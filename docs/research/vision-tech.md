@@ -1,14 +1,15 @@
 # 기술 검증 — 사진→재료 인식 모델·정확도·원가
 
 > wayfinder 티켓 [#3](https://github.com/woosung-dev/cookmark/issues/3) · deep-research 워크플로우 · 2026-07-12
-> 표기 — ✅ 검증됨(3표 적대적 검증 통과) / ⚠️ 미검증(월 사용량 한도로 검증 실패) / ❌ 기각(검증 패널이 반박)
+> **라운드 2 재검증(2026-07-13, sonnet 소스 직접 확인)** — 원가·토큰 주장 4건 ✅ 확정(1건은 프레이밍 정정), 영상 토큰 수치 1건 ❌ 정정. 보완 스윕에서 인식 실패 모드 신규 수집(⚠️).
+> 표기 — ✅ 검증됨 / ⚠️ 미검증 / ❌ 기각
 
 ## 핵심 결론
 
 1. **음식·재료 인식에서 Gemini 계열이 벤치마크 최상위**라는 것은 검증된 사실이다(✅ 2건). 모델 1순위 후보는 Gemini Flash 계열 — 성능·원가·지연 모두에서 유리.
 2. **다중 품목 이미지에서 정확도가 크게 떨어진다**(✅) — 냉장고 사진은 정확히 이 최악 조건이다. P2 킬 기준(사진당 수동 수정 5개)의 현실성은 문헌으로 결론 낼 수 없고, **P1 스파이크(실물 사진)가 반드시 필요**하다.
-3. 사진 1장당 원가는 어느 모델이든 **호출당 1센트 미만~수 센트** 수준(⚠️)이라 원가가 MVP의 병목이 될 가능성은 낮다.
-4. 유튜브 재료 추출은 **설명란 파싱 → 자막(yt-dlp) → 영상 이해** 순으로 시도하는 게 비용 구조상 합리적이다. 영상 이해 직접 처리는 10분 영상 ≈ 15.8만 토큰(⚠️)으로 가장 비싸다.
+3. 사진 1장당 원가는 어느 모델이든 **1센트 미만~수 센트** 수준(✅ 라운드 2 확정)이라 원가가 MVP의 병목이 될 가능성은 낮다. **프레이밍 정정** — JFB 실측치는 이미지당 4회 호출 기준의 '호출당' 값이라 이미지 1장당은 약 4배(Gemini 2.5 Flash ≈ $0.006/장). 그래도 결론은 동일하다.
+4. 유튜브 재료 추출은 **설명란 파싱 → 자막(yt-dlp) → 영상 이해** 순으로 시도하는 게 비용 구조상 합리적이다. **수치 정정(라운드 2)** — 영상 입력은 263이 아니라 기본 해상도 **초당 약 300토큰**(프레임 258 + 오디오 32), 저해상도는 초당 약 100토큰. 10분 영상 ≈ 18만 토큰(기본) 또는 6만 토큰(저해상도) — "영상 직접 처리가 가장 비싸다"는 방향성은 유지.
 
 ## 검증된 사실 ✅
 
@@ -18,18 +19,28 @@
 - **bag-of-features 한계** — 비전 LLM은 지배적 구성 요소만 식별하고 썰기 방식·질감 같은 미세 차이는 구분 못함 — "손질된 재료" 인식의 구조적 한계. ([arXiv 2604.10425](https://arxiv.org/html/2604.10425))
 - **JFB 벤치마크** — 범용 VLM 중 GPT-4o가 최고(Overall 74.1, Ingredient F1 0.737). Gemini가 항상 이기는 건 아니라는 균형 근거. ([arXiv 2508.09966](https://arxiv.org/html/2508.09966v1))
 
-## 미검증 주장 ⚠️ (수집·추출 완료, 교차 검증 실패)
+## 라운드 2 재검증 결과 (원가·토큰)
+
+- ✅ JFB 실측(2025-08, Table 2 원문 일치) — **호출당** Gemini 2.5 Flash $0.0014/13.5초, GPT-4o $0.0065/10.3초, Gemini 2.5 Pro $0.0225/28.1초. 단 'Best' 구성은 이미지당 4회 호출 → **이미지 1장당 Flash ≈ $0.006**. ([arXiv 2508.09966](https://arxiv.org/html/2508.09966v1))
+- ✅ Gemini 공식 가격(원문 일치) — 2.5 Flash 입력 $0.30/M(텍스트·이미지·비디오)·출력 $2.50/M, 2.5 Flash-Lite $0.10/$0.40. ([가격](https://ai.google.dev/gemini-api/docs/pricing))
+- ✅ 이미지 토큰 산정(원문 일치) — 양변 384px 이하 258토큰, 초과 시 768×768 타일당 258토큰 → 냉장고 사진 1장 원가는 결정적으로 계산 가능. ([문서](https://ai.google.dev/gemini-api/docs/image-understanding))
+- ❌→정정 — "영상 263토큰/초"는 원문에 없는 수치. 실제는 기본 해상도 초당 약 300토큰(프레임 258+오디오 32), 저해상도 초당 약 100토큰. ([문서](https://ai.google.dev/gemini-api/docs/tokens))
+- ✅ 냉장고 인식 실패 모드(원문 일치) — "occlusions, variable distortions, and complex backgrounds … require frontal and close-up images". ([PMC](https://pmc.ncbi.nlm.nih.gov/articles/PMC11652515/))
+
+## 보완 스윕 신규 수집 ⚠️ (2026-07-13, 인식 실패 모드 — 검증 미완)
+
+- 냉동칸은 성에·유사 용기·적층 때문에 특히 인식이 어렵다. 시야에서 가려진 품목은 false negative를 만든다. 조명·반사·각도가 정확도에 유의미하게 영향. ([fitham.ai](https://fitham.ai/en/blog/ai-fridge-scanner/))
+- 유사 포장 오인(플레인 요거트 vs 사워크림), 냉장고 내부 LED 색온도·밝기 편차, 소형 품목의 저픽셀 문제(1080p+ 필요), 시간 경과에 따른 식품 외관 변화(변색·시듦)가 정적 이미지 모델을 흔든다. ([basic.ai](https://www.basic.ai/blog-post/computer-vision-for-smart-fridges-how-it-works-models-data-and-annotations))
+- 공개 음식 데이터셋(Food-101 등)은 냉장고 특유 조건이 없어 프로덕션급 인식에는 부족 — 업체들은 자체 데이터셋을 구축한다. (동일 출처)
+- 전용 모델 참고치 — BroadFPN-YOLACT는 60~100cm 소형 물체 95.0% mAP(표준 YOLACT 72.3%). ([Frontiers](https://www.frontiersin.org/journals/artificial-intelligence/articles/10.3389/frai.2024.1442948/full))
+
+## 미검증 주장 ⚠️ (라운드 1 잔여)
 
 ### 원가·지연
-- 음식 사진 1장 실측(2025-08, JFB) — Gemini 2.5 Flash **$0.0014/13.5초**, GPT-4o $0.0065/10.3초, Gemini 2.5 Pro $0.0225/28.1초. ([arXiv 2508.09966](https://arxiv.org/html/2508.09966v1))
-- Gemini 공식 가격 — 2.5 Flash 입력 $0.30/M(텍스트·이미지·비디오)·출력 $2.50/M, 2.5 Flash-Lite $0.10/$0.40, Gemini 3 Flash Preview $0.50/$3.00. ([가격](https://ai.google.dev/gemini-api/docs/pricing))
-- 이미지 토큰 산정 — 양변 384px 이하 258토큰, 초과 시 768×768 타일당 258토큰 → 냉장고 사진 1장 원가는 결정적으로 계산 가능. ([문서](https://ai.google.dev/gemini-api/docs/image-understanding))
-- 영상 입력 263토큰/초 → 10분 레시피 영상 ≈ 157,800토큰. 영상 이해 직접 처리의 비용 근거. ([문서](https://ai.google.dev/gemini-api/docs/tokens))
 - Claude Haiku 4.5 $1/$5, Sonnet 5 $2/$10(2026-08-31까지 프로모션). OpenAI는 gpt-5.4-nano $0.20/$1.25부터. ([Claude 가격](https://platform.claude.com/docs/en/about-claude/pricing) · [OpenAI 가격](https://developers.openai.com/api/docs/pricing))
 - Gemini 2.5 Flash-Lite TTFT 0.35초 — 측정 대상 중 2위로 낮음. ([Artificial Analysis](https://artificialanalysis.ai/models))
 
 ### 실패 모드·난이도
-- 냉장고 음식 인식의 알려진 실패 모드 — 가림(occlusion), 왜곡, 복잡 배경, 각도·위치 변화. ([PMC](https://pmc.ncbi.nlm.nih.gov/articles/PMC11652515/))
 - 식품 특화 모델(FoodLMM)조차 VIREO Food-172 재료 인식 F1 68.97 — 재료 인식은 특화 모델도 F1 70 미만인 난제. ([arXiv 2312.14991](https://arxiv.org/html/2312.14991v1))
 - 전용 CNN 냉장고 시스템은 "내부 1장 사진"을 회피하고 출입 순간 개별 촬영 방식을 씀 — 1장 시나리오의 난이도 방증. ([Frontiers](https://www.frontiersin.org/journals/artificial-intelligence/articles/10.3389/frai.2024.1442948/full))
 - 단일 2D 사진에선 양 추정 불가, 숨은 재료(기름·설탕) 인식 불가. ([arXiv 2511.08215](https://arxiv.org/html/2511.08215))
