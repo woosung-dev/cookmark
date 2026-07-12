@@ -30,7 +30,13 @@
 ## 보완 스윕 신규 수집 ⚠️ (2026-07-13, 인식 실패 모드 — 검증 미완)
 
 - 냉동칸은 성에·유사 용기·적층 때문에 특히 인식이 어렵다. 시야에서 가려진 품목은 false negative를 만든다. 조명·반사·각도가 정확도에 유의미하게 영향. ([fitham.ai](https://fitham.ai/en/blog/ai-fridge-scanner/))
-- 유사 포장 오인(플레인 요거트 vs 사워크림), 냉장고 내부 LED 색온도·밝기 편차, 소형 품목의 저픽셀 문제(1080p+ 필요), 시간 경과에 따른 식품 외관 변화(변색·시듦)가 정적 이미지 모델을 흔든다. ([basic.ai](https://www.basic.ai/blog-post/computer-vision-for-smart-fridges-how-it-works-models-data-and-annotations))
+- ~~유사 포장 오인(플레인 요거트 vs 사워크림)~~ — **라운드 3 검증에서 기각(0-3)**, 근거로 쓰지 말 것. 냉장고 내부 LED 색온도·밝기 편차, 소형 품목의 저픽셀 문제(1080p+ 필요), 시간 경과에 따른 식품 외관 변화(변색·시듦)는 여전히 ⚠️. ([basic.ai](https://www.basic.ai/blog-post/computer-vision-for-smart-fridges-how-it-works-models-data-and-annotations))
+
+## 라운드 3 확정 — 실사용 인식 현실 (opus, 3표 검증 통과)
+
+- ✅ **벤더 광고 vs 실사용 격차** — Fridge Vision AI는 "over 95% accuracy"를 광고하지만, 삼성 Bespoke AI 실사용 리뷰(Engadget)는 "The AI doesn't get things right every time... you will still need to delete food manually from time to time". 동료심사 연구는 낱개 과채 인식 62~74%. **P2 킬 기준(수동 수정 카운트)이 정확히 올바른 측정 지표라는 뜻이다.** ([Engadget](https://www.engadget.com/home/kitchen-tech/samsung-bespoke-fridge-with-ai-review-all-the-bells-and-whistles-140000099.html))
+- ✅ **오인식의 실제 사례** — 삼성 Bespoke가 손가락의 반창고를 채소로 라벨링, 크림치즈를 "Philadelphia Plant-based"로 오인, "Other times it seemingly just guesses". 전용 하드웨어(내장 카메라)조차 이 수준 — 인식 대상도 신선 37종·포장 50종 온디바이스 제한. CES 2026 Gemini 업그레이드(2,000종)로 완화 예정이라 시효성 주의. ([techbriefly](https://techbriefly.com/2026/05/11/samsung-expands-smart-fridge-food-recognition-to-2000-items/) · [삼성 뉴스룸](https://news.samsung.com/global/samsung-to-unveil-ai-vision-built-with-google-gemini-at-ces-2026))
+- 시사점 — 전용 냉장고 하드웨어도 수동 수정이 일상이라면, 냉파의 "체크박스 수정을 1급 UX로 설계"(수정이 실패가 아니라 플로우의 일부)가 옳은 방향이다. P1 스파이크에서 잴 것은 "수정 0회 가능한가"가 아니라 "수정이 5개/장 이내로 수렴하는가"다.
 - 공개 음식 데이터셋(Food-101 등)은 냉장고 특유 조건이 없어 프로덕션급 인식에는 부족 — 업체들은 자체 데이터셋을 구축한다. (동일 출처)
 - 전용 모델 참고치 — BroadFPN-YOLACT는 60~100cm 소형 물체 95.0% mAP(표준 YOLACT 72.3%). ([Frontiers](https://www.frontiersin.org/journals/artificial-intelligence/articles/10.3389/frai.2024.1442948/full))
 
