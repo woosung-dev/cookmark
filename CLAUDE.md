@@ -9,3 +9,7 @@
 ### Domain docs
 
 단일 컨텍스트 — 루트 `CONTEXT.md` + `docs/adr/`. See `docs/agents/domain.md`.
+
+### Coding standards
+
+코드 작성 규약은 `docs/coding-standards.md`를 따른다 (code-review 스킬의 standards 소스).
