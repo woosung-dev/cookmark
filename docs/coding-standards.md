@@ -1,27 +1,28 @@
 # 코딩 스탠다드
 
-MVP(질문 검증기) 코드 작성 규약. 2026-07-13 문답으로 확정.
+MVP(질문 검증기) 코드 작성 규약. 2026-07-13 문답으로 확정, 같은 날 Flutter 전환(ADR-0005)으로 개정.
 
 ## 스택
 
-- Next.js(App Router) + TypeScript(strict), Vercel 배포.
-- 로그인·서버 DB 없음 — localStorage가 유일한 영속층.
+- Flutter(Dart) 단일 코드베이스. 우선 타깃 = **Web 빌드**(모바일 브라우저·URL 공유 배포), 후순위 = Android 네이티브(파일럿 후, 같은 코드베이스).
+- 로그인·서버 DB 없음 — 클라이언트 로컬 영속이 유일한 영속층(Web 빌드에서는 브라우저 스토리지 기반).
+- LLM 프록시(인식·매칭)는 앱과 분리된 서버리스 함수 — API 키는 클라이언트에 두지 않는다.
 
 ## 도구
 
-- **Biome** — 린트 + 포맷 단일 도구. ESLint/Prettier 도입 금지.
-- **Vitest** — 순수 로직 유닛 테스트.
-- **Playwright** — E2E. 검증의 정본은 E2E이고, 유닛은 보완이다.
+- **dart format + flutter_lints** — 포맷·린트. 표준 설정에서 벗어나지 않는다.
+- **flutter test** — 순수 로직(라벨 결정·병합·산식·휴리스틱) 유닛.
+- **integration_test** — E2E(Web 타깃 실행). 검증의 정본은 E2E이고, 유닛은 보완이다.
 
 ## 상태·경계
 
-- 상태 관리는 React 내장 훅(useState/useReducer/Context)만. 외부 상태 라이브러리(Zustand·Redux 등) 금지.
-- localStorage 접근은 단일 스토리지 모듈을 통해서만 — 컴포넌트에서 `window.localStorage` 직접 호출 금지. 이벤트 로그·레시피 북의 읽기/쓰기 경계를 한 곳에 모은다.
-- LLM 호출(인식·매칭)은 단일 경계 모듈을 통해서만 — 테스트 페이크 주입 지점이자 유일한 seam. 모델명은 환경변수 주입.
+- 상태 관리는 Flutter 내장(setState/ValueNotifier/ChangeNotifier) + **Riverpod까지 허용**. 그 외 상태 라이브러리(Bloc·GetX 등) 금지.
+- 로컬 영속 접근은 단일 스토리지 모듈을 통해서만 — 위젯에서 스토리지 API 직접 호출 금지. 이벤트 로그·레시피 북의 읽기/쓰기 경계를 한 곳에 모은다.
+- LLM 호출은 단일 경계 모듈을 통해서만 — 테스트 페이크 주입 지점이자 유일한 seam. 모델명은 환경설정 주입.
 
 ## 테스트
 
-- 외부 행동만 검증한다 — 브라우저에서 보이는 것과 export JSON에 남는 것. 내부 구현 세부에 비의존.
+- 외부 행동만 검증한다 — 화면에 보이는 것과 export JSON에 남는 것. 내부 구현 세부에 비의존.
 - E2E는 LLM 경계에 결정적 페이크를 주입해 돌린다.
 
 ## 네이밍·문서
