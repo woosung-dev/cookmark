@@ -15,4 +15,4 @@ MVP UI의 시각 언어를 **Apple식 절제된 구조**(라이트 쿨 뉴트럴
 - **접근성 2단 구조 필수** — vivid `#E8552D`는 대비 3.6이라 흰 텍스트 금지(필·그래픽 전용), 버튼 등 흰 텍스트 컨트롤은 `#C0391B`(AA 5.47). 뉴트럴은 쿨 클린(`#F5F5F7/#FFF/#1D1D1F`), 크림/베이지 금지.
 - **세리프 디스플레이 배제** — taste-skill "세리프 디폴트=AI tell" + Apple 관용과 상충. 위계는 크기·굵기·색으로.
 - **DESIGN.md 규약 채택** — Google Stitch 규약대로 루트 `DESIGN.md`(에이전트 read). 파일럿은 Flutter Web이므로 토큰을 Flutter ThemeData/색상으로 매핑해 구현. 색상 변경 시 DESIGN.md를 단일 소스로 갱신.
-- 프로토타입 탐색물(30+ 산출)은 keeper(스크린샷·근거·보고서)만 `docs/design/exploration/`에 아카이브하고, 라이브 HTML 스크래치는 삭제했다.
+- 프로토타입 탐색물(30+ 산출)은 최종 적용 화면(`docs/design/applied-app.jpeg`)과 도출 보고서(`docs/design/color-decision.md`)만 보존하고, 나머지 라이브·중간 산출물은 삭제했다.

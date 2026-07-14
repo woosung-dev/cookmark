@@ -5,18 +5,13 @@
 - **`/DESIGN.md`** (루트) — **에이전트가 읽는 살아있는 디자인 스펙**. Google Stitch 규약(YAML 토큰 + 8섹션). 색·타입·간격·컴포넌트·Do/Don't의 단일 소스. UI를 만들거나 바꿀 땐 이 파일을 먼저·항상 갱신.
 - **`docs/adr/0006-brand-color-and-app-shell.md`** — **결정 스냅샷**. Apple 구조 + 홍시 퍼시먼을 왜 골랐는지, 무엇을 기각했는지.
 - **`docs/design/color-decision.md`** — **색상 도출 보고서**(사람용). 3가치·다출처 리서치·소크라테스 논증·순위.
-- **`docs/design/exploration/`** — 프로토타입 탐색 **아카이브**(스크린샷·근거 원본). 라이브 HTML 스크래치(30+ 산출)는 아카이브 후 삭제했다.
+- **`docs/design/applied-app.jpeg`** — **실제 적용된 최종 디자인**(Apple 구조 + 홍시 퍼시먼, 6화면).
 
 ## 핵심 결론 (요약)
-- **구조**: Apple식 절제(라이트 쿨 뉴트럴 그룹 리스트·단일 액센트·희소 그림자·타이트 타이포). 4모델·2 taste 스킬 평가에서 최소 AI-slop으로 수렴.
+- **구조**: Apple식 절제(라이트 쿨 뉴트럴 그룹 리스트·단일 액센트·희소 그림자·타이트 타이포).
 - **브랜드 색**: **홍시(감) 퍼시먼** — 브랜드/필 `#E8552D`, 액션(버튼) `#C0391B`(AA), pressed `#9A2E15`. 온기는 액센트에만.
 - **시맨틱**: 바로 가능=나물 그린 · 이것만 사면=앰버 · 애매=그레이 · 부족=딥레드.
 - **은유**: 곶감 = "버릴 것 없이(냉파) 인내로 더 달게(즐거움)" — 낭비방지 ∩ 즐거움.
-
-## 아카이브 내용 (exploration/)
-- `screenshots/` — device-scale 앱 시안(apple·airbnb·hybrid·cookmark), 감레드 리컬러, **최종 홍시 앱**(`final-persimmon-app.jpeg`).
-- `DESIGN-color-draft.md` — 색상 토큰 초안(감레드 기준, 이후 홍시로 승격).
-- `opinions/color-opinions.md` — 맥락0 독립 에이전트·스킬·웹 의견 원본.
 
 ## 구현 시 (Flutter Web)
 `DESIGN.md`의 토큰을 Flutter `ThemeData`/`ColorScheme`로 매핑. 액션색=primary(`#C0391B`), 브랜드 vivid=강조 필, 뉴트럴=surface/background, 시맨틱 3색=제안 라벨. 색 변경은 `DESIGN.md` → 코드 순.
