@@ -1,6 +1,8 @@
 // 외길 페이지가 상태별로 무엇을 보여주는지 — E2E와 같은 흐름을 브라우저 없이 빠르게 돌린다.
 import 'package:cookmark/app.dart';
 import 'package:cookmark/data/storage.dart';
+import 'package:cookmark/domain/app_event.dart';
+import 'package:cookmark/domain/session_state.dart';
 import 'package:cookmark/llm/fake_llm_gateway.dart';
 import 'package:cookmark/ui/backup_controller.dart';
 import 'package:cookmark/ui/main_controller.dart';
@@ -89,5 +91,63 @@ void main() {
     await tester.tap(find.byKey(const Key('recipe-nudge-chip')));
     await tester.pumpAndSettle();
     expect(find.text('아직 저장한 레시피가 없어요.'), findsOneWidget);
+  });
+
+  group('실행취소 토스트', () {
+    /// 제안이 떠 있는 화면. 사진 경로를 타지 않는다 — 위 주석대로 FakeAsync에서 이미지
+    /// 디코드가 끝나지 않으므로, 세션 복원으로 체크리스트를 세우고 매칭만 돌린다.
+    Future<MainController> pumpWithSuggestions(WidgetTester tester) async {
+      // 기본 800x600에서는 토스트가 두 번째 제안 카드를 덮어 탭이 조용히 빗나간다.
+      // 실기기(세로로 긴 폰)에서는 카드가 토스트 위에 있으므로 화면을 그만큼 키운다.
+      tester.view.physicalSize = const Size(1200, 2600);
+      tester.view.devicePixelRatio = 1.0;
+      addTearDown(tester.view.reset);
+
+      await storage.writeSession(
+        SessionState(ingredients: defaultRecognitionFixture),
+      );
+      final llm = FakeLlmGateway();
+      final controller = MainController(llm, storage)..restoreSession();
+      await controller.requestSuggestions();
+
+      await tester.pumpWidget(
+        CookmarkApp(
+          controller: controller,
+          recipeBookController: RecipeBookController(llm, storage),
+          backupController: BackupController(storage),
+          imagePicker: () async =>
+              XFile.fromData(fridgePhoto(), mimeType: 'image/jpeg'),
+        ),
+      );
+      await tester.pumpAndSettle();
+      return controller;
+    }
+
+    testWidgets('"이거 했어요"를 연달아 눌러도 마지막 실행취소가 살아 있다 (#19)', (tester) async {
+      final controller = await pumpWithSuggestions(tester);
+      final menus = [for (final s in controller.suggestions) s.menu];
+
+      await tester.tap(find.byKey(Key('cooked-${menus[0]}')));
+      await tester.pumpAndSettle();
+
+      // 두 번째 토스트가 첫 번째를 밀어낸다 — 밀려난 토스트의 닫힘이 여기서 살아 있는
+      // 실행취소 창을 죽였다. pumpAndSettle이 그 퇴장 애니메이션을 끝까지 돌린다.
+      await tester.tap(find.byKey(Key('cooked-${menus[1]}')));
+      await tester.pumpAndSettle();
+
+      await tester.tap(find.text('실행취소'));
+      await tester.pumpAndSettle();
+
+      final events = storage.readEvents();
+      expect(
+        events
+            .where((e) => e.type == AppEventType.cookedUndo)
+            .single
+            .data['menu'],
+        menus[1],
+      );
+      // 되돌렸는데 cooked가 그대로 남으면 성공 지표 2가 영구히 과대집계된다.
+      expect(events.where((e) => e.type == AppEventType.cooked), hasLength(2));
+    });
   });
 }

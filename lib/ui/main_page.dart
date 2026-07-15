@@ -110,7 +110,14 @@ class _MainPageState extends State<MainPage> {
           ),
         )
         .closed
-        .then((_) => _controller.dismissUndo());
+        .then((reason) {
+          // 위 clearSnackBars가 앞선 토스트를 닫은 것이라면(reason: hide), 그 닫힘은 방금 연
+          // 실행취소 창의 것이 아니라 밀려난 창의 것이다. 구별하지 않으면 연속 "이거 했어요"에서
+          // 두 번째 창이 뜨자마자 죽는다 — 버튼은 살아 있는데 눌러도 아무 일이 없다.
+          // hide를 만드는 곳은 이 파일의 clearSnackBars 하나뿐이다.
+          if (reason == SnackBarClosedReason.hide) return;
+          _controller.dismissUndo();
+        });
   }
 
   @override
