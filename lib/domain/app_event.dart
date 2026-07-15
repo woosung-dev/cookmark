@@ -76,6 +76,9 @@ enum EditKind {
   bool get countsAsManualEdit => this != EditKind.vagueDismiss;
 }
 
+/// 레시피 북에 무슨 일이 일어났는지.
+enum RecipeBookAction { add, remove }
+
 /// 조작이 어느 경로로 들어왔는지 — 분석 단계에서 대안 산식을 재산할 해상도(ADR-0003).
 enum EditPath {
   /// 행 전체 탭 토글
@@ -129,6 +132,23 @@ class AppEvent {
     Map<String, Object?> extra = const {},
   }) : type = AppEventType.checklistEdit,
        data = {'kind': kind.name, 'path': path.name, 'name': name, ...extra};
+
+  /// ⑩ 레시피 북 변경 — 질문 2(저장 레시피가 선택을 바꾸는가)의 분모가 여기서 자란다.
+  AppEvent.recipeBookChanged({
+    required this.at,
+    required RecipeBookAction action,
+    required String url,
+    required String title,
+    required int ingredientCount,
+    LlmUsage? usage,
+  }) : type = AppEventType.recipeBookChanged,
+       data = {
+         'action': action.name,
+         'url': url,
+         'title': title,
+         'ingredientCount': ingredientCount,
+         if (usage != null) ...usage.toJson(),
+       };
 
   /// ⑫ 오류 표시
   AppEvent.errorShown({

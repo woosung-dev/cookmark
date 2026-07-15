@@ -12,6 +12,7 @@ import 'package:cookmark/domain/app_event.dart';
 import 'package:cookmark/llm/fake_llm_gateway.dart';
 import 'package:cookmark/llm/llm_gateway.dart';
 import 'package:cookmark/ui/main_controller.dart';
+import 'package:cookmark/ui/recipe_book_controller.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:image/image.dart' as img;
@@ -65,15 +66,26 @@ void main() {
   Future<MainController> pumpApp(
     WidgetTester tester, {
     FakeLlmGateway? gateway,
+    bool skipOnboarding = true,
   }) async {
-    final controller = MainController(gateway ?? FakeLlmGateway(), storage);
+    final llm = gateway ?? FakeLlmGateway();
+    final controller = MainController(llm, storage);
     await tester.pumpWidget(
       CookmarkApp(
         controller: controller,
+        recipeBookController: RecipeBookController(llm, storage),
         imagePicker: () async => fridgePhotoFile(),
       ),
     );
     await tester.pumpAndSettle();
+
+    // 레시피 북이 비어 있을 때만 온보딩 카드가 업로드 존 자리를 차지한다(G1 #8) —
+    // 레시피를 미리 담아둔 테스트에서는 애초에 뜨지 않는다.
+    final skip = find.byKey(const Key('onboarding-skip'));
+    if (skipOnboarding && skip.evaluate().isNotEmpty) {
+      await tester.tap(skip);
+      await tester.pumpAndSettle();
+    }
     return controller;
   }
 
@@ -304,6 +316,91 @@ void main() {
     expect(find.textContaining('1개 고침'), findsNothing);
   });
 
+  testWidgets('첫 방문 온보딩 카드에서 레시피 저장이 그 자리에서 끝난다 (#17)', (tester) async {
+    await pumpApp(tester, skipOnboarding: false);
+
+    // 업로드 존 자리에 온보딩 카드가 온다 — 별도 화면이 아니다(G1 #8).
+    expect(find.byKey(const Key('onboarding-card')), findsOneWidget);
+    expect(find.text('0/3'), findsOneWidget);
+    expect(find.byKey(const Key('upload-photo')), findsNothing);
+
+    await tester.enterText(
+      find.byKey(const Key('recipe-url-field')),
+      'https://youtu.be/abc',
+    );
+    await tester.enterText(find.byKey(const Key('recipe-title-field')), '김치찌개');
+    await tester.tap(find.byKey(const Key('recipe-submit')));
+    await tester.pumpAndSettle();
+
+    // 저장되면 온보딩이 끝나고 업로드 존이 나온다 — 화면 전환 없이.
+    expect(find.byKey(const Key('upload-photo')), findsOneWidget);
+
+    final saved = (await Storage.open()).readEvents().where(
+      (e) => e.type == AppEventType.recipeBookChanged,
+    );
+    expect(saved.single.data['action'], 'add');
+    expect(saved.single.data['title'], '김치찌개');
+  });
+
+  testWidgets('레시피 북 재료 중 미인식 재료가 강조 칩으로 뜨고 탭으로 추가된다 (#17)', (tester) async {
+    // 먼저 레시피를 하나 담는다.
+    final book = RecipeBookController(FakeLlmGateway(), storage);
+    await book.add(url: 'https://youtu.be/abc', title: '김치찌개');
+
+    final controller = await pumpApp(tester);
+    await uploadAndWait(tester, controller);
+
+    // 김치찌개 재료 중 사진에서 안 나온 것들.
+    expect(find.text('레시피 북에 있는 재료예요 — 혹시 있나요?'), findsOneWidget);
+    expect(find.byKey(const Key('recipe-book-chip-김치')), findsOneWidget);
+
+    await tester.tap(find.byKey(const Key('recipe-book-chip-김치')));
+    await tester.pumpAndSettle();
+
+    // 체크리스트에 들어가고 칩에서는 빠진다.
+    expect(find.byKey(const Key('ingredient-row-김치')), findsOneWidget);
+    expect(find.byKey(const Key('recipe-book-chip-김치')), findsNothing);
+
+    final edit = (await Storage.open()).readEvents().lastWhere(
+      (e) => e.type == AppEventType.checklistEdit,
+    );
+    expect(edit.data['path'], 'recipeBookChip');
+  });
+
+  testWidgets('레시피 북에서 저장·삭제가 되고 이벤트로 남는다 (#17)', (tester) async {
+    await pumpApp(tester);
+
+    await tester.tap(find.byKey(const Key('recipe-book-link')));
+    await tester.pumpAndSettle();
+
+    await tester.enterText(
+      find.byKey(const Key('recipe-url-field')),
+      'https://youtu.be/abc',
+    );
+    await tester.enterText(find.byKey(const Key('recipe-title-field')), '김치찌개');
+    await tester.tap(find.byKey(const Key('recipe-submit')));
+    await tester.pumpAndSettle();
+
+    expect(
+      find.byKey(const Key('recipe-tile-https://youtu.be/abc')),
+      findsOneWidget,
+    );
+    expect(find.text('김치찌개'), findsOneWidget);
+    // 제목에서 추론된 재료가 보인다.
+    expect(find.textContaining('돼지고기'), findsOneWidget);
+
+    await tester.tap(
+      find.byKey(const Key('recipe-remove-https://youtu.be/abc')),
+    );
+    await tester.pumpAndSettle();
+    expect(find.text('아직 저장한 레시피가 없어요.'), findsOneWidget);
+
+    final events = (await Storage.open()).readEvents().where(
+      (e) => e.type == AppEventType.recipeBookChanged,
+    );
+    expect(events.map((e) => e.data['action']), ['add', 'remove']);
+  });
+
   testWidgets('레시피 북은 헤더 링크 하나로만 들어간다 — 탭 바가 없다', (tester) async {
     await pumpApp(tester);
 
@@ -312,6 +409,6 @@ void main() {
 
     await tester.tap(find.byKey(const Key('recipe-book-link')));
     await tester.pumpAndSettle();
-    expect(find.text('믿고 보는 레시피를 여기에 모읍니다.'), findsOneWidget);
+    expect(find.text('아직 저장한 레시피가 없어요.'), findsOneWidget);
   });
 }

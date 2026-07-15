@@ -5,12 +5,19 @@ import 'app.dart';
 import 'data/storage.dart';
 import 'llm/proxy_llm_gateway.dart';
 import 'ui/main_controller.dart';
+import 'ui/recipe_book_controller.dart';
 
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
   final storage = await Storage.open();
-  final controller = MainController(ProxyLlmGateway(), storage)
+  final gateway = ProxyLlmGateway();
+  final controller = MainController(gateway, storage)
     // 냉장고 앞에서 브라우저를 닫았다 열어도 하던 데서 이어간다(#15).
     ..restoreSession();
-  runApp(CookmarkApp(controller: controller));
+  runApp(
+    CookmarkApp(
+      controller: controller,
+      recipeBookController: RecipeBookController(gateway, storage),
+    ),
+  );
 }

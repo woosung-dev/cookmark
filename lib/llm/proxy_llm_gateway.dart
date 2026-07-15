@@ -21,32 +21,9 @@ class ProxyLlmGateway implements LlmGateway {
 
   @override
   Future<RecognitionResult> recognize(Uint8List jpegBytes) async {
-    final http.Response response;
-    try {
-      response = await _client
-          .post(
-            Uri.parse('$_baseUrl/api/recognize'),
-            headers: const {'content-type': 'application/json'},
-            body: jsonEncode({'imageBase64': base64Encode(jpegBytes)}),
-          )
-          .timeout(recognizeTimeout);
-    } on TimeoutException catch (e) {
-      throw LlmFailure(LlmFailureKind.timeout, e.toString());
-    } on Exception catch (e) {
-      throw LlmFailure(LlmFailureKind.error, e.toString());
-    }
-
-    if (response.statusCode != 200) {
-      throw LlmFailure(LlmFailureKind.error, 'HTTP ${response.statusCode}');
-    }
-
-    final Map<String, Object?> body;
-    try {
-      body = (jsonDecode(utf8.decode(response.bodyBytes)) as Map)
-          .cast<String, Object?>();
-    } on FormatException catch (e) {
-      throw LlmFailure(LlmFailureKind.error, '응답 파싱 실패: ${e.message}');
-    }
+    final body = await _post('/api/recognize', {
+      'imageBase64': base64Encode(jpegBytes),
+    });
 
     if (body['lowQuality'] == true) {
       throw const LlmFailure(LlmFailureKind.lowQuality);
@@ -63,6 +40,57 @@ class ProxyLlmGateway implements LlmGateway {
       ingredients: ingredients,
       usage: LlmUsage.fromJson((body['usage']! as Map).cast<String, Object?>()),
     );
+  }
+
+  @override
+  Future<ExtractionResult> extractIngredients(String title) async {
+    final body = await _post('/api/extract', {'title': title});
+
+    final raw = body['ingredients'] as List<Object?>? ?? const [];
+    final ingredients = <String>[
+      for (final item in raw)
+        if ((item as String?)?.trim() case final name? when name.isNotEmpty)
+          name,
+    ];
+
+    if (ingredients.isEmpty) throw const LlmFailure(LlmFailureKind.empty);
+
+    return ExtractionResult(
+      ingredients: ingredients,
+      usage: LlmUsage.fromJson((body['usage']! as Map).cast<String, Object?>()),
+    );
+  }
+
+  /// 프록시 호출의 공통부 — 타임아웃·HTTP 오류·파싱 실패를 전부 LlmFailure로 정규화한다.
+  Future<Map<String, Object?>> _post(
+    String path,
+    Map<String, Object?> payload,
+  ) async {
+    final http.Response response;
+    try {
+      response = await _client
+          .post(
+            Uri.parse('$_baseUrl$path'),
+            headers: const {'content-type': 'application/json'},
+            body: jsonEncode(payload),
+          )
+          .timeout(recognizeTimeout);
+    } on TimeoutException catch (e) {
+      throw LlmFailure(LlmFailureKind.timeout, e.toString());
+    } on Exception catch (e) {
+      throw LlmFailure(LlmFailureKind.error, e.toString());
+    }
+
+    if (response.statusCode != 200) {
+      throw LlmFailure(LlmFailureKind.error, 'HTTP ${response.statusCode}');
+    }
+
+    try {
+      return (jsonDecode(utf8.decode(response.bodyBytes)) as Map)
+          .cast<String, Object?>();
+    } on FormatException catch (e) {
+      throw LlmFailure(LlmFailureKind.error, '응답 파싱 실패: ${e.message}');
+    }
   }
 
   /// 이름이 비었거나 confidence가 3단 밖이면 버린다 — 모델이 스키마를 벗어나도 화면은 살아야 한다.

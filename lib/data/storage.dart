@@ -5,6 +5,7 @@ import 'package:flutter/foundation.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 import '../domain/app_event.dart';
+import '../domain/recipe.dart';
 import '../domain/session_state.dart';
 
 /// 이벤트 로그·레시피 북·세션 상태의 읽기/쓰기를 한 곳에 모은 모듈.
@@ -18,8 +19,9 @@ class Storage {
 
   static const _kEvents = 'events';
   static const _kSession = 'session';
+  static const _kRecipes = 'recipes';
 
-  static const _allowList = <String>{_kEvents, _kSession};
+  static const _allowList = <String>{_kEvents, _kSession, _kRecipes};
 
   static Future<Storage> open() async {
     final prefs = await SharedPreferencesWithCache.create(
@@ -60,6 +62,21 @@ class Storage {
 
   Future<void> writeSession(SessionState session) =>
       _prefs.setString(_kSession, jsonEncode(session.toJson()));
+
+  /// 레시피 북 — 저장한 순서 그대로.
+  List<Recipe> readRecipes() {
+    final raw = _prefs.getString(_kRecipes);
+    if (raw == null) return const [];
+    return [
+      for (final r in jsonDecode(raw) as List<Object?>)
+        Recipe.fromJson((r! as Map).cast<String, Object?>()),
+    ];
+  }
+
+  Future<void> writeRecipes(List<Recipe> recipes) => _prefs.setString(
+    _kRecipes,
+    jsonEncode([for (final r in recipes) r.toJson()]),
+  );
 
   /// "자주 쓰는 재료" 칩의 재료 — 사용자가 있다고 말한 횟수가 많은 순(#15).
   ///

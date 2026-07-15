@@ -8,6 +8,7 @@ import '../domain/session_state.dart';
 import '../domain/vague_heuristic.dart';
 import '../image/resize.dart';
 import '../llm/llm_gateway.dart';
+import 'recipe_book_controller.dart';
 
 /// 단일 페이지 상태(ADR-0001). 제안은 #18에서 붙는다.
 ///
@@ -44,6 +45,42 @@ class MainController extends ChangeNotifier {
   DateTime? _recognizeStartedAt;
 
   Uint8List? _lastResizedPhoto;
+
+  /// 레시피 북이 비어 있고 아직 건너뛰지 않았으면 첫 방문 상태다 — 업로드 존 자리에 온보딩 카드가 온다.
+  ///
+  /// 별도 화면이 아니라 메인의 한 상태다(G1 #8).
+  bool get showsOnboarding =>
+      !_onboardingSkipped && _storage.readRecipes().isEmpty;
+  bool _onboardingSkipped = false;
+
+  /// 건너뛰기 — 빈 레시피 북으로도 루프는 돈다. 대신 넛지 칩이 상시로 남는다.
+  void skipOnboarding() {
+    _onboardingSkipped = true;
+    notifyListeners();
+  }
+
+  /// 3개 미만이면 넛지 칩을 띄운다(G1 #8).
+  bool get showsRecipeNudge =>
+      _storage.readRecipes().length < trustedRecipeGoal;
+
+  int get recipeCount => _storage.readRecipes().length;
+
+  /// 레시피 북 재료 중 지금 체크리스트에 없는 것 — 강조 칩으로 뜬다(B 이식, G1 #8).
+  ///
+  /// 질문 2(저장 레시피가 실제 선택을 바꾸는가)의 검증 확률을 직접 올리는 장치다 —
+  /// 저장 레시피와 연결될 재료를 놓치지 않게 한다.
+  List<String> get unrecognizedFromRecipeBook {
+    final present = {for (final i in _ingredients) i.name};
+    final seen = <String>{};
+    return [
+      for (final recipe in _storage.readRecipes())
+        for (final name in recipe.ingredients)
+          if (!present.contains(name) && seen.add(name)) name,
+    ];
+  }
+
+  /// 레시피 북이 바뀐 뒤 화면을 다시 그리게 한다 — 스토리지에서 바로 읽으므로 알림만 주면 된다.
+  void refresh() => notifyListeners();
 
   /// 점선 칩으로 분리되는 뭉뚱그림 항목들(ADR-0002).
   List<Ingredient> get vagueItems => [

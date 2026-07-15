@@ -5,11 +5,18 @@ import 'package:image_picker/image_picker.dart';
 import 'theme/app_theme.dart';
 import 'ui/main_controller.dart';
 import 'ui/main_page.dart';
+import 'ui/recipe_book_controller.dart';
 
 class CookmarkApp extends StatelessWidget {
-  const CookmarkApp({super.key, required this.controller, this.imagePicker});
+  const CookmarkApp({
+    super.key,
+    required this.controller,
+    required this.recipeBookController,
+    this.imagePicker,
+  });
 
   final MainController controller;
+  final RecipeBookController recipeBookController;
 
   /// E2E가 파일 선택창을 우회할 때 주입한다.
   final Future<XFile?> Function()? imagePicker;
@@ -20,7 +27,11 @@ class CookmarkApp extends StatelessWidget {
       title: '냉파',
       debugShowCheckedModeBanner: false,
       theme: buildAppTheme(),
-      home: MainPage(controller: controller, imagePicker: imagePicker),
+      home: MainPage(
+        controller: controller,
+        recipeBookController: recipeBookController,
+        imagePicker: imagePicker,
+      ),
     );
   }
 }

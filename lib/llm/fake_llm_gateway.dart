@@ -47,6 +47,16 @@ class FakeLlmGateway implements LlmGateway {
 
   /// 이 페이크가 몇 번 호출됐는지 — "다시 시도"가 실제로 재호출하는지 검증할 때 쓴다.
   int recognizeCallCount = 0;
+  int extractCallCount = 0;
+
+  /// 제목 → 재료. 없는 제목은 [_fallbackExtraction]으로 답한다.
+  final Map<String, List<String>> extractions = {
+    '김치찌개': ['김치', '돼지고기', '두부', '대파', '고춧가루'],
+    '애호박볶음': ['애호박', '대파', '소금', '식용유'],
+    '계란찜': ['계란', '대파', '새우젓'],
+  };
+
+  static const _fallbackExtraction = ['소금', '식용유'];
 
   @override
   Future<RecognitionResult> recognize(Uint8List jpegBytes) async {
@@ -55,4 +65,26 @@ class FakeLlmGateway implements LlmGateway {
     if (failure != null) throw failure!;
     return RecognitionResult(ingredients: ingredients, usage: _fixtureUsage);
   }
+
+  @override
+  Future<ExtractionResult> extractIngredients(String title) async {
+    extractCallCount++;
+    if (latency > Duration.zero) await Future<void>.delayed(latency);
+    if (failure != null) throw failure!;
+    return ExtractionResult(
+      ingredients: extractions[title] ?? _fallbackExtraction,
+      usage: _extractionUsage,
+    );
+  }
 }
+
+/// T1 #6 실측의 매칭 호출(텍스트 온리, 395/225 → $0.00044) 자리를 빌린다 —
+/// 추출도 같은 모양의 텍스트 온리 호출이라 이미지 토큰이 0이다.
+const _extractionUsage = LlmUsage(
+  promptTokens: 395,
+  outputTokens: 225,
+  thoughtTokens: 0,
+  imageTokens: 0,
+  costUsd: 0.00044,
+  model: 'fake-extractor',
+);

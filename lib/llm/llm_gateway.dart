@@ -95,8 +95,23 @@ class LlmFailure implements Exception {
       'LlmFailure(${kind.name}${detail == null ? '' : ': $detail'})';
 }
 
-/// 인식·매칭을 감싸는 경계. 구현은 서버리스 프록시(운영)와 페이크(테스트) 둘뿐이다.
+/// 레시피 제목에서 재료를 추론한 결과.
+@immutable
+class ExtractionResult {
+  const ExtractionResult({required this.ingredients, required this.usage});
+
+  final List<String> ingredients;
+  final LlmUsage usage;
+}
+
+/// 인식·추출·매칭을 감싸는 경계. 구현은 서버리스 프록시(운영)와 페이크(테스트) 둘뿐이다.
 abstract interface class LlmGateway {
   /// 냉장고 사진에서 재료 후보를 얻는다. [jpegBytes]는 이미 768px로 리사이즈된 것이어야 한다.
   Future<RecognitionResult> recognize(Uint8List jpegBytes);
+
+  /// 레시피 제목에서 재료를 추론한다.
+  ///
+  /// 제목만 보낸다 — 본문·자막을 긁지 않는다(스펙 Out of scope, 수익화·법적 리서치 #5).
+  /// "김치찌개"처럼 요리명이 또렷하면 잘 되고, "오늘의 저녁"처럼 모호하면 빈약해진다.
+  Future<ExtractionResult> extractIngredients(String title);
 }
