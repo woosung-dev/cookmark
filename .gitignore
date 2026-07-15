@@ -1,3 +1,9 @@
 .env*
 .agents
 .claude
+
+# Flutter 산출물
+/build/
+.dart_tool/
+.idea/
+*.iml
