@@ -126,7 +126,7 @@
 - [x] `flutter build web` 성공
 - [x] `dart format` 적용
 - [x] /code-review — 2축(standards·spec). 결함 5건 수정(커밋 2bd8833), 미결 4건은 아래
-- [ ] PR
+- [x] PR — https://github.com/woosung-dev/cookmark/pull/26
 
 ## 12. 리뷰가 남긴 미결 (사용자 판단 필요)
 
