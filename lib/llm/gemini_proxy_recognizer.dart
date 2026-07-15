@@ -14,7 +14,7 @@ class GeminiProxyRecognizer implements IngredientRecognizer {
   GeminiProxyRecognizer({
     required this.client,
     required this.endpoint,
-    this.timeout = const Duration(seconds: 30),
+    this.timeout = kRecognitionTimeout,
   });
 
   /// 배포된 앱이 쓰는 기본 구성 — 프록시는 같은 오리진의 `/api/recognize`다.
@@ -27,7 +27,8 @@ class GeminiProxyRecognizer implements IngredientRecognizer {
   final http.Client client;
   final Uri endpoint;
 
-  /// G1 #8의 단계식 문구가 30초에서 타임아웃을 알리므로 경계도 30초로 맞춘다.
+  /// HTTP 연결이 매달리지 않게 하는 전송 계층 보호. UX 약속([kRecognitionTimeout])을
+  /// 지키는 주체는 호출자이고, 이건 소켓을 붙들지 않기 위한 같은 값의 이중 방어다.
   final Duration timeout;
 
   @override

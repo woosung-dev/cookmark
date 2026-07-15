@@ -42,6 +42,7 @@ class FakeRecognizer implements IngredientRecognizer {
         outputTokens: 295,
         thinkingTokens: 0,
         estimatedCostUsd: 0.00073,
+        model: 'gemini-3.1-flash-lite',
       ),
     );
   }

@@ -2,7 +2,6 @@
 import 'dart:typed_data';
 
 import 'package:cookmark/image/resize.dart';
-import 'package:cookmark/llm/recognizer.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:image/image.dart' as img;
 
@@ -37,29 +36,17 @@ void main() {
       expect(out.height, 768);
     });
 
-    test('디코드할 수 없는 바이트는 저품질 실패로 던진다 — 디코더 내부 Error도 흡수', () {
+    test('디코드할 수 없는 바이트는 ImageDecodeException으로 던진다 — 디코더 내부 Error도 흡수', () {
       expect(
         () => resizeForRecognition([0, 1, 2, 3]),
-        throwsA(
-          isA<RecognitionException>().having(
-            (e) => e.reason,
-            'reason',
-            FailureReason.lowQuality,
-          ),
-        ),
+        throwsA(isA<ImageDecodeException>()),
       );
     });
 
-    test('빈 바이트도 저품질 실패다', () {
+    test('빈 바이트도 ImageDecodeException이다', () {
       expect(
         () => resizeForRecognition(const []),
-        throwsA(
-          isA<RecognitionException>().having(
-            (e) => e.reason,
-            'reason',
-            FailureReason.lowQuality,
-          ),
-        ),
+        throwsA(isA<ImageDecodeException>()),
       );
     });
   });

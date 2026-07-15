@@ -1,4 +1,4 @@
-// 인식 로딩 — 사진 위 스캔 시머 + 체크박스 스켈레톤 + 단계식 문구(G1 #8)
+// 재료 인식 로딩 — 사진 위 스캔 시머 + 체크박스 스켈레톤 + 단계식 문구(G1 #8)
 import 'dart:typed_data';
 
 import 'package:flutter/material.dart';
@@ -8,8 +8,8 @@ import '../theme/app_colors.dart';
 
 /// 기다림이 불안하지 않게 만드는 섹션. 원형 스피너는 쓰지 않고
 /// 레이아웃 모양의 스켈레톤을 쓴다(DESIGN.md §7).
-class ScanningSection extends StatelessWidget {
-  const ScanningSection({
+class RecognitionSection extends StatelessWidget {
+  const RecognitionSection({
     required this.photo,
     required this.stage,
     required this.onCancel,
@@ -28,7 +28,7 @@ class ScanningSection extends StatelessWidget {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
-          if (photo != null) _ScanningPhoto(photo: photo!),
+          if (photo != null) _RecognitionPhoto(photo: photo!),
           const SizedBox(height: 20),
           Text(
             stage.message,
@@ -53,16 +53,16 @@ class ScanningSection extends StatelessWidget {
 }
 
 /// 사진 위를 지나가는 스캔 시머. 사진이 표면 위에 놓이므로 유일하게 그림자를 쓴다(DESIGN.md §5).
-class _ScanningPhoto extends StatefulWidget {
-  const _ScanningPhoto({required this.photo});
+class _RecognitionPhoto extends StatefulWidget {
+  const _RecognitionPhoto({required this.photo});
 
   final Uint8List photo;
 
   @override
-  State<_ScanningPhoto> createState() => _ScanningPhotoState();
+  State<_RecognitionPhoto> createState() => _RecognitionPhotoState();
 }
 
-class _ScanningPhotoState extends State<_ScanningPhoto>
+class _RecognitionPhotoState extends State<_RecognitionPhoto>
     with SingleTickerProviderStateMixin {
   late final AnimationController _shimmer = AnimationController(
     vsync: this,

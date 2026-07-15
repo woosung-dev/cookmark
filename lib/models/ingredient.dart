@@ -36,16 +36,21 @@ class Ingredient {
     checked: confidence != Confidence.low,
   );
 
-  /// 사용자가 직접 추가한 재료 — 사용자가 봤으므로 high·체크다.
-  factory Ingredient.userAdded(String name) =>
-      Ingredient(name: name, confidence: Confidence.high, checked: true);
+  factory Ingredient.fromJson(Map<String, dynamic> json) => Ingredient(
+    name: json['name'] as String,
+    confidence: Confidence.parse(json['confidence'] as String?),
+    checked: json['checked'] as bool? ?? false,
+  );
 
   final String name;
   final Confidence confidence;
   final bool checked;
 
-  Ingredient toggled() =>
-      Ingredient(name: name, confidence: confidence, checked: !checked);
+  Map<String, dynamic> toJson() => {
+    'name': name,
+    'confidence': confidence.name,
+    'checked': checked,
+  };
 
   @override
   bool operator ==(Object other) =>

@@ -3,6 +3,12 @@ import 'package:flutter/foundation.dart';
 
 import '../models/ingredient.dart';
 
+/// 인식 1회의 제한 시간. G1 #8의 단계식 문구가 30초에 타임아웃을 알리므로 같은 값이다.
+///
+/// 이 약속을 지키는 책임은 호출자([MainController])에 있다 — 구현마다 제 타이머를 두면
+/// 타이머 없는 구현 하나가 부엌 앞 사용자를 무한히 기다리게 만든다.
+const kRecognitionTimeout = Duration(seconds: 30);
+
 /// 재료 인식의 경계. 구현은 서버리스 프록시([GeminiProxyRecognizer])이거나
 /// 테스트용 페이크([FakeRecognizer])다. 위젯은 이 타입만 안다.
 abstract interface class IngredientRecognizer {
@@ -36,6 +42,7 @@ class RecognitionUsage {
     this.outputTokens = 0,
     this.thinkingTokens = 0,
     this.estimatedCostUsd = 0,
+    this.model = '',
   });
 
   factory RecognitionUsage.fromJson(Map<String, dynamic> json) =>
@@ -45,6 +52,7 @@ class RecognitionUsage {
         outputTokens: (json['outputTokens'] as num?)?.toInt() ?? 0,
         thinkingTokens: (json['thinkingTokens'] as num?)?.toInt() ?? 0,
         estimatedCostUsd: (json['estimatedCostUsd'] as num?)?.toDouble() ?? 0,
+        model: json['model'] as String? ?? '',
       );
 
   final int latencyMs;
@@ -57,12 +65,17 @@ class RecognitionUsage {
   final int thinkingTokens;
   final double estimatedCostUsd;
 
+  /// 이 결과를 만든 모델명(프록시의 `GEMINI_MODEL`). 모델명이 환경변수로 교체 가능하므로
+  /// 로그에 같이 남기지 않으면 파일럿 행을 어떤 모델이 만들었는지 사후에 댈 수 없다.
+  final String model;
+
   Map<String, dynamic> toEventData() => {
     'latencyMs': latencyMs,
     'inputTokens': inputTokens,
     'outputTokens': outputTokens,
     'thinkingTokens': thinkingTokens,
     'estimatedCostUsd': estimatedCostUsd,
+    'model': model,
   };
 }
 

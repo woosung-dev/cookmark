@@ -100,6 +100,7 @@ void main() {
           'outputTokens': 295,
           'thinkingTokens': 0,
           'estimatedCostUsd': 0.00073,
+          'model': 'gemini-3.1-flash-lite',
         },
       }).recognize(image);
 
@@ -109,7 +110,21 @@ void main() {
         'outputTokens': 295,
         'thinkingTokens': 0,
         'estimatedCostUsd': 0.00073,
+        'model': 'gemini-3.1-flash-lite',
       });
+    });
+
+    test('모델명을 보존한다 — GEMINI_MODEL을 바꾸면 로그에 흔적이 남아야 한다', () async {
+      final r = await recognizerReturning({
+        'ingredients': [
+          {'name': '대파', 'confidence': 'high'},
+        ],
+        'usage': {'model': 'gemini-3.5-flash'},
+      }).recognize(image);
+
+      // 파일럿 행을 어떤 모델이 만들었는지 못 대면 원가 데이터의 귀속이 깨진다.
+      expect(r.usage.model, 'gemini-3.5-flash');
+      expect(r.usage.toEventData()['model'], 'gemini-3.5-flash');
     });
 
     test('이미지를 base64로 실어 POST한다', () async {

@@ -80,14 +80,17 @@ void main() {
       expect(s.session, isEmpty);
     });
 
-    test('세션을 비우면 복원되지 않는다', () async {
+    test('세션을 다시 저장하면 이전 목록을 덮어쓴다', () async {
       final s = await openStorage();
       await s.saveSession(const [
         Ingredient(name: '대파', confidence: Confidence.high, checked: true),
       ]);
-      await s.clearSession();
+      await s.saveSession(const [
+        Ingredient(name: '계란', confidence: Confidence.high, checked: true),
+      ]);
 
-      expect((await AppStorage.open()).session, isEmpty);
+      final restored = (await AppStorage.open()).session;
+      expect(restored.map((i) => i.name), ['계란']);
     });
   });
 }

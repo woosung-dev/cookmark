@@ -16,10 +16,18 @@ Future<void> main() async {
 /// 앱 루트. [recognizer]를 넘기지 않으면 실제 서버리스 프록시를 쓴다 —
 /// E2E는 여기에 결정적 페이크를 주입한다(스펙 #13의 유일한 seam).
 class CookmarkApp extends StatefulWidget {
-  const CookmarkApp({required this.storage, this.recognizer, super.key});
+  const CookmarkApp({
+    required this.storage,
+    this.recognizer,
+    this.recognitionTimeout = kRecognitionTimeout,
+    super.key,
+  });
 
   final AppStorage storage;
   final IngredientRecognizer? recognizer;
+
+  /// 인식 제한 시간. E2E만 줄여 쓴다.
+  final Duration recognitionTimeout;
 
   @override
   State<CookmarkApp> createState() => _CookmarkAppState();
@@ -29,6 +37,7 @@ class _CookmarkAppState extends State<CookmarkApp> {
   late final MainController _controller = MainController(
     storage: widget.storage,
     recognizer: widget.recognizer ?? GeminiProxyRecognizer.forApp(),
+    recognitionTimeout: widget.recognitionTimeout,
   );
 
   @override

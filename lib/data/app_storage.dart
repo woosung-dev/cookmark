@@ -27,7 +27,7 @@ class AppStorage {
     return AppStorage._(
       prefs,
       _decodeList(prefs.getString(_eventsKey), AppEvent.fromJson),
-      _decodeList(prefs.getString(_sessionKey), _ingredientFromJson),
+      _decodeList(prefs.getString(_sessionKey), Ingredient.fromJson),
     );
   }
 
@@ -49,13 +49,8 @@ class AppStorage {
     _session = List.of(ingredients);
     await _prefs.setString(
       _sessionKey,
-      jsonEncode(_session.map(_ingredientToJson).toList()),
+      jsonEncode(_session.map((i) => i.toJson()).toList()),
     );
-  }
-
-  Future<void> clearSession() async {
-    _session = [];
-    await _prefs.remove(_sessionKey);
   }
 
   /// 손상된 JSON에 로그 전체를 잃지 않는다 — 파일럿 데이터는 복구 불가이므로
@@ -75,17 +70,4 @@ class AppStorage {
       return [];
     }
   }
-
-  static Map<String, dynamic> _ingredientToJson(Ingredient i) => {
-    'name': i.name,
-    'confidence': i.confidence.name,
-    'checked': i.checked,
-  };
-
-  static Ingredient _ingredientFromJson(Map<String, dynamic> json) =>
-      Ingredient(
-        name: json['name'] as String,
-        confidence: Confidence.parse(json['confidence'] as String?),
-        checked: json['checked'] as bool? ?? false,
-      );
 }

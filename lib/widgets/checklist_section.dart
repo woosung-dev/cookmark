@@ -119,18 +119,28 @@ class _ConfidenceBox extends StatelessWidget {
                 ? const Icon(Icons.check, size: 16, color: AppColors.onAction)
                 : null,
           ),
-          // medium — "체크는 했는데 확인해 보세요"를 점 하나로 말한다.
+          // medium — "체크는 했는데 확인해 보세요"를 물음표 점으로 말한다(G1 #8).
           if (confidence == Confidence.medium)
             Positioned(
-              right: -3,
-              top: -3,
+              right: -4,
+              top: -4,
               child: Container(
                 key: const Key('medium-dot'),
-                width: 10,
-                height: 10,
+                width: 13,
+                height: 13,
+                alignment: Alignment.center,
                 decoration: const BoxDecoration(
                   color: AppColors.buyFg,
                   shape: BoxShape.circle,
+                ),
+                child: const Text(
+                  '?',
+                  style: TextStyle(
+                    color: AppColors.surface,
+                    fontSize: 9,
+                    fontWeight: FontWeight.w700,
+                    height: 1,
+                  ),
                 ),
               ),
             ),

@@ -4,14 +4,17 @@ import 'package:flutter/material.dart';
 import '../llm/recognizer.dart';
 import '../widgets/checklist_section.dart';
 import '../widgets/failure_card.dart';
-import '../widgets/scanning_section.dart';
+import '../widgets/recognition_section.dart';
 import '../widgets/upload_zone.dart';
 import 'main_controller.dart';
 
 /// 앱의 두 화면 중 하나. 코어 루프 전체가 여기서 화면 전환 0회로 일어난다.
 ///
 /// #14 구간은 상태 4종(온보딩·로딩·체크리스트·실패)까지다 —
-/// 제안·세션 복원 배너는 후속 티켓에서 이 switch에 붙는다.
+/// 제안은 후속 티켓에서 이 switch에 붙는다.
+///
+/// 헤더의 레시피 북 링크(ADR-0001의 유일한 진입점)는 #17이 레시피 북 화면과 함께 붙인다 —
+/// 갈 곳 없는 링크를 파일럿에 먼저 내보내지 않는다.
 class MainPage extends StatelessWidget {
   const MainPage({required this.controller, super.key});
 
@@ -22,11 +25,6 @@ class MainPage extends StatelessWidget {
     return Scaffold(
       appBar: AppBar(
         title: const Text('냉파'),
-        // ADR-0001 — 레시피 북 진입점은 헤더 링크 1개. 탭 바 없음.
-        actions: [
-          TextButton(onPressed: () {}, child: const Text('레시피 북')),
-          const SizedBox(width: 8),
-        ],
         bottom: const PreferredSize(
           preferredSize: Size.fromHeight(1),
           child: Divider(height: 1),
@@ -39,7 +37,7 @@ class MainPage extends StatelessWidget {
             MainState.onboarding => UploadZone(
               onPick: controller.pickAndRecognize,
             ),
-            MainState.loading => ScanningSection(
+            MainState.loading => RecognitionSection(
               photo: controller.photo,
               stage: controller.stage,
               onCancel: controller.cancel,
@@ -52,7 +50,6 @@ class MainPage extends StatelessWidget {
               child: FailureCard(
                 reason: controller.failure ?? FailureReason.server,
                 onRetry: controller.pickAndRecognize,
-                onContinueManually: controller.continueManually,
               ),
             ),
           },

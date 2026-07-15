@@ -29,6 +29,7 @@ void main() {
   Future<AppStorage> pumpApp(
     WidgetTester tester, {
     IngredientRecognizer recognizer = const FakeRecognizer(),
+    Duration recognitionTimeout = kRecognitionTimeout,
   }) async {
     // 파일럿 타깃은 모바일 브라우저다 — 데스크톱 기본 뷰포트로 재면 실제로 화면
     // 밖에 있는 요소가 테스트에서만 닿는다.
@@ -38,7 +39,11 @@ void main() {
 
     final storage = await AppStorage.open();
     await tester.pumpWidget(
-      CookmarkApp(storage: storage, recognizer: recognizer),
+      CookmarkApp(
+        storage: storage,
+        recognizer: recognizer,
+        recognitionTimeout: recognitionTimeout,
+      ),
     );
     await tester.pumpAndSettle();
     return storage;
@@ -72,6 +77,8 @@ void main() {
     expect(done.data['outputTokens'], 295);
     expect(done.data['thinkingTokens'], 0);
     expect(done.data['estimatedCostUsd'], 0.00073);
+    // 모델명이 없으면 이 행이 어떤 모델의 원가인지 사후에 댈 수 없다.
+    expect(done.data['model'], 'gemini-3.1-flash-lite');
   });
 
   testWidgets('confidence 3단 초기 상태로 렌더된다 (ADR-0003)', (tester) async {
@@ -104,7 +111,7 @@ void main() {
     );
   });
 
-  testWidgets('인식 실패는 인라인 카드로 처리하고 직접 입력으로 이어간다', (tester) async {
+  testWidgets('인식 실패는 그 자리의 인라인 카드로 처리한다 — 막다른 에러 화면 없음', (tester) async {
     final storage = await pumpApp(
       tester,
       recognizer: const FakeRecognizer(failWith: FailureReason.empty),
@@ -113,15 +120,28 @@ void main() {
     await tester.tap(find.byKey(const Key('upload-button')));
     await tester.pumpAndSettle();
 
-    // 막다른 에러 화면이 아니라 그 자리의 카드다.
     expect(find.byKey(const Key('failure-card')), findsOneWidget);
     expect(find.text('재료를 찾지 못했어요'), findsOneWidget);
+    expect(find.byKey(const Key('retry-button')), findsOneWidget);
     expect(storage.events.map((e) => e.type), contains(EventType.errorShown));
+  });
 
-    // "직접 입력으로 계속" — 빈 체크리스트 폴백으로 루프를 잇는다.
-    await tester.tap(find.byKey(const Key('continue-manually-button')));
+  testWidgets('인식이 제한 시간을 넘기면 타임아웃 카드가 뜬다 (AC — 30초)', (tester) async {
+    await pumpApp(
+      tester,
+      // 제 타이머가 없는 페이크 — 제한 시간은 호출 경계가 지킨다.
+      recognizer: const FakeRecognizer(delay: Duration(seconds: 90)),
+      recognitionTimeout: const Duration(seconds: 1),
+    );
+
+    await tester.tap(find.byKey(const Key('upload-button')));
+    await tester.pump();
+    await tester.pump();
+    await tester.pump(const Duration(seconds: 2));
     await tester.pumpAndSettle();
-    expect(find.byKey(const Key('checklist')), findsOneWidget);
+
+    expect(find.byKey(const Key('failure-card')), findsOneWidget);
+    expect(find.text('시간이 너무 오래 걸렸어요'), findsOneWidget);
   });
 
   testWidgets('인식이 길어지면 문구가 바뀌고 10초에 취소가 등장한다', (tester) async {

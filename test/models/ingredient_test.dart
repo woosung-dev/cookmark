@@ -42,25 +42,23 @@ void main() {
     });
   });
 
-  group('토글 — 해제=매칭 제외 (삭제 개념 없음)', () {
-    test('toggled()는 checked만 뒤집고 name·confidence를 보존한다', () {
-      final it = Ingredient.fromRecognition(
-        name: '계란',
-        confidence: Confidence.high,
+  group('JSON 라운드트립 — 세션 복원의 계약', () {
+    test('name·confidence·checked를 그대로 되살린다', () {
+      const it = Ingredient(
+        name: '두부',
+        confidence: Confidence.medium,
+        checked: true,
       );
-      final off = it.toggled();
-      expect(off.checked, isFalse);
-      expect(off.name, '계란');
-      expect(off.confidence, Confidence.high);
-      expect(off.toggled().checked, isTrue);
+      expect(Ingredient.fromJson(it.toJson()), it);
     });
-  });
 
-  group('직접 추가한 재료', () {
-    test('사용자가 추가한 재료는 high·체크로 들어온다', () {
-      final it = Ingredient.userAdded('멸치');
-      expect(it.checked, isTrue);
-      expect(it.confidence, Confidence.high);
+    test('해제된 low 재료도 상태 그대로 되살린다', () {
+      const it = Ingredient(
+        name: '트러플',
+        confidence: Confidence.low,
+        checked: false,
+      );
+      expect(Ingredient.fromJson(it.toJson()), it);
     });
   });
 }
