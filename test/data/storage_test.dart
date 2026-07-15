@@ -1,10 +1,13 @@
 // 이벤트 로그가 남고 새로고침 후에도 유지되는지 — #14 AC의 영속 부분.
+import 'dart:convert';
+
 import 'package:cookmark/data/storage.dart';
 import 'package:cookmark/domain/app_event.dart';
 import 'package:cookmark/llm/llm_gateway.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:shared_preferences_platform_interface/in_memory_shared_preferences_async.dart';
 import 'package:shared_preferences_platform_interface/shared_preferences_async_platform_interface.dart';
+import 'package:shared_preferences_platform_interface/types.dart';
 
 /// T1 #6 실측표의 flash-lite 기본·768px 행.
 const _usage = LlmUsage(
@@ -99,5 +102,72 @@ void main() {
 
     final reopened = await Storage.open();
     expect(reopened.readEvents().single.at, at);
+  });
+
+  group('모르는 유형의 이벤트 — 앞선 버전이 썼거나 백업으로 들어온 것', () {
+    /// 카탈로그에 없는 유형 1건이 섞인 로그를 디스크에 미리 깔아둔다.
+    void seedWithUnknownEvent() {
+      SharedPreferencesAsyncPlatform.instance =
+          InMemorySharedPreferencesAsync.withData({
+            'events': jsonEncode([
+              {
+                'type': 'photoUpload',
+                'at': '2026-07-15T19:00:00.000Z',
+                'bytes': 100,
+                'width': 768,
+              },
+              {'type': '앞선버전이벤트', 'at': '2026-07-15T19:01:00.000Z'},
+            ]),
+          });
+    }
+
+    test('로그 전체를 막지 않는다 — 읽기도 쓰기도 된다', () async {
+      seedWithUnknownEvent();
+      final storage = await Storage.open();
+
+      // 못 읽는 1건만 빠지고 나머지는 살아 있다.
+      expect(storage.readEvents().map((e) => e.type), [
+        AppEventType.photoUpload,
+      ]);
+
+      // readEvents가 appendEvent를 떠받치므로, 읽기가 터지면 쓰기까지 전부 막힌다.
+      await storage.appendEvent(
+        AppEvent.photoUpload(
+          at: DateTime.utc(2026, 7, 15, 20),
+          bytes: 1,
+          width: 768,
+        ),
+      );
+      expect(storage.readEvents(), hasLength(2));
+    });
+
+    test('지워지지 않는다 — 로그는 덧붙이기만 한다', () async {
+      seedWithUnknownEvent();
+      final storage = await Storage.open();
+      await storage.appendEvent(
+        AppEvent.photoUpload(
+          at: DateTime.utc(2026, 7, 15, 20),
+          bytes: 1,
+          width: 768,
+        ),
+      );
+
+      // 이 빌드가 못 읽는 행이라도 디스크의 원본은 남아야 한다 — 읽을 줄 아는 빌드가 내보낸다.
+      final stored =
+          (await SharedPreferencesAsyncPlatform.instance!.getPreferences(
+                const GetPreferencesParameters(
+                  filter: PreferencesFilters(allowList: {'events'}),
+                ),
+                const SharedPreferencesOptions(),
+              ))['events']!
+              as String;
+      expect(
+        [
+          for (final e in jsonDecode(stored) as List<Object?>)
+            (e! as Map)['type'],
+        ],
+        ['photoUpload', '앞선버전이벤트', 'photoUpload'],
+      );
+    });
   });
 }

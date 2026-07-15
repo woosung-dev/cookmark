@@ -36,6 +36,20 @@ void main() {
     test('버전이 붙는다 — 나중에 형식이 바뀌어도 옛 백업을 읽을 수 있게', () {
       expect(backupOf().toJson()['version'], 1);
     });
+
+    test('앞선 버전이 만든 백업도 가져올 수 있다 — 모르는 이벤트가 있어도', () {
+      final restored = BackupData.fromJson({
+        'version': 1,
+        'exportedAt': '2026-07-15T00:00:00.000Z',
+        'recipes': <Object?>[],
+        'events': [
+          {'type': 'photoUpload', 'at': '2026-07-15T19:00:00.000Z'},
+          {'type': '앞선버전이벤트', 'at': '2026-07-15T19:01:00.000Z'},
+        ],
+      });
+
+      expect(restored.events.map((e) => e.type), [AppEventType.photoUpload]);
+    });
   });
 
   group('레시피 병합 — URL 중복 제거', () {

@@ -47,17 +47,20 @@ class Storage {
     if (raw == null) return const [];
     final list = jsonDecode(raw) as List<Object?>;
     return [
+      // 못 읽는 유형은 조용히 빠진다 — 디스크의 원본은 그대로다(appendEvent 참조).
       for (final e in list)
-        AppEvent.fromJson((e! as Map).cast<String, Object?>()),
+        ?AppEvent.parse((e! as Map).cast<String, Object?>()),
     ];
   }
 
+  /// 로그에 덧붙인다 — 읽어서 다시 쓰지 않는다. 못 읽는 이벤트가 있어도 쓰기가 막히지 않고,
+  /// 그 원본도 지워지지 않는다. 로그는 덧붙이기만 한다.
   Future<void> appendEvent(AppEvent event) async {
-    final events = [...readEvents(), event];
-    await _prefs.setString(
-      _kEvents,
-      jsonEncode([for (final e in events) e.toJson()]),
-    );
+    final raw = _prefs.getString(_kEvents);
+    final stored = raw == null
+        ? const <Object?>[]
+        : jsonDecode(raw) as List<Object?>;
+    await _prefs.setString(_kEvents, jsonEncode([...stored, event.toJson()]));
   }
 
   SessionState? readSession() {

@@ -34,8 +34,9 @@ class BackupData {
         Recipe.fromJson((r! as Map).cast<String, Object?>()),
     ],
     events: [
+      // 앞선 버전이 만든 백업이라 못 읽는 이벤트가 섞여 있어도 가져오기가 통째로 실패하지 않는다.
       for (final e in json['events'] as List<Object?>? ?? const [])
-        AppEvent.fromJson((e! as Map).cast<String, Object?>()),
+        ?AppEvent.parse((e! as Map).cast<String, Object?>()),
     ],
   );
 }

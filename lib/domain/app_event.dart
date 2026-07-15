@@ -254,12 +254,16 @@ class AppEvent {
     ...data,
   };
 
-  factory AppEvent.fromJson(Map<String, Object?> json) {
+  /// 모르는 유형이면 null — 앞선 버전이 쓴 이벤트 1건이 로그 전체를 막으면 안 된다.
+  /// [AppEventType.parse]와 같은 계약이다(모르면 null).
+  static AppEvent? parse(Map<String, Object?> json) {
+    final type = AppEventType.parse(json['type']! as String);
+    if (type == null) return null;
     final rest = Map<String, Object?>.from(json)
       ..remove('type')
       ..remove('at');
     return AppEvent(
-      type: AppEventType.parse(json['type']! as String)!,
+      type: type,
       at: DateTime.parse(json['at']! as String),
       data: rest,
     );
