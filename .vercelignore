@@ -1,19 +1,43 @@
 # Vercel에 올릴 것은 web 빌드 산출물(build/web)과 api/ 함수뿐이다.
-# .gitignore가 build/를 제외하므로, 여기서 필요한 것만 남기고 나머지를 명시적으로 뺀다.
-!build/web
+# 서빙되는 건 outputDirectory(vercel.json = build/web)의 내용물과 api/ 함수다.
+#
+# 규칙 두 개를 지켜야 한다. 둘 다 어기면 사이트 전체가 404가 되는데,
+# api/ 함수는 멀쩡히 살아 있어서 원인이 잘 안 보인다(실측 2026-07-16).
+#
+# 1) 부정 패턴(`!build/web`)을 쓰지 말 것 — Vercel의 ignore 처리는 그 줄을 "다시 포함"이
+#    아니라 그냥 **제외**로 적용한다. 형제(test_cache 등)는 다 올라가는데 build/web만 빠진다.
+# 2) 디렉터리 패턴은 반드시 `/`로 시작해 루트에 고정할 것 — gitignore 문법에서 `web/`은
+#    **모든 깊이**의 web 디렉터리에 걸리므로 `build/web`까지 같이 제외해 버린다.
+#
+# .gitignore에 기대지도 말 것 — Vercel은 .gitignore를 읽지 않는다
+# (실측: gitignore된 .claude/·.agents/가 업로드에 들어왔다).
 
-lib/
-test/
-integration_test/
-test_driver/
-test_results/
-docs/
-web/
-.dart_tool/
-.idea/
+# 빌드 중간 산출물 — 배포에 쓰는 건 build/web 하나뿐이다.
+/build/test_cache/
+/build/flutter_assets/
+/build/native_assets/
+/build/unit_test_assets/
+
+# 소스·테스트·문서 — 배포 대상이 아니다.
+/lib/
+/test/
+/integration_test/
+/test_driver/
+/test_results/
+/docs/
+/web/
+/.dart_tool/
+/.idea/
+/pubspec.yaml
+/pubspec.lock
+/analysis_options.yaml
+/.metadata
 *.iml
-pubspec.yaml
-pubspec.lock
-analysis_options.yaml
-.metadata
 *.md
+
+# 에이전트·개발 도구 — 공개 표면에 올릴 이유가 없다.
+/.claude/
+/.agents/
+/scripts/
+/skills-lock.json
+/.flutter-plugins-dependencies
