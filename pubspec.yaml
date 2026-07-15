@@ -1,0 +1,39 @@
+name: cookmark
+description: "냉파 — 냉장고 사진 1장으로 재고를 파악하고 레시피 북과 매칭하는 질문 검증기 MVP."
+publish_to: 'none'
+
+version: 1.0.0+1
+
+environment:
+  sdk: ^3.12.2
+
+dependencies:
+  flutter:
+    sdk: flutter
+
+  cupertino_icons: ^1.0.8
+  # LLM 프록시(서버리스 함수) 호출
+  http: ^1.6.0
+  # 냉장고 사진 선택 (웹은 <input type=file>로 위임)
+  image_picker: ^1.2.3
+  # 768px 리사이즈 후 JPEG 재인코딩 — 디코드는 dart:ui가 하고 인코딩만 맡긴다
+  image: ^4.9.1
+  # 클라이언트 로컬 영속 (웹은 localStorage)
+  shared_preferences: ^2.5.5
+  # "레시피 보기" — 원본을 새 탭으로
+  url_launcher: ^6.3.2
+  # 카톡 인앱 브라우저 감지 (웹 타깃 전용, 조건부 임포트로 격리)
+  web: ^1.1.1
+
+dev_dependencies:
+  flutter_test:
+    sdk: flutter
+  # E2E 정본 (Web 타깃 실행)
+  integration_test:
+    sdk: flutter
+  # 테스트에서 로컬 영속을 인메모리로 갈아끼운다 (InMemorySharedPreferencesAsync)
+  shared_preferences_platform_interface: ^2.4.2
+  flutter_lints: ^6.0.0
+
+flutter:
+  uses-material-design: true
