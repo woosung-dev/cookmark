@@ -104,22 +104,23 @@ void main() {
       name: '대파',
     );
 
-    test('해제·재체크·추가·치환을 센다', () {
+    test('다섯 조작을 전부 센다', () {
       final metrics = debugMetricsFrom([
         editOf(EditKind.uncheck),
         editOf(EditKind.recheck),
         editOf(EditKind.add),
         editOf(EditKind.substitute),
+        editOf(EditKind.vagueDismiss),
       ]);
-      expect(metrics.manualEdits, 4);
+      expect(metrics.manualEdits, 5);
     });
 
-    test('뭉뚱그림 오탐 복귀는 세지 않는다 — 산식 판정이 미결이다', () {
+    test('뭉뚱그림 오탐 복귀도 센다 — 손이 간 횟수 전부다(ADR-0003, #28)', () {
       final metrics = debugMetricsFrom([
         editOf(EditKind.uncheck),
         editOf(EditKind.vagueDismiss),
       ]);
-      expect(metrics.manualEdits, 1);
+      expect(metrics.manualEdits, 2);
     });
 
     test('체크리스트 조작이 아닌 이벤트는 안 센다', () {

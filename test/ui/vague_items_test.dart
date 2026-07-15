@@ -156,22 +156,12 @@ void main() {
       );
     });
 
-    test('별도 kind로 남는다 — 산식 판정이 미결이라 뭉뚱그려 세지 않는다', () async {
+    test('별도 kind로 남는다 — 제외 산식을 나중에 재산할 수 있게(ADR-0003)', () async {
       final controller = await loadedController();
       await controller.dismissVague('반찬통');
 
       expect(edits().single.data['kind'], 'vagueDismiss');
       expect(edits().single.data['path'], 'vagueChip');
-    });
-
-    test('ADR-0003이 열거한 4종만 수동 수정으로 센다 — vagueDismiss는 빠져 있다', () {
-      expect(EditKind.values.where((k) => k.countsAsManualEdit), [
-        EditKind.uncheck,
-        EditKind.recheck,
-        EditKind.add,
-        EditKind.substitute,
-      ]);
-      expect(EditKind.vagueDismiss.countsAsManualEdit, isFalse);
     });
   });
 

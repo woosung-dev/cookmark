@@ -30,7 +30,7 @@ class DebugMetrics {
   /// 누적 추정 원가 — 파일럿 전체가 $0.1 미만이어야 정상이다(T1 #6).
   final double totalCostUsd;
 
-  /// 수동 수정 수 — ADR-0003 산식 그대로(vagueDismiss는 미결이라 제외).
+  /// 수동 수정 수 — 체크리스트 조작 전부(ADR-0003).
   final int manualEdits;
 
   final int eventCount;
@@ -57,10 +57,10 @@ DebugMetrics debugMetricsFrom(List<AppEvent> events) {
         lastTokens = _billedTokens(event.data);
         lastModel = event.data['model'] as String?;
       case AppEventType.checklistEdit:
-        final kind = EditKind.values
-            .where((k) => k.name == event.data['kind'])
-            .firstOrNull;
-        if (kind != null && kind.countsAsManualEdit) manualEdits++;
+        // 모든 체크리스트 조작이 각 1회다(ADR-0003). 유형을 못 읽는 것만 뺀다.
+        if (EditKind.values.any((k) => k.name == event.data['kind'])) {
+          manualEdits++;
+        }
       case _:
         break;
     }
