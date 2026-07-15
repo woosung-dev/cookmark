@@ -27,7 +27,9 @@ Uint8List resizeForRecognition(List<int> bytes) {
     throw const RecognitionException(FailureReason.lowQuality, '이미지를 읽지 못했습니다');
   }
 
-  final longEdge = decoded.width > decoded.height ? decoded.width : decoded.height;
+  final longEdge = decoded.width > decoded.height
+      ? decoded.width
+      : decoded.height;
   if (longEdge <= recognitionMaxEdge) return img.encodeJpg(decoded);
 
   final resized = img.copyResize(

@@ -5,17 +5,26 @@ import 'package:flutter_test/flutter_test.dart';
 void main() {
   group('인식 결과의 confidence 초기 상태 (ADR-0003 — 변경 시 수동 수정 산식 재검토)', () {
     test('high는 체크된 상태로 시작한다', () {
-      final it = Ingredient.fromRecognition(name: '대파', confidence: Confidence.high);
+      final it = Ingredient.fromRecognition(
+        name: '대파',
+        confidence: Confidence.high,
+      );
       expect(it.checked, isTrue);
     });
 
     test('medium은 체크된 상태로 시작한다 (물음표 점은 표시 층위)', () {
-      final it = Ingredient.fromRecognition(name: '두부', confidence: Confidence.medium);
+      final it = Ingredient.fromRecognition(
+        name: '두부',
+        confidence: Confidence.medium,
+      );
       expect(it.checked, isTrue);
     });
 
     test('low는 해제된 상태로 시작한다 — 환각을 매칭에서 배제', () {
-      final it = Ingredient.fromRecognition(name: '트러플', confidence: Confidence.low);
+      final it = Ingredient.fromRecognition(
+        name: '트러플',
+        confidence: Confidence.low,
+      );
       expect(it.checked, isFalse);
     });
   });
@@ -35,7 +44,10 @@ void main() {
 
   group('토글 — 해제=매칭 제외 (삭제 개념 없음)', () {
     test('toggled()는 checked만 뒤집고 name·confidence를 보존한다', () {
-      final it = Ingredient.fromRecognition(name: '계란', confidence: Confidence.high);
+      final it = Ingredient.fromRecognition(
+        name: '계란',
+        confidence: Confidence.high,
+      );
       final off = it.toggled();
       expect(off.checked, isFalse);
       expect(off.name, '계란');

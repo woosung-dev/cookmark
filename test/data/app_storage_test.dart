@@ -17,7 +17,10 @@ void main() {
     test('append한 이벤트를 순서대로 되읽는다', () async {
       final s = await openStorage();
       await s.appendEvent(
-        AppEvent(type: EventType.photoUploaded, at: DateTime.utc(2026, 7, 15, 1)),
+        AppEvent(
+          type: EventType.photoUploaded,
+          at: DateTime.utc(2026, 7, 15, 1),
+        ),
       );
       await s.appendEvent(
         AppEvent(

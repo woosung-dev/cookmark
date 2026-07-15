@@ -82,9 +82,10 @@ class AppStorage {
     'checked': i.checked,
   };
 
-  static Ingredient _ingredientFromJson(Map<String, dynamic> json) => Ingredient(
-    name: json['name'] as String,
-    confidence: Confidence.parse(json['confidence'] as String?),
-    checked: json['checked'] as bool? ?? false,
-  );
+  static Ingredient _ingredientFromJson(Map<String, dynamic> json) =>
+      Ingredient(
+        name: json['name'] as String,
+        confidence: Confidence.parse(json['confidence'] as String?),
+        checked: json['checked'] as bool? ?? false,
+      );
 }

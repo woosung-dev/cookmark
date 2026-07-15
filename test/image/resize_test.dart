@@ -7,7 +7,8 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:image/image.dart' as img;
 
 void main() {
-  Uint8List encodedImage(int w, int h) => img.encodeJpg(img.Image(width: w, height: h));
+  Uint8List encodedImage(int w, int h) =>
+      img.encodeJpg(img.Image(width: w, height: h));
 
   img.Image decode(Uint8List bytes) => img.decodeImage(bytes)!;
 
@@ -40,8 +41,11 @@ void main() {
       expect(
         () => resizeForRecognition([0, 1, 2, 3]),
         throwsA(
-          isA<RecognitionException>()
-              .having((e) => e.reason, 'reason', FailureReason.lowQuality),
+          isA<RecognitionException>().having(
+            (e) => e.reason,
+            'reason',
+            FailureReason.lowQuality,
+          ),
         ),
       );
     });
@@ -50,8 +54,11 @@ void main() {
       expect(
         () => resizeForRecognition(const []),
         throwsA(
-          isA<RecognitionException>()
-              .having((e) => e.reason, 'reason', FailureReason.lowQuality),
+          isA<RecognitionException>().having(
+            (e) => e.reason,
+            'reason',
+            FailureReason.lowQuality,
+          ),
         ),
       );
     });

@@ -22,7 +22,8 @@ class RecognitionException implements Exception {
   final String? detail;
 
   @override
-  String toString() => 'RecognitionException($reason${detail == null ? '' : ': $detail'})';
+  String toString() =>
+      'RecognitionException($reason${detail == null ? '' : ': $detail'})';
 }
 
 /// LLM 호출 1건의 사용량. 토큰·추정 원가는 프록시가 계산해 회신하고,
@@ -33,25 +34,34 @@ class RecognitionUsage {
     this.latencyMs = 0,
     this.inputTokens = 0,
     this.outputTokens = 0,
+    this.thinkingTokens = 0,
     this.estimatedCostUsd = 0,
   });
 
-  factory RecognitionUsage.fromJson(Map<String, dynamic> json) => RecognitionUsage(
-    latencyMs: (json['latencyMs'] as num?)?.toInt() ?? 0,
-    inputTokens: (json['inputTokens'] as num?)?.toInt() ?? 0,
-    outputTokens: (json['outputTokens'] as num?)?.toInt() ?? 0,
-    estimatedCostUsd: (json['estimatedCostUsd'] as num?)?.toDouble() ?? 0,
-  );
+  factory RecognitionUsage.fromJson(Map<String, dynamic> json) =>
+      RecognitionUsage(
+        latencyMs: (json['latencyMs'] as num?)?.toInt() ?? 0,
+        inputTokens: (json['inputTokens'] as num?)?.toInt() ?? 0,
+        outputTokens: (json['outputTokens'] as num?)?.toInt() ?? 0,
+        thinkingTokens: (json['thinkingTokens'] as num?)?.toInt() ?? 0,
+        estimatedCostUsd: (json['estimatedCostUsd'] as num?)?.toDouble() ?? 0,
+      );
 
   final int latencyMs;
   final int inputTokens;
   final int outputTokens;
+
+  /// Gemini의 `thoughtsTokenCount`. flash-lite는 0이지만 반드시 남긴다 —
+  /// T1 #6 실측에서 thinking이 호출 원가의 78%를 차지한 구성이 있었고,
+  /// 이 필드를 빠뜨리면 향후 과금 설계의 바닥 데이터가 그만큼 왜곡된다.
+  final int thinkingTokens;
   final double estimatedCostUsd;
 
   Map<String, dynamic> toEventData() => {
     'latencyMs': latencyMs,
     'inputTokens': inputTokens,
     'outputTokens': outputTokens,
+    'thinkingTokens': thinkingTokens,
     'estimatedCostUsd': estimatedCostUsd,
   };
 }

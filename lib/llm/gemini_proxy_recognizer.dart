@@ -48,7 +48,10 @@ class GeminiProxyRecognizer implements IngredientRecognizer {
     }
 
     if (response.statusCode != 200) {
-      throw RecognitionException(FailureReason.server, 'HTTP ${response.statusCode}');
+      throw RecognitionException(
+        FailureReason.server,
+        'HTTP ${response.statusCode}',
+      );
     }
 
     final Map<String, dynamic> body;

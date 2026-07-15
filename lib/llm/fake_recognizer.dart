@@ -35,11 +35,13 @@ class FakeRecognizer implements IngredientRecognizer {
         for (final f in _fixture)
           Ingredient.fromRecognition(name: f.name, confidence: f.confidence),
       ],
+      // T1 #6의 flash-lite·768px 실측값(1157/295/0, 1.9s, $0.00073).
       usage: const RecognitionUsage(
         latencyMs: 1900,
-        inputTokens: 1064,
-        outputTokens: 48,
-        estimatedCostUsd: 0.0011,
+        inputTokens: 1157,
+        outputTokens: 295,
+        thinkingTokens: 0,
+        estimatedCostUsd: 0.00073,
       ),
     );
   }

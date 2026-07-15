@@ -26,7 +26,10 @@ void main() {
         headers: {'content-type': 'application/json'},
       );
     });
-    return GeminiProxyRecognizer(client: client, endpoint: Uri.parse('/api/recognize'));
+    return GeminiProxyRecognizer(
+      client: client,
+      endpoint: Uri.parse('/api/recognize'),
+    );
   }
 
   group('프록시 응답 파싱 — P1에서 확정된 스키마', () {
@@ -58,15 +61,55 @@ void main() {
         ],
         'usage': {
           'latencyMs': 1900,
-          'inputTokens': 1064,
-          'outputTokens': 48,
-          'estimatedCostUsd': 0.0011,
+          'inputTokens': 1157,
+          'outputTokens': 295,
+          'thinkingTokens': 0,
+          'estimatedCostUsd': 0.00073,
         },
       }).recognize(image);
 
-      expect(r.usage.inputTokens, 1064);
-      expect(r.usage.outputTokens, 48);
-      expect(r.usage.estimatedCostUsd, 0.0011);
+      expect(r.usage.inputTokens, 1157);
+      expect(r.usage.outputTokens, 295);
+      expect(r.usage.thinkingTokens, 0);
+      expect(r.usage.estimatedCostUsd, 0.00073);
+    });
+
+    test('thinking 토큰을 보존한다 — T1 #6: 미기록 시 원가의 78%가 누락될 수 있다', () async {
+      final r = await recognizerReturning({
+        'ingredients': [
+          {'name': '대파', 'confidence': 'high'},
+        ],
+        'usage': {
+          'inputTokens': 1157,
+          'outputTokens': 294,
+          'thinkingTokens': 1735,
+        },
+      }).recognize(image);
+
+      expect(r.usage.thinkingTokens, 1735);
+    });
+
+    test('사용량이 이벤트 데이터로 그대로 실린다', () async {
+      final r = await recognizerReturning({
+        'ingredients': [
+          {'name': '대파', 'confidence': 'high'},
+        ],
+        'usage': {
+          'latencyMs': 1900,
+          'inputTokens': 1157,
+          'outputTokens': 295,
+          'thinkingTokens': 0,
+          'estimatedCostUsd': 0.00073,
+        },
+      }).recognize(image);
+
+      expect(r.usage.toEventData(), {
+        'latencyMs': 1900,
+        'inputTokens': 1157,
+        'outputTokens': 295,
+        'thinkingTokens': 0,
+        'estimatedCostUsd': 0.00073,
+      });
     });
 
     test('이미지를 base64로 실어 POST한다', () async {
@@ -106,7 +149,11 @@ void main() {
       await expectLater(
         call,
         throwsA(
-          isA<RecognitionException>().having((e) => e.reason, 'reason', FailureReason.empty),
+          isA<RecognitionException>().having(
+            (e) => e.reason,
+            'reason',
+            FailureReason.empty,
+          ),
         ),
       );
     });
@@ -115,7 +162,11 @@ void main() {
       await expectLater(
         recognizerReturning({'error': 'boom'}, status: 502).recognize(image),
         throwsA(
-          isA<RecognitionException>().having((e) => e.reason, 'reason', FailureReason.server),
+          isA<RecognitionException>().having(
+            (e) => e.reason,
+            'reason',
+            FailureReason.server,
+          ),
         ),
       );
     });
@@ -124,7 +175,11 @@ void main() {
       await expectLater(
         recognizerReturning('<html>gateway</html>').recognize(image),
         throwsA(
-          isA<RecognitionException>().having((e) => e.reason, 'reason', FailureReason.server),
+          isA<RecognitionException>().having(
+            (e) => e.reason,
+            'reason',
+            FailureReason.server,
+          ),
         ),
       );
     });
@@ -145,7 +200,11 @@ void main() {
       await expectLater(
         recognizer.recognize(image),
         throwsA(
-          isA<RecognitionException>().having((e) => e.reason, 'reason', FailureReason.timeout),
+          isA<RecognitionException>().having(
+            (e) => e.reason,
+            'reason',
+            FailureReason.timeout,
+          ),
         ),
       );
     });
@@ -180,7 +239,11 @@ void main() {
       await expectLater(
         FakeRecognizer(failWith: FailureReason.timeout).recognize(image),
         throwsA(
-          isA<RecognitionException>().having((e) => e.reason, 'reason', FailureReason.timeout),
+          isA<RecognitionException>().having(
+            (e) => e.reason,
+            'reason',
+            FailureReason.timeout,
+          ),
         ),
       );
     });
