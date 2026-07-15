@@ -106,9 +106,15 @@ void main() {
     FakeLlmGateway? gateway,
     bool skipOnboarding = true,
     String userAgent = 'Mozilla/5.0 Chrome/120.0.0.0 Mobile Safari/537.36',
+    bool debug = false,
   }) async {
     final llm = gateway ?? FakeLlmGateway();
-    final controller = MainController(llm, storage, userAgent: () => userAgent);
+    final controller = MainController(
+      llm,
+      storage,
+      userAgent: () => userAgent,
+      debugEnabled: () => debug,
+    );
     await tester.pumpWidget(
       CookmarkApp(
         controller: controller,
@@ -127,6 +133,14 @@ void main() {
       await tester.pumpAndSettle();
     }
     return controller;
+  }
+
+  /// 스크롤 안의 위젯은 뷰포트 밖이면 탭이 안 먹는다 — 올린 뒤 누른다.
+  Future<void> tapVisible(WidgetTester tester, Finder finder) async {
+    await tester.ensureVisible(finder);
+    await tester.pumpAndSettle();
+    await tester.tap(finder);
+    await tester.pumpAndSettle();
   }
 
   /// 체크리스트가 길면 "오늘 뭐 해먹지"가 뷰포트 밖에 있다 — 스크롤해 올린 뒤 탭한다.
@@ -845,6 +859,152 @@ void main() {
     final error = errors.lastWhere((e) => e.type == AppEventType.errorShown);
     expect(error.data['stage'], 'matching');
     expect(error.data['kind'], 'timeout');
+  });
+
+  testWidgets('측정 푸터는 debug 파라미터가 있을 때만 존재한다 (#22, ADR-0004)', (tester) async {
+    final controller = await pumpApp(tester, debug: true);
+    await uploadAndWait(tester, controller);
+
+    final footer = find.byKey(const Key('debug-footer'));
+    await tester.ensureVisible(footer);
+    await tester.pumpAndSettle();
+
+    expect(footer, findsOneWidget);
+    expect(find.textContaining('인식'), findsWidgets);
+    // 파운더는 수동 수정 수를 본다 — 여기서만.
+    expect(find.textContaining('수동 수정'), findsOneWidget);
+  });
+
+  testWidgets('debug가 없으면 측정 푸터가 트리에 없다 — 숨김이 아니라 부재다 (#22)', (tester) async {
+    final controller = await pumpApp(tester);
+    await uploadAndWait(tester, controller);
+
+    expect(find.byKey(const Key('debug-footer')), findsNothing);
+    // 배우자 화면 어디에도 계측이 새지 않는다(ADR-0004).
+    expect(find.textContaining('수동 수정'), findsNothing);
+    expect(find.textContaining('토큰'), findsNothing);
+  });
+
+  testWidgets('코어 루프+백업 관통 후 export JSON에 이벤트 12종이 전부 있다 (#22)', (
+    tester,
+  ) async {
+    // ⑩ 레시피 북 변경
+    final book = RecipeBookController(FakeLlmGateway(), storage);
+    await book.add(url: 'https://youtu.be/abc', title: '김치찌개');
+
+    // ⑫ 오류 표시 — 첫 시도를 실패시켜 오류를 만든 뒤 직접 입력으로 잇는다.
+    var controller = await pumpApp(
+      tester,
+      gateway: FakeLlmGateway(failure: const LlmFailure(LlmFailureKind.empty)),
+    );
+    await uploadAndWait(tester, controller);
+    await tester.tap(find.byKey(const Key('failure-manual')));
+    await tester.pumpAndSettle();
+
+    // ① 사진 업로드 ② 인식 완료
+    controller = await pumpApp(tester);
+    await uploadAndWait(tester, controller);
+
+    // ③ 체크리스트 조작
+    await tapVisible(tester, find.byKey(const Key('ingredient-row-대파')));
+
+    // ④ 매칭 완료 ⑤ 제안 노출
+    await tapRequestSuggestions(tester, controller);
+
+    // ⑥ 제안 선택 — 저장 카드만 "레시피 보기"를 가진다.
+    await controller.openRecipe(
+      controller.suggestions.firstWhere(
+        (s) => s.source == SuggestionSource.saved,
+      ),
+    );
+
+    // ⑦ 이거 했어요 ⑧ 실행취소
+    final menu = controller.suggestions.first.menu;
+    await tapVisible(tester, find.byKey(Key('cooked-$menu')));
+    await tester.tap(find.text('실행취소'));
+    await tester.pumpAndSettle();
+
+    // ⑨ 다시 제안 — 재료를 손봐 낡게 만든 뒤 갱신.
+    await tapVisible(tester, find.byKey(const Key('checklist-summary')));
+    await tapVisible(tester, find.byKey(const Key('ingredient-row-계란')));
+    await tapVisible(tester, find.byKey(const Key('rematch-button')));
+    await tester.pump();
+    await waitForPhase(
+      tester,
+      controller,
+      () => controller.phase == MainPhase.suggestions,
+    );
+    await tester.pumpAndSettle();
+
+    // ⑪ 백업 export/import
+    final backup = BackupController(storage);
+    await backup.exportJson();
+    backup.previewImport(
+      jsonEncode(
+        BackupData(
+          recipes: const [
+            Recipe(
+              url: 'https://youtu.be/other',
+              title: '계란찜',
+              ingredients: ['계란'],
+            ),
+          ],
+          events: const [],
+          exportedAt: DateTime.utc(2026, 7, 14),
+        ).toJson(),
+      ),
+    );
+    await backup.confirmImport();
+
+    // export JSON이 분석에 넘어가는 유일한 산출물이다 — 여기 다 있어야 한다.
+    final exported =
+        jsonDecode(await BackupController(storage).exportJson())
+            as Map<String, Object?>;
+    final events = (exported['events'] as List).cast<Map<String, Object?>>();
+    final types = events.map((e) => e['type']).toSet();
+
+    for (final type in AppEventType.values) {
+      expect(
+        types,
+        contains(type.name),
+        reason: '이벤트 카탈로그 ${type.name}이(가) export JSON에 없다',
+      );
+    }
+    expect(types, hasLength(AppEventType.values.length), reason: '12종 전부');
+
+    // 모든 이벤트에 타임스탬프가 있다.
+    for (final event in events) {
+      expect(event['at'], isA<String>());
+      expect(() => DateTime.parse(event['at']! as String), returnsNormally);
+    }
+
+    // 요구 필드 — 유형·경로·stale·토큰·원가.
+    Map<String, Object?> firstOf(String type) =>
+        events.firstWhere((e) => e['type'] == type);
+
+    final edit = firstOf('checklistEdit');
+    expect(edit['kind'], isA<String>(), reason: '유형');
+    expect(edit['path'], isA<String>(), reason: '경로');
+
+    final recognition = firstOf('recognitionDone');
+    expect(recognition['promptTokens'], isA<int>(), reason: '토큰');
+    expect(recognition['thoughtTokens'], isA<int>(), reason: 'thinking 토큰');
+    expect(recognition['costUsd'], isA<num>(), reason: '원가');
+    expect(recognition['model'], isA<String>(), reason: '모델 귀속');
+
+    final matching = firstOf('matchingDone');
+    expect(matching['costUsd'], isA<num>());
+    expect(matching['excludedCount'], isA<int>());
+
+    expect(firstOf('suggestionsShown')['stale'], isA<bool>(), reason: 'stale');
+    expect(firstOf('cooked')['stale'], isA<bool>(), reason: 'stale');
+    expect(firstOf('cookedUndo')['stale'], isA<bool>(), reason: 'stale');
+    expect(firstOf('suggestionOpened')['stale'], isA<bool>(), reason: 'stale');
+    expect(firstOf('backup')['direction'], isA<String>());
+    expect(firstOf('errorShown')['kind'], isA<String>(), reason: '오류 유형');
+
+    // 레시피 북도 같은 파일에 있다(US 30) — 백업 2개로 가구 단위 분석이 된다.
+    expect(exported['recipes'], isNotEmpty);
   });
 
   testWidgets('레시피 북은 헤더 링크 하나로만 들어간다 — 탭 바가 없다', (tester) async {

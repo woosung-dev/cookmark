@@ -16,6 +16,7 @@ import 'recipe_book_page.dart';
 import 'widgets/add_ingredient_bar.dart';
 import 'widgets/backup_section.dart';
 import 'widgets/checklist_section.dart';
+import 'widgets/debug_footer.dart';
 import 'widgets/failure_card.dart';
 import 'widgets/in_app_browser_banner.dart';
 import 'widgets/onboarding_card.dart';
@@ -246,6 +247,10 @@ class _MainPageState extends State<MainPage> {
           ),
         _ => const SizedBox.shrink(),
       },
+
+      // debug 파라미터가 없으면 이 위젯은 트리에 존재하지 않는다(ADR-0004).
+      if (controller.showsDebugFooter)
+        DebugFooter(metrics: controller.debugMetrics),
     ];
   }
 
