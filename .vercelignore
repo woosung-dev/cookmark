@@ -1,0 +1,19 @@
+# Vercel에 올릴 것은 web 빌드 산출물(build/web)과 api/ 함수뿐이다.
+# .gitignore가 build/를 제외하므로, 여기서 필요한 것만 남기고 나머지를 명시적으로 뺀다.
+!build/web
+
+lib/
+test/
+integration_test/
+test_driver/
+test_results/
+docs/
+web/
+.dart_tool/
+.idea/
+*.iml
+pubspec.yaml
+pubspec.lock
+analysis_options.yaml
+.metadata
+*.md
