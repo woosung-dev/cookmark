@@ -4,11 +4,14 @@ import 'package:flutter/foundation.dart';
 import '../data/storage.dart';
 import '../domain/app_event.dart';
 import '../domain/ingredient.dart';
+import '../domain/session_state.dart';
 import '../image/resize.dart';
 import '../llm/llm_gateway.dart';
 
-/// 단일 페이지 상태 6종 중 이 티켓(#14) 구간 — 온보딩/로딩/체크리스트/에러.
-/// 제안은 #18, 세션 복원은 #15에서 붙는다.
+/// 단일 페이지 상태(ADR-0001). 제안은 #18에서 붙는다.
+///
+/// "세션 복원"은 별도 상태가 아니라 [MainController.restoreSession]이 지나온 체크리스트로
+/// 되돌리는 경로다 — 사용자에게는 하던 화면이 그대로 보이는 게 전부다.
 enum MainPhase { upload, recognizing, checklist, failed }
 
 class MainController extends ChangeNotifier {
@@ -41,6 +44,85 @@ class MainController extends ChangeNotifier {
 
   Uint8List? _lastResizedPhoto;
 
+  /// "자주 쓰는 재료" 칩 — 빈도 기반, 이미 체크리스트에 있는 건 뺀다(#15).
+  List<String> get frequentIngredients {
+    final present = {for (final i in _ingredients) i.name};
+    return [
+      for (final name in _storage.frequentIngredients(
+        limit: 8 + present.length,
+      ))
+        if (!present.contains(name)) name,
+    ].take(8).toList();
+  }
+
+  /// 브라우저를 닫았다 열면 마지막 재료 체크리스트로 돌아간다(#15).
+  ///
+  /// 인식 중이던 상태는 복원하지 않는다 — 그 호출은 이미 사라졌다.
+  void restoreSession() {
+    final session = _storage.readSession();
+    if (session == null || session.ingredients.isEmpty) return;
+    _ingredients = [...session.ingredients];
+    _phase = MainPhase.checklist;
+    notifyListeners();
+  }
+
+  /// 행 전체 탭 토글 — 재료 체크리스트의 유일한 제스처다(G1 #8).
+  ///
+  /// 삭제는 없다. 해제가 곧 매칭 제외다.
+  Future<void> toggle(String name) async {
+    final index = _ingredients.indexWhere((i) => i.name == name);
+    if (index < 0) return;
+
+    final next = _ingredients[index].copyWith(
+      checked: !_ingredients[index].checked,
+    );
+    _ingredients[index] = next;
+    notifyListeners();
+
+    // 해제도 재체크도 각각 수동 수정 1회다(ADR-0003) — 산식은 파일럿 종료까지 불변.
+    await _recordEdit(
+      kind: next.checked ? EditKind.recheck : EditKind.uncheck,
+      path: EditPath.row,
+      name: name,
+    );
+  }
+
+  /// 재료 직접 추가 — 하단 고정 추가 바(타이핑)와 칩 3종이 모두 여기로 들어온다.
+  ///
+  /// [path]가 경로를 가른다. 분석 단계에서 대안 산식을 재산하려면 이 해상도가 필요하다(ADR-0003).
+  Future<void> addIngredient(String rawName, {required EditPath path}) async {
+    final name = rawName.trim();
+    if (name.isEmpty) return;
+
+    final existing = _ingredients.indexWhere((i) => i.name == name);
+    if (existing >= 0) {
+      // 이미 있는 이름이면 새로 만들지 않고 체크만 되살린다 — 같은 재료가 두 줄이 되면 매칭이 오염된다.
+      if (_ingredients[existing].checked) return;
+      _ingredients[existing] = _ingredients[existing].copyWith(checked: true);
+      notifyListeners();
+      await _recordEdit(kind: EditKind.recheck, path: path, name: name);
+      return;
+    }
+
+    _ingredients.add(Ingredient.added(name));
+    notifyListeners();
+    await _recordEdit(kind: EditKind.add, path: path, name: name);
+  }
+
+  Future<void> _recordEdit({
+    required EditKind kind,
+    required EditPath path,
+    required String name,
+  }) async {
+    await _storage.appendEvent(
+      AppEvent.checklistEdit(at: _now(), kind: kind, path: path, name: name),
+    );
+    await _saveSession();
+  }
+
+  Future<void> _saveSession() =>
+      _storage.writeSession(SessionState(ingredients: _ingredients));
+
   /// 사진 1장 → 리사이즈 → 인식 → 재료 체크리스트. 코어 루프의 시작이다.
   Future<void> uploadPhoto(Uint8List original) async {
     final resized = await resizeForRecognition(original);
@@ -64,12 +146,13 @@ class MainController extends ChangeNotifier {
   }
 
   /// 실패 인라인 카드의 "직접 입력으로 계속" — 빈 체크리스트 폴백(G1 #8, 막다른 화면 없음).
-  void continueWithEmptyChecklist() {
+  Future<void> continueWithEmptyChecklist() async {
     _ingredients = [];
     _photo = null;
     _failure = null;
     _phase = MainPhase.checklist;
     notifyListeners();
+    await _saveSession();
   }
 
   Future<void> _recognize(Uint8List jpegBytes) async {
@@ -89,9 +172,11 @@ class MainController extends ChangeNotifier {
           count: result.ingredients.length,
         ),
       );
-      _ingredients = result.ingredients;
+      // 게이트웨이가 준 목록을 그대로 들고 있으면 토글이 그 인스턴스를 건드린다 — 복사해서 소유한다.
+      _ingredients = [...result.ingredients];
       _photo = null;
       _phase = MainPhase.checklist;
+      await _saveSession();
     } on LlmFailure catch (e) {
       await _storage.appendEvent(
         AppEvent.errorShown(

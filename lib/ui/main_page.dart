@@ -6,6 +6,7 @@ import '../theme/app_colors.dart';
 import '../theme/app_theme.dart';
 import 'main_controller.dart';
 import 'recipe_book_page.dart';
+import 'widgets/add_ingredient_bar.dart';
 import 'widgets/checklist_section.dart';
 import 'widgets/failure_card.dart';
 import 'widgets/recognition_loading.dart';
@@ -54,14 +55,27 @@ class _MainPageState extends State<MainPage> {
       body: SafeArea(
         child: ListenableBuilder(
           listenable: widget.controller,
-          builder: (context, _) => SingleChildScrollView(
-            padding: const EdgeInsets.fromLTRB(
-              Space.screenPad,
-              Space.sm,
-              Space.screenPad,
-              Space.xxxl,
-            ),
-            child: _section(),
+          builder: (context, _) => Column(
+            children: [
+              Expanded(
+                child: SingleChildScrollView(
+                  padding: const EdgeInsets.fromLTRB(
+                    Space.screenPad,
+                    Space.sm,
+                    Space.screenPad,
+                    Space.xxxl,
+                  ),
+                  child: _section(),
+                ),
+              ),
+              // 추가 바는 체크리스트를 다듬는 동안에만 하단에 고정된다.
+              if (widget.controller.phase == MainPhase.checklist)
+                AddIngredientBar(
+                  frequent: widget.controller.frequentIngredients,
+                  onAdd: (name, path) =>
+                      widget.controller.addIngredient(name, path: path),
+                ),
+            ],
           ),
         ),
       ),
@@ -89,7 +103,10 @@ class _MainPageState extends State<MainPage> {
             padding: const EdgeInsets.only(left: Space.xs, bottom: Space.md),
             child: Text('냉장고에 있는 것', style: AppTypography.largeTitle),
           ),
-          ChecklistSection(ingredients: controller.ingredients),
+          ChecklistSection(
+            ingredients: controller.ingredients,
+            onToggle: controller.toggle,
+          ),
           const SizedBox(height: Space.xl),
           Text(
             '맞는 것만 남기고 아닌 건 체크를 풀어주세요.',

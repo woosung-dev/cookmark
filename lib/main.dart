@@ -9,5 +9,8 @@ import 'ui/main_controller.dart';
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
   final storage = await Storage.open();
-  runApp(CookmarkApp(controller: MainController(ProxyLlmGateway(), storage)));
+  final controller = MainController(ProxyLlmGateway(), storage)
+    // 냉장고 앞에서 브라우저를 닫았다 열어도 하던 데서 이어간다(#15).
+    ..restoreSession();
+  runApp(CookmarkApp(controller: controller));
 }

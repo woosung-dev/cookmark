@@ -6,13 +6,19 @@ import '../../theme/app_colors.dart';
 import '../../theme/app_theme.dart';
 import 'confidence_checkbox.dart';
 
-/// confidence 3단 초기 상태로 재료를 보여준다 — high·medium은 본문에, low는 "확실하지 않아요" 흐린 그룹에.
+/// confidence 3단 초기 상태로 재료를 보여주고, 행 전체 탭으로 토글한다.
 ///
-/// 조작(행 탭 토글·추가 바·칩)은 #15에서 붙는다. 여기서는 초기 상태의 렌더가 전부다.
+/// 제스처는 행 탭 하나뿐이다 — 스와이프·롱프레스·삭제 버튼 없음(G1 #8). 삭제 개념 자체가 없다.
+/// 해제가 곧 매칭 제외다.
 class ChecklistSection extends StatelessWidget {
-  const ChecklistSection({super.key, required this.ingredients});
+  const ChecklistSection({
+    super.key,
+    required this.ingredients,
+    required this.onToggle,
+  });
 
   final List<Ingredient> ingredients;
+  final void Function(String name) onToggle;
 
   @override
   Widget build(BuildContext context) {
@@ -31,7 +37,7 @@ class ChecklistSection extends StatelessWidget {
         if (confident.isEmpty && uncertain.isEmpty)
           const _EmptyChecklistHint()
         else
-          _IngredientGroup(ingredients: confident),
+          _IngredientGroup(ingredients: confident, onToggle: onToggle),
         if (uncertain.isNotEmpty) ...[
           const SizedBox(height: Space.xxl),
           Padding(
@@ -44,7 +50,7 @@ class ChecklistSection extends StatelessWidget {
           // 흐린 그룹 — 여기 있는 건 해제 상태이고, 그냥 두면 매칭에서 빠진다.
           Opacity(
             opacity: 0.6,
-            child: _IngredientGroup(ingredients: uncertain),
+            child: _IngredientGroup(ingredients: uncertain, onToggle: onToggle),
           ),
         ],
       ],
@@ -53,9 +59,10 @@ class ChecklistSection extends StatelessWidget {
 }
 
 class _IngredientGroup extends StatelessWidget {
-  const _IngredientGroup({required this.ingredients});
+  const _IngredientGroup({required this.ingredients, required this.onToggle});
 
   final List<Ingredient> ingredients;
+  final void Function(String name) onToggle;
 
   @override
   Widget build(BuildContext context) {
@@ -70,7 +77,7 @@ class _IngredientGroup extends StatelessWidget {
         children: [
           for (final (index, ingredient) in ingredients.indexed) ...[
             if (index > 0) const Divider(indent: Space.lg),
-            _IngredientRow(ingredient: ingredient),
+            _IngredientRow(ingredient: ingredient, onToggle: onToggle),
           ],
         ],
       ),
@@ -79,30 +86,48 @@ class _IngredientGroup extends StatelessWidget {
 }
 
 class _IngredientRow extends StatelessWidget {
-  const _IngredientRow({required this.ingredient});
+  const _IngredientRow({required this.ingredient, required this.onToggle});
 
   final Ingredient ingredient;
+  final void Function(String name) onToggle;
 
   @override
   Widget build(BuildContext context) {
     return Semantics(
       checked: ingredient.checked,
       label: ingredient.name,
-      child: Container(
-        constraints: const BoxConstraints(minHeight: Space.rowMin),
-        padding: const EdgeInsets.symmetric(
-          horizontal: Space.lg,
-          vertical: Space.md,
-        ),
-        child: Row(
-          children: [
-            ConfidenceCheckbox(
-              checked: ingredient.checked,
-              confidence: ingredient.confidence,
-            ),
-            const SizedBox(width: Space.md),
-            Expanded(child: Text(ingredient.name, style: AppTypography.body)),
-          ],
+      button: true,
+      child: InkWell(
+        // 행 전체가 탭 타깃이다 — 체크박스만 노리게 하지 않는다.
+        key: Key('ingredient-row-${ingredient.name}'),
+        onTap: () => onToggle(ingredient.name),
+        child: Container(
+          constraints: const BoxConstraints(minHeight: Space.rowMin),
+          padding: const EdgeInsets.symmetric(
+            horizontal: Space.lg,
+            vertical: Space.md,
+          ),
+          child: Row(
+            children: [
+              ExcludeSemantics(
+                child: ConfidenceCheckbox(
+                  checked: ingredient.checked,
+                  confidence: ingredient.confidence,
+                ),
+              ),
+              const SizedBox(width: Space.md),
+              Expanded(
+                child: Text(
+                  ingredient.name,
+                  style: AppTypography.body.copyWith(
+                    color: ingredient.checked
+                        ? AppColors.text
+                        : AppColors.muted,
+                  ),
+                ),
+              ),
+            ],
+          ),
         ),
       ),
     );

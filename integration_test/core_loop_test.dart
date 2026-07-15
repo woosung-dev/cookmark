@@ -211,6 +211,53 @@ void main() {
     expect(errors.single.data['kind'], 'empty');
   });
 
+  testWidgets('행 전체를 탭해 재료를 토글하고, 그게 유형·경로와 함께 남는다 (#15)', (tester) async {
+    final controller = await pumpApp(tester);
+    await uploadAndWait(tester, controller);
+
+    // 체크박스가 아니라 행을 탭한다.
+    await tester.tap(find.byKey(const Key('ingredient-row-대파')));
+    await tester.pumpAndSettle();
+    await tester.tap(find.byKey(const Key('ingredient-row-표고버섯')));
+    await tester.pumpAndSettle();
+
+    final edits = (await Storage.open()).readEvents().where(
+      (e) => e.type == AppEventType.checklistEdit,
+    );
+    expect(edits.map((e) => (e.data['kind'], e.data['path'], e.data['name'])), [
+      ('uncheck', 'row', '대파'),
+      ('recheck', 'row', '표고버섯'),
+    ]);
+  });
+
+  testWidgets('하단 추가 바로 빠진 재료를 넣는다 — 경로 typing (#15)', (tester) async {
+    final controller = await pumpApp(tester);
+    await uploadAndWait(tester, controller);
+
+    await tester.enterText(find.byKey(const Key('add-ingredient-field')), '두유');
+    await tester.tap(find.byKey(const Key('add-ingredient-submit')));
+    await tester.pumpAndSettle();
+
+    expect(find.text('두유'), findsOneWidget);
+
+    final add = (await Storage.open()).readEvents().lastWhere(
+      (e) => e.type == AppEventType.checklistEdit,
+    );
+    expect(add.data, {'kind': 'add', 'path': 'typing', 'name': '두유'});
+  });
+
+  testWidgets('수정 카운터는 화면 어디에도 없다 (ADR-0004 단일맹검)', (tester) async {
+    final controller = await pumpApp(tester);
+    await uploadAndWait(tester, controller);
+
+    await tester.tap(find.byKey(const Key('ingredient-row-대파')));
+    await tester.pumpAndSettle();
+
+    // 조작을 3번 해도 "3"이나 "수정" 같은 숫자·문구가 뜨지 않는다 — 죄책감 UI 회피.
+    expect(find.textContaining('수정'), findsNothing);
+    expect(find.textContaining('1개 고침'), findsNothing);
+  });
+
   testWidgets('레시피 북은 헤더 링크 하나로만 들어간다 — 탭 바가 없다', (tester) async {
     await pumpApp(tester);
 

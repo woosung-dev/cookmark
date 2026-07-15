@@ -5,6 +5,7 @@ import 'package:flutter/foundation.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 import '../domain/app_event.dart';
+import '../domain/session_state.dart';
 
 /// 이벤트 로그·레시피 북·세션 상태의 읽기/쓰기를 한 곳에 모은 모듈.
 ///
@@ -16,8 +17,9 @@ class Storage {
   final SharedPreferencesWithCache _prefs;
 
   static const _kEvents = 'events';
+  static const _kSession = 'session';
 
-  static const _allowList = <String>{_kEvents};
+  static const _allowList = <String>{_kEvents, _kSession};
 
   static Future<Storage> open() async {
     final prefs = await SharedPreferencesWithCache.create(
@@ -46,6 +48,42 @@ class Storage {
       _kEvents,
       jsonEncode([for (final e in events) e.toJson()]),
     );
+  }
+
+  SessionState? readSession() {
+    final raw = _prefs.getString(_kSession);
+    if (raw == null) return null;
+    return SessionState.fromJson(
+      (jsonDecode(raw) as Map).cast<String, Object?>(),
+    );
+  }
+
+  Future<void> writeSession(SessionState session) =>
+      _prefs.setString(_kSession, jsonEncode(session.toJson()));
+
+  /// "자주 쓰는 재료" 칩의 재료 — 사용자가 있다고 말한 횟수가 많은 순(#15).
+  ///
+  /// 빈도의 출처는 이벤트 로그다. 추가(add)와 재체크(recheck)만 센다 — 둘 다 "이건 우리 집에 있다"는
+  /// 사용자의 진술이다. 해제(uncheck)는 없다는 진술이므로 세지 않는다.
+  /// 로그가 비어 있으면 빈 목록이다 — 빈도는 이력에서만 나온다.
+  List<String> frequentIngredients({int limit = 8}) {
+    final counts = <String, int>{};
+    for (final event in readEvents()) {
+      if (event.type != AppEventType.checklistEdit) continue;
+      final kind = event.data['kind'];
+      if (kind != EditKind.add.name && kind != EditKind.recheck.name) continue;
+      final name = event.data['name'] as String?;
+      if (name == null) continue;
+      counts[name] = (counts[name] ?? 0) + 1;
+    }
+
+    final names = counts.keys.toList()
+      ..sort((a, b) {
+        final byCount = counts[b]!.compareTo(counts[a]!);
+        // 동률이면 이름순 — 칩 순서가 매번 흔들리면 근육 기억이 안 생긴다.
+        return byCount != 0 ? byCount : a.compareTo(b);
+      });
+    return names.take(limit).toList();
   }
 
   /// E2E가 브라우저 localStorage를 비우고 시작할 수 있게 — 앱에는 데이터를 지우는 경로가 없다.
