@@ -21,12 +21,14 @@ class Storage {
   static const _kSession = 'session';
   static const _kRecipes = 'recipes';
   static const _kLastBackupAt = 'lastBackupAt';
+  static const _kExpectationSeen = 'expectationNoteSeen';
 
   static const _allowList = <String>{
     _kEvents,
     _kSession,
     _kRecipes,
     _kLastBackupAt,
+    _kExpectationSeen,
   };
 
   static Future<Storage> open() async {
@@ -108,6 +110,12 @@ class Storage {
       });
     return names.take(limit).toList();
   }
+
+  /// 기대 세팅 문구를 이미 봤는가 — 1회성이다(G1 #8).
+  bool readExpectationNoteSeen() => _prefs.getBool(_kExpectationSeen) ?? false;
+
+  Future<void> markExpectationNoteSeen() =>
+      _prefs.setBool(_kExpectationSeen, true);
 
   /// 마지막으로 백업한 시각. null이면 한 번도 안 했다.
   DateTime? readLastBackupAt() {

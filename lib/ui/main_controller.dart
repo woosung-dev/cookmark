@@ -6,9 +6,11 @@ import '../domain/app_event.dart';
 import '../domain/ingredient.dart';
 import '../domain/session_state.dart';
 import '../domain/suggestion.dart';
+import '../domain/in_app_browser.dart';
 import '../domain/vague_heuristic.dart';
 import '../image/resize.dart';
 import '../llm/llm_gateway.dart';
+import '../platform/user_agent.dart';
 import 'recipe_book_controller.dart';
 
 /// 단일 페이지 상태(ADR-0001).
@@ -21,14 +23,34 @@ enum MainPhase { upload, recognizing, checklist, matching, suggestions, failed }
 enum FailureStage { recognition, matching }
 
 class MainController extends ChangeNotifier {
-  MainController(this._gateway, this._storage, {DateTime Function()? now})
-    : _now = now ?? DateTime.now;
+  MainController(
+    this._gateway,
+    this._storage, {
+    DateTime Function()? now,
+    String Function()? userAgent,
+  }) : _now = now ?? DateTime.now,
+       _userAgent = userAgent ?? currentUserAgent;
 
   final LlmGateway _gateway;
   final Storage _storage;
 
   /// 테스트가 시간을 고정할 수 있게 — 이벤트 타임스탬프는 분석의 기준선이라 결정적이어야 한다.
   final DateTime Function() _now;
+
+  /// 테스트가 인앱 브라우저를 흉내 낼 수 있게 — 브라우저를 진짜로 띄울 수는 없다.
+  final String Function() _userAgent;
+
+  /// 카톡 인앱 브라우저에서 열렸는가 — 그러면 상시 경고 배너가 뜬다(#21).
+  ///
+  /// 닫을 수 없다. 여기서 쓰면 2주치 기록이 통째로 날아갈 수 있다.
+  late final bool showsInAppBrowserWarning = isKakaoInAppBrowser(_userAgent());
+
+  /// 첫 인식 결과 위에 1회성으로 뜨는 기대 세팅 문구(B 이식, G1 #8).
+  ///
+  /// 영속 플래그는 첫 인식이 끝나는 순간 찍고, 이번 화면에는 이 메모리 플래그로 계속 보여준다 —
+  /// 곧바로 영속 플래그를 읽으면 그리자마자 사라진다.
+  bool get showsExpectationNote => _showExpectationNote;
+  bool _showExpectationNote = false;
 
   MainPhase get phase => _phase;
   MainPhase _phase = MainPhase.upload;
@@ -426,6 +448,13 @@ class MainController extends ChangeNotifier {
           count: result.ingredients.length,
         ),
       );
+      // 첫 인식 결과에만 붙는다. 이 앱은 인식이 틀리는 걸 전제로 설계됐고(재료 체크리스트가 그 장치다),
+      // 사용자가 그걸 모르면 첫 오인식에서 앱을 접는다.
+      if (!_storage.readExpectationNoteSeen()) {
+        _showExpectationNote = true;
+        await _storage.markExpectationNoteSeen();
+      }
+
       // 게이트웨이가 준 목록을 그대로 들고 있으면 토글이 그 인스턴스를 건드린다 — 복사해서 소유한다.
       _ingredients = [...result.ingredients];
       _photo = null;

@@ -105,9 +105,10 @@ void main() {
     WidgetTester tester, {
     FakeLlmGateway? gateway,
     bool skipOnboarding = true,
+    String userAgent = 'Mozilla/5.0 Chrome/120.0.0.0 Mobile Safari/537.36',
   }) async {
     final llm = gateway ?? FakeLlmGateway();
-    final controller = MainController(llm, storage);
+    final controller = MainController(llm, storage, userAgent: () => userAgent);
     await tester.pumpWidget(
       CookmarkApp(
         controller: controller,
@@ -777,6 +778,73 @@ void main() {
     // 조작을 7번 했어도 그 숫자는 어디에도 없다(ADR-0004).
     expect(find.textContaining('수정'), findsNothing);
     expect(find.textContaining('7회'), findsNothing);
+  });
+
+  testWidgets('카톡 인앱 브라우저면 상시 경고 배너가 뜬다 (#21)', (tester) async {
+    await pumpApp(
+      tester,
+      userAgent:
+          'Mozilla/5.0 (Linux; Android 14) Mobile Safari/537.36 KAKAOTALK 10.4.5',
+    );
+
+    expect(find.byKey(const Key('in-app-browser-banner')), findsOneWidget);
+    expect(find.text('여기서는 기록이 사라질 수 있어요'), findsOneWidget);
+    // 기본 브라우저로 열기 + 홈 화면 추가 안내(G1 #8).
+    expect(find.textContaining('다른 브라우저로 열기'), findsOneWidget);
+    expect(find.textContaining('홈 화면에 추가'), findsOneWidget);
+  });
+
+  testWidgets('일반 브라우저면 경고가 없다 (#21)', (tester) async {
+    await pumpApp(tester);
+    expect(find.byKey(const Key('in-app-browser-banner')), findsNothing);
+  });
+
+  testWidgets('첫 인식 결과 위에 기대 세팅 문구가 1회만 뜬다 (#21)', (tester) async {
+    final controller = await pumpApp(tester);
+    await uploadAndWait(tester, controller);
+
+    expect(find.byKey(const Key('expectation-note')), findsOneWidget);
+    expect(find.text('인식이 틀려도 괜찮아요 — 체크로 다듬는 게 정상이에요.'), findsOneWidget);
+
+    // 다시 열면(새 컨트롤러) 이제 안 뜬다 — 브라우저 스토리지에 남는 1회성이다.
+    final next = await pumpApp(tester);
+    await uploadAndWait(tester, next);
+    expect(find.byKey(const Key('expectation-note')), findsNothing);
+  });
+
+  testWidgets('매칭 실패도 인라인 카드로 해소된다 — 에러 화면이 없다 (#21)', (tester) async {
+    final controller = await pumpApp(
+      tester,
+      gateway: FakeLlmGateway(
+        matchFailure: const LlmFailure(LlmFailureKind.timeout),
+      ),
+    );
+    await uploadAndWait(tester, controller);
+    await tapRequestSuggestions(tester, controller);
+
+    expect(find.byKey(const Key('failure-card')), findsOneWidget);
+    expect(find.text('메뉴를 고르는 데 시간이 너무 걸렸어요.'), findsOneWidget);
+    // 재료 섹션이 위에 그대로, 펼쳐진 채로 있다 — 접힘은 매칭이 성공했을 때만이고,
+    // 실패했으면 손봐야 할 대상이 바로 그 재료다. 막다른 화면이 아니다.
+    expect(find.text('냉장고에 있는 것'), findsOneWidget);
+    expect(find.byKey(const Key('ingredient-row-대파')), findsOneWidget);
+
+    // "재료 다시 보기"로 루프를 이어간다.
+    final fallback = find.byKey(const Key('failure-manual'));
+    await tester.ensureVisible(fallback);
+    await tester.pumpAndSettle();
+    await tester.tap(fallback);
+    await tester.pumpAndSettle();
+    expect(find.byKey(const Key('failure-card')), findsNothing);
+
+    final errors = await waitForEvents(
+      tester,
+      storage,
+      (events) => events.any((e) => e.type == AppEventType.errorShown),
+    );
+    final error = errors.lastWhere((e) => e.type == AppEventType.errorShown);
+    expect(error.data['stage'], 'matching');
+    expect(error.data['kind'], 'timeout');
   });
 
   testWidgets('레시피 북은 헤더 링크 하나로만 들어간다 — 탭 바가 없다', (tester) async {

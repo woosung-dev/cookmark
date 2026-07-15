@@ -17,6 +17,7 @@ import 'widgets/add_ingredient_bar.dart';
 import 'widgets/backup_section.dart';
 import 'widgets/checklist_section.dart';
 import 'widgets/failure_card.dart';
+import 'widgets/in_app_browser_banner.dart';
 import 'widgets/onboarding_card.dart';
 import 'widgets/recipe_book_chips.dart';
 import 'widgets/recognition_loading.dart';
@@ -175,6 +176,12 @@ class _MainPageState extends State<MainPage> {
     final controller = _controller;
 
     return [
+      // 카톡 인앱 브라우저 상시 경고 — 닫을 수 없다. 여기서 쓰면 기록이 날아간다(#21).
+      if (controller.showsInAppBrowserWarning) ...[
+        const InAppBrowserBanner(),
+        const SizedBox(height: Space.lg),
+      ],
+
       // 7일이 지났으면 주간 성적표로 백업을 권한다(G1 #8). 수동 수정 수는 여기 없다(ADR-0004).
       if (widget.backupController.needsBackup) ...[
         WeeklyReportBanner(
@@ -280,6 +287,11 @@ class _MainPageState extends State<MainPage> {
           padding: const EdgeInsets.only(left: Space.xs, bottom: Space.md),
           child: Text('냉장고에 있는 것', style: AppTypography.largeTitle),
         ),
+        // 첫 인식 결과 위 1회성 — 인식 오류를 실패로 느끼지 않게 한다(B 이식, G1 #8).
+        if (controller.showsExpectationNote) ...[
+          const ExpectationNote(),
+          const SizedBox(height: Space.md),
+        ],
         ChecklistSection(
           ingredients: controller.ingredients,
           onToggle: controller.toggle,
