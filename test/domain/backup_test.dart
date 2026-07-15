@@ -2,7 +2,6 @@
 import 'package:cookmark/domain/app_event.dart';
 import 'package:cookmark/domain/backup.dart';
 import 'package:cookmark/domain/recipe.dart';
-import 'package:cookmark/llm/llm_gateway.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 Recipe recipeAt(String id) =>
@@ -10,15 +9,6 @@ Recipe recipeAt(String id) =>
 
 AppEvent uploadAt(DateTime at) =>
     AppEvent.photoUpload(at: at, bytes: 1, width: 768);
-
-const _usage = LlmUsage(
-  promptTokens: 1,
-  outputTokens: 1,
-  thoughtTokens: 0,
-  imageTokens: 0,
-  costUsd: 0.1,
-  model: 'm',
-);
 
 BackupData backupOf({
   List<Recipe> recipes = const [],
@@ -100,75 +90,43 @@ void main() {
     });
   });
 
-  group('이벤트 병합 — 재가져오기가 로그를 두 배로 만들지 않는다', () {
-    test('같은 시각의 같은 이벤트는 건너뛴다', () {
-      final at = DateTime.utc(2026, 7, 15, 19);
-      final merge = previewMerge(
-        current: backupOf(events: [uploadAt(at)]),
-        incoming: backupOf(events: [uploadAt(at)]),
-      );
-
-      expect(merge.newEventCount, 0);
-      expect(merge.duplicateEventCount, 1);
-      expect(merge.mergedEvents, hasLength(1));
-    });
-
-    test('다른 시각이면 둘 다 남는다', () {
+  group('이벤트 로그는 가져오지 않는다 (US 25·US 30)', () {
+    test('들어온 백업의 이벤트는 무시된다', () {
       final merge = previewMerge(
         current: backupOf(events: [uploadAt(DateTime.utc(2026, 7, 15, 19))]),
         incoming: backupOf(events: [uploadAt(DateTime.utc(2026, 7, 15, 20))]),
       );
 
-      expect(merge.newEventCount, 1);
-      expect(merge.mergedEvents, hasLength(2));
+      expect(merge.ignoredEventCount, 1);
     });
 
-    test('같은 시각이라도 종류가 다르면 다른 일이다', () {
-      final at = DateTime.utc(2026, 7, 15, 19);
+    test('배우자 기기 시딩이 내 로그를 남의 이벤트로 오염시키지 않는다', () {
+      // 이게 깨지면 다음 주 export가 남의 이벤트를 되뱉어 US 30의 인별 귀속이 무너진다.
       final merge = previewMerge(
-        current: backupOf(events: [uploadAt(at)]),
+        current: backupOf(recipes: [recipeAt('mine')]),
         incoming: backupOf(
+          recipes: [recipeAt('theirs')],
           events: [
-            AppEvent.recognitionDone(
-              at: at,
-              latency: Duration.zero,
-              usage: _usage,
-              count: 1,
-            ),
+            uploadAt(DateTime.utc(2026, 7, 15, 19)),
+            uploadAt(DateTime.utc(2026, 7, 15, 20)),
           ],
         ),
       );
 
-      expect(merge.newEventCount, 1);
+      expect(merge.newRecipes.map((r) => r.url), ['https://youtu.be/theirs']);
+      expect(merge.ignoredEventCount, 2);
     });
 
-    test('같은 시각·종류라도 대상이 다르면 다른 일이다 — 빠른 연속 조작', () {
-      final at = DateTime.utc(2026, 7, 15, 19);
-      AppEvent editOf(String name) => AppEvent.checklistEdit(
-        at: at,
-        kind: EditKind.uncheck,
-        path: EditPath.row,
-        name: name,
-      );
-
+    test('레시피가 없으면 바뀌는 게 없다 — 이벤트만 잔뜩 들어와도', () {
       final merge = previewMerge(
-        current: backupOf(events: [editOf('대파')]),
-        incoming: backupOf(events: [editOf('계란')]),
+        current: backupOf(recipes: [recipeAt('a')]),
+        incoming: backupOf(
+          recipes: [recipeAt('a')],
+          events: [uploadAt(DateTime.utc(2026, 7, 15, 19))],
+        ),
       );
 
-      expect(merge.newEventCount, 1);
-    });
-
-    test('합친 이벤트는 시간순이다 — 분석이 타임스탬프에서 업로드 세션을 파생한다', () {
-      final merge = previewMerge(
-        current: backupOf(events: [uploadAt(DateTime.utc(2026, 7, 15, 20))]),
-        incoming: backupOf(events: [uploadAt(DateTime.utc(2026, 7, 15, 19))]),
-      );
-
-      expect(merge.mergedEvents.map((e) => e.at), [
-        DateTime.utc(2026, 7, 15, 19),
-        DateTime.utc(2026, 7, 15, 20),
-      ]);
+      expect(merge.changesNothing, isTrue);
     });
   });
 
@@ -191,8 +149,7 @@ void main() {
       expect(merge.toSummary(), {
         'newRecipes': 1,
         'duplicateRecipes': 1,
-        'newEvents': 1,
-        'duplicateEvents': 1,
+        'ignoredEvents': 2,
       });
     });
   });

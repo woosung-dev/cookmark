@@ -3,14 +3,7 @@
 // 한국어 동의어·정규화("대파"/"파", "간장"/"진간장")는 프롬프트 안에서 LLM이 처리한다(스펙 #13).
 // 부족 4개 이상 제외와 3개 상한은 여기가 아니라 클라이언트가 한다 — 제외 수를 투명성 줄에
 // 집계해야 하므로 걸러지기 전의 원본이 앱까지 와야 한다.
-
-const MODEL = process.env.GEMINI_MODEL ?? 'gemini-3.1-flash-lite';
-
-/// 단가(USD per 1M 토큰) — recognize.mjs와 같은 출처(T1 #6). 모델을 바꾸면 함께 바꾼다.
-const PRICE_INPUT_PER_M = Number(process.env.GEMINI_PRICE_INPUT_PER_M ?? 0.25);
-const PRICE_OUTPUT_PER_M = Number(process.env.GEMINI_PRICE_OUTPUT_PER_M ?? 1.5);
-
-const ENDPOINT = `https://generativelanguage.googleapis.com/v1beta/models/${MODEL}:generateContent`;
+import { generateJson, rejectNonPost } from './_gemini.mjs';
 
 /// 텍스트 온리 — T1 #6 실측 1.2s.
 const UPSTREAM_TIMEOUT_MS = 20_000;
@@ -48,7 +41,9 @@ const RESPONSE_SCHEMA = {
 function promptFor(ingredients, recipes) {
   const savedBlock = recipes.length
     ? recipes
-        .map((r) => `- ${r.title}: ${(r.ingredients ?? []).join(', ') || '(재료 미상)'}`)
+        .map(
+          (r) => `- ${r.title}: ${(r.ingredients ?? []).join(', ') || '(재료 미상)'}`,
+        )
         .join('\n')
     : '(저장된 레시피 없음)';
 
@@ -73,79 +68,25 @@ function promptFor(ingredients, recipes) {
   ].join('\n');
 }
 
-function readUsage(usageMetadata = {}) {
-  const promptTokens = usageMetadata.promptTokenCount ?? 0;
-  const outputTokens = usageMetadata.candidatesTokenCount ?? 0;
-  const thoughtTokens = usageMetadata.thoughtsTokenCount ?? 0;
-  return {
-    promptTokens,
-    outputTokens,
-    thoughtTokens,
-    imageTokens: 0,
-    model: MODEL,
-    costUsd:
-      (promptTokens * PRICE_INPUT_PER_M) / 1_000_000 +
-      ((outputTokens + thoughtTokens) * PRICE_OUTPUT_PER_M) / 1_000_000,
-  };
-}
-
 export default async function handler(req, res) {
-  if (req.method !== 'POST') {
-    return res.status(405).json({ message: 'POST만 받습니다' });
-  }
-  if (!process.env.GEMINI_API_KEY) {
-    return res.status(500).json({ message: 'GEMINI_API_KEY가 없습니다' });
-  }
+  if (rejectNonPost(req, res)) return;
 
   const { ingredients, recipes } = req.body ?? {};
   if (!Array.isArray(ingredients) || ingredients.length === 0) {
     return res.status(400).json({ message: 'ingredients가 필요합니다' });
   }
 
-  let upstream;
-  try {
-    upstream = await fetch(ENDPOINT, {
-      method: 'POST',
-      headers: {
-        'content-type': 'application/json',
-        'x-goog-api-key': process.env.GEMINI_API_KEY,
-      },
-      signal: AbortSignal.timeout(UPSTREAM_TIMEOUT_MS),
-      body: JSON.stringify({
-        contents: [
-          { parts: [{ text: promptFor(ingredients, recipes ?? []) }] },
-        ],
-        generationConfig: {
-          responseMimeType: 'application/json',
-          responseSchema: RESPONSE_SCHEMA,
-        },
-      }),
-    });
-  } catch (e) {
-    return res.status(502).json({ message: `업스트림 호출 실패: ${e.name}` });
-  }
-
-  if (!upstream.ok) {
-    return res.status(502).json({ message: `업스트림 ${upstream.status}` });
-  }
-
-  const payload = await upstream.json();
-  const text = payload?.candidates?.[0]?.content?.parts?.[0]?.text;
-  if (!text) {
-    return res.status(502).json({ message: '업스트림 응답에 본문이 없습니다' });
-  }
-
-  let parsed;
-  try {
-    parsed = JSON.parse(text);
-  } catch {
-    return res.status(502).json({ message: '구조화 출력 파싱 실패' });
-  }
+  const { parsed, usage, error } = await generateJson({
+    parts: [{ text: promptFor(ingredients, recipes ?? []) }],
+    schema: RESPONSE_SCHEMA,
+    timeoutMs: UPSTREAM_TIMEOUT_MS,
+  });
+  if (error) return res.status(error.status).json({ message: error.message });
 
   return res.status(200).json({
     suggestions: parsed.suggestions ?? [],
-    usage: readUsage(payload.usageMetadata),
+    usage,
   });
 }
 
-export const __testing = { promptFor, readUsage, RESPONSE_SCHEMA };
+export const __testing = { promptFor, RESPONSE_SCHEMA };

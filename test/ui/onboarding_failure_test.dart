@@ -1,5 +1,6 @@
 // 인앱 브라우저 경고와 기대 세팅 문구 — 외길의 나머지 상태들(#21).
 import 'package:cookmark/data/storage.dart';
+import 'package:cookmark/domain/app_event.dart';
 import 'package:cookmark/domain/in_app_browser.dart';
 import 'package:cookmark/llm/fake_llm_gateway.dart';
 import 'package:cookmark/llm/llm_gateway.dart';
@@ -9,6 +10,7 @@ import 'package:shared_preferences_platform_interface/in_memory_shared_preferenc
 import 'package:shared_preferences_platform_interface/shared_preferences_async_platform_interface.dart';
 
 import '../support/fixtures.dart';
+import '../support/wait_for.dart';
 
 /// 실제 카톡 인앱 브라우저가 보내는 모양.
 const _kakaoUa =
@@ -97,6 +99,64 @@ void main() {
       final next = controllerWith();
       await next.uploadPhoto(fridgePhoto());
       expect(next.showsExpectationNote, isTrue);
+    });
+  });
+
+  group('로딩 취소 — 진행 중이던 인식을 버린다 (US 22)', () {
+    test('취소 후 늦게 온 인식 결과가 화면을 덮어쓰지 않는다', () async {
+      final controller = MainController(
+        FakeLlmGateway(latency: const Duration(milliseconds: 300)),
+        storage,
+        userAgent: () => _chromeUa,
+      );
+      final pending = controller.uploadPhoto(fridgePhoto());
+      await waitFor(
+        controller,
+        () => controller.phase == MainPhase.recognizing,
+      );
+
+      // 10초 후의 "취소" — 직접 입력으로 넘어간다.
+      await controller.continueWithEmptyChecklist();
+      await controller.addIngredient('두유', path: EditPath.typing);
+
+      // 버려진 인식이 돌아온다.
+      await pending;
+
+      expect(controller.phase, MainPhase.checklist);
+      expect(
+        controller.ingredients.map((i) => i.name),
+        ['두유'],
+        reason: '사용자가 직접 넣은 재료가 인식 결과에 덮이면 안 된다',
+      );
+    });
+
+    test('취소 후 늦게 온 인식 실패가 에러 카드를 띄우지 않는다', () async {
+      final controller = MainController(
+        FakeLlmGateway(
+          latency: const Duration(milliseconds: 300),
+          failure: const LlmFailure(LlmFailureKind.timeout),
+        ),
+        storage,
+        userAgent: () => _chromeUa,
+      );
+      final pending = controller.uploadPhoto(fridgePhoto());
+      await waitFor(
+        controller,
+        () => controller.phase == MainPhase.recognizing,
+      );
+
+      await controller.continueWithEmptyChecklist();
+      await pending;
+
+      expect(
+        controller.phase,
+        MainPhase.checklist,
+        reason: '이미 넘어간 사람에게 에러를 띄우지 않는다',
+      );
+      expect(
+        storage.readEvents().where((e) => e.type == AppEventType.errorShown),
+        isEmpty,
+      );
     });
   });
 

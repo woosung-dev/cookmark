@@ -115,7 +115,26 @@ void main() {
       expect(event.data['direction'], 'import');
       expect(event.data['newRecipes'], 1);
       expect(event.data['duplicateRecipes'], 0);
-      expect(event.data['newEvents'], 1);
+      expect(event.data['ignoredEvents'], 1, reason: '들어온 이벤트는 안 가져온다');
+    });
+
+    test('남의 이벤트가 내 로그에 섞이지 않는다 (US 30 인별 귀속)', () async {
+      await seed();
+      final before = storage.readEvents().length;
+
+      final c = controller()..previewImport(await otherDeviceBackup());
+      await c.confirmImport();
+
+      // 늘어난 건 이 import 이벤트 1건뿐 — 남의 업로드는 안 들어왔다.
+      expect(storage.readEvents(), hasLength(before + 1));
+      expect(
+        storage.readEvents().where(
+          (e) =>
+              e.type == AppEventType.photoUpload &&
+              e.at == DateTime.utc(2026, 7, 13),
+        ),
+        isEmpty,
+      );
     });
 
     test('취소하면 미리보기가 사라지고 데이터는 그대로다', () async {
@@ -137,7 +156,6 @@ void main() {
 
       await c.confirmImport();
       expect(storage.readRecipes(), hasLength(1));
-      // export 이벤트 1건은 백업 파일에 없던 것이라 남는다 — 그것 말고 늘어난 건 없다.
       expect(
         storage.readEvents().where((e) => e.type == AppEventType.photoUpload),
         hasLength(1),

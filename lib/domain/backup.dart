@@ -46,10 +46,8 @@ class MergePreview {
   const MergePreview({
     required this.newRecipes,
     required this.duplicateRecipeCount,
-    required this.newEventCount,
-    required this.duplicateEventCount,
+    required this.ignoredEventCount,
     required this.mergedRecipes,
-    required this.mergedEvents,
   });
 
   /// 새로 들어올 레시피들 — 미리보기에 이름을 보여준다.
@@ -58,32 +56,32 @@ class MergePreview {
   /// URL이 겹쳐 건너뛴 수.
   final int duplicateRecipeCount;
 
-  final int newEventCount;
-  final int duplicateEventCount;
+  /// 백업 파일에 들어 있었지만 **가져오지 않은** 이벤트 수 — 아래 주석 참조.
+  final int ignoredEventCount;
 
   final List<Recipe> mergedRecipes;
-  final List<AppEvent> mergedEvents;
 
-  bool get changesNothing => newRecipes.isEmpty && newEventCount == 0;
+  bool get changesNothing => newRecipes.isEmpty;
 
   /// 이벤트에 남길 병합 요약.
   Map<String, Object?> toSummary() => {
     'newRecipes': newRecipes.length,
     'duplicateRecipes': duplicateRecipeCount,
-    'newEvents': newEventCount,
-    'duplicateEvents': duplicateEventCount,
+    'ignoredEvents': ignoredEventCount,
   };
 }
 
-/// 이벤트의 동일성 — 같은 시각에 난 같은 종류의 일은 같은 일로 본다.
+/// 들어온 백업에서 **레시피만** 가져온다. 이벤트 로그는 건드리지 않는다.
 ///
-/// 재가져오기(자기 백업 복원)에서 로그가 두 배가 되지 않게 하는 장치다.
-String _eventKey(AppEvent e) =>
-    '${e.type.name}@${e.at.toUtc().toIso8601String()}@${e.data['name'] ?? e.data['menu'] ?? e.data['url'] ?? ''}';
-
-/// 지금 있는 것과 들어온 것을 합친다 — 레시피는 URL로, 이벤트는 시각+종류로 중복을 뺀다.
+/// 스펙 US 25는 "URL 중복 제거 병합"으로 레시피만 말하고, 그럴 만한 이유가 있다 —
+/// 배우자 기기 시딩(이 기능의 주 용도)에서 남의 이벤트가 내 로그에 섞이면,
+/// 다음 주 export가 그걸 되뱉어 **US 30의 "백업 파일 2개로 가구 단위 분석"에서
+/// 인별 귀속이 깨진다.** 두 파일이 서로를 머금으면 누가 몇 번 했는지 셀 수 없다.
 ///
-/// 겹치면 **지금 것을 남긴다**. 들어온 백업이 오래된 것일 수 있고, 내 기기의 기록이 더 정확하다.
+/// 이벤트 유실이 걱정될 수 있지만, 주간 백업의 정의(CONTEXT.md)상 보험은 "파운더 로컬 폴더에
+/// 보관된 파일"이지 "기기 복원"이 아니다. 기록은 이미 안전하다.
+///
+/// 레시피가 겹치면 **지금 것을 남긴다** — 들어온 백업이 오래된 것일 수 있고 내 기기 기록이 더 정확하다.
 MergePreview previewMerge({
   required BackupData current,
   required BackupData incoming,
@@ -100,29 +98,11 @@ MergePreview previewMerge({
     }
   }
 
-  final existingEventKeys = {for (final e in current.events) _eventKey(e)};
-  final newEvents = <AppEvent>[];
-  var duplicateEventCount = 0;
-  for (final event in incoming.events) {
-    if (existingEventKeys.contains(_eventKey(event))) {
-      duplicateEventCount++;
-    } else {
-      existingEventKeys.add(_eventKey(event));
-      newEvents.add(event);
-    }
-  }
-
-  // 합친 이벤트는 시간순으로 다시 세운다 — 분석이 타임스탬프에서 업로드 세션을 파생하므로.
-  final mergedEvents = [...current.events, ...newEvents]
-    ..sort((a, b) => a.at.compareTo(b.at));
-
   return MergePreview(
     newRecipes: newRecipes,
     duplicateRecipeCount: duplicateRecipeCount,
-    newEventCount: newEvents.length,
-    duplicateEventCount: duplicateEventCount,
+    ignoredEventCount: incoming.events.length,
     mergedRecipes: [...current.recipes, ...newRecipes],
-    mergedEvents: mergedEvents,
   );
 }
 

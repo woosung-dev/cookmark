@@ -302,10 +302,8 @@ void main() {
     await uploadAndWait(tester, controller);
 
     // 체크박스가 아니라 행을 탭한다.
-    await tester.tap(find.byKey(const Key('ingredient-row-대파')));
-    await tester.pumpAndSettle();
-    await tester.tap(find.byKey(const Key('ingredient-row-표고버섯')));
-    await tester.pumpAndSettle();
+    await tapVisible(tester, find.byKey(const Key('ingredient-row-대파')));
+    await tapVisible(tester, find.byKey(const Key('ingredient-row-표고버섯')));
 
     final edits = (await Storage.open()).readEvents().where(
       (e) => e.type == AppEventType.checklistEdit,
@@ -321,8 +319,7 @@ void main() {
     await uploadAndWait(tester, controller);
 
     await tester.enterText(find.byKey(const Key('add-ingredient-field')), '두유');
-    await tester.tap(find.byKey(const Key('add-ingredient-submit')));
-    await tester.pumpAndSettle();
+    await tapVisible(tester, find.byKey(const Key('add-ingredient-submit')));
 
     expect(find.text('두유'), findsOneWidget);
 
@@ -341,11 +338,9 @@ void main() {
     expect(find.byKey(const Key('vague-chip-반찬통')), findsOneWidget);
 
     // 칩을 탭하면 그 자리에서 입력창이 열린다 — 화면 전환 없음(ADR-0001).
-    await tester.tap(find.byKey(const Key('vague-chip-반찬통')));
-    await tester.pumpAndSettle();
+    await tapVisible(tester, find.byKey(const Key('vague-chip-반찬통')));
     await tester.enterText(find.byKey(const Key('vague-input-반찬통')), '멸치볶음, 김');
-    await tester.tap(find.byKey(const Key('vague-submit-반찬통')));
-    await tester.pumpAndSettle();
+    await tapVisible(tester, find.byKey(const Key('vague-submit-반찬통')));
 
     expect(find.byKey(const Key('vague-chip-반찬통')), findsNothing);
     expect(find.text('멸치볶음'), findsOneWidget);
@@ -364,8 +359,7 @@ void main() {
     final controller = await pumpApp(tester);
     await uploadAndWait(tester, controller);
 
-    await tester.tap(find.byKey(const Key('vague-dismiss-반찬통')));
-    await tester.pumpAndSettle();
+    await tapVisible(tester, find.byKey(const Key('vague-dismiss-반찬통')));
 
     expect(find.byKey(const Key('vague-chip-반찬통')), findsNothing);
     expect(find.text('이건 뭐였나요?'), findsNothing);
@@ -406,14 +400,50 @@ void main() {
     await tester.tap(find.byKey(const Key('recipe-submit')));
     await tester.pumpAndSettle();
 
-    // 저장되면 온보딩이 끝나고 업로드 존이 나온다 — 화면 전환 없이.
-    expect(find.byKey(const Key('upload-photo')), findsOneWidget);
+    // 카드는 그 자리에 남고 카운터만 오른다 — "0/3, 그 자리에서 완결"(G1 #8).
+    // 1개에서 카드를 치우면 3개를 채울 방법이 없다.
+    expect(find.byKey(const Key('onboarding-card')), findsOneWidget);
+    expect(find.text('1/3'), findsOneWidget);
+    expect(find.byKey(const Key('upload-photo')), findsNothing);
 
     final saved = (await Storage.open()).readEvents().where(
       (e) => e.type == AppEventType.recipeBookChanged,
     );
     expect(saved.single.data['action'], 'add');
     expect(saved.single.data['title'], '김치찌개');
+
+    // 3개를 채우면 그제서야 업로드 존으로 넘어간다.
+    for (final (i, title) in ['계란찜', '애호박볶음'].indexed) {
+      await tester.enterText(
+        find.byKey(const Key('recipe-url-field')),
+        'https://youtu.be/more$i',
+      );
+      await tester.enterText(
+        find.byKey(const Key('recipe-title-field')),
+        title,
+      );
+      await tapVisible(tester, find.byKey(const Key('recipe-submit')));
+    }
+
+    expect(find.byKey(const Key('onboarding-card')), findsNothing);
+    expect(find.byKey(const Key('upload-photo')), findsOneWidget);
+    // 3개를 채웠으니 넛지도 사라진다.
+    expect(find.byKey(const Key('recipe-nudge-chip')), findsNothing);
+  });
+
+  testWidgets('넛지 칩은 체크리스트·제안 단계에서도 상시로 남는다 (#17)', (tester) async {
+    final controller = await pumpApp(tester);
+
+    // 건너뛰면 업로드 존 + 넛지.
+    expect(find.byKey(const Key('recipe-nudge-chip')), findsOneWidget);
+
+    // 체크리스트로 넘어가도 남는다 — "3개 미만 상시".
+    await uploadAndWait(tester, controller);
+    expect(find.byKey(const Key('recipe-nudge-chip')), findsOneWidget);
+
+    // 제안 단계에서도.
+    await tapRequestSuggestions(tester, controller);
+    expect(find.byKey(const Key('recipe-nudge-chip')), findsOneWidget);
   });
 
   testWidgets('레시피 북 재료 중 미인식 재료가 강조 칩으로 뜨고 탭으로 추가된다 (#17)', (tester) async {
@@ -428,8 +458,7 @@ void main() {
     expect(find.text('레시피 북에 있는 재료예요 — 혹시 있나요?'), findsOneWidget);
     expect(find.byKey(const Key('recipe-book-chip-김치')), findsOneWidget);
 
-    await tester.tap(find.byKey(const Key('recipe-book-chip-김치')));
-    await tester.pumpAndSettle();
+    await tapVisible(tester, find.byKey(const Key('recipe-book-chip-김치')));
 
     // 체크리스트에 들어가고 칩에서는 빠진다.
     expect(find.byKey(const Key('ingredient-row-김치')), findsOneWidget);
@@ -619,10 +648,8 @@ void main() {
     expect(find.byKey(const Key('rematch-banner')), findsNothing);
 
     // 펼쳐서 재료를 손본다 — 아래 제안이 낡는다.
-    await tester.tap(find.byKey(const Key('checklist-summary')));
-    await tester.pumpAndSettle();
-    await tester.tap(find.byKey(const Key('ingredient-row-대파')));
-    await tester.pumpAndSettle();
+    await tapVisible(tester, find.byKey(const Key('checklist-summary')));
+    await tapVisible(tester, find.byKey(const Key('ingredient-row-대파')));
 
     expect(find.byKey(const Key('rematch-banner')), findsOneWidget);
 
@@ -645,10 +672,8 @@ void main() {
     await uploadAndWait(tester, controller);
     await tapRequestSuggestions(tester, controller);
 
-    await tester.tap(find.byKey(const Key('checklist-summary')));
-    await tester.pumpAndSettle();
-    await tester.tap(find.byKey(const Key('ingredient-row-대파')));
-    await tester.pumpAndSettle();
+    await tapVisible(tester, find.byKey(const Key('checklist-summary')));
+    await tapVisible(tester, find.byKey(const Key('ingredient-row-대파')));
 
     final rematch = find.byKey(const Key('rematch-button'));
     await tester.ensureVisible(rematch);
@@ -735,7 +760,8 @@ void main() {
     // 확정 전에 무엇이 들어올지 보여준다(C 이식).
     expect(find.byKey(const Key('merge-preview')), findsOneWidget);
     expect(find.textContaining('계란찜'), findsWidgets);
-    expect(find.text('레시피 1개, 기록 0건이 새로 들어와요.'), findsOneWidget);
+    expect(find.text('레시피 1개가 새로 들어와요.'), findsOneWidget);
+    expect(find.text('레시피만 가져옵니다. 이 기기의 기록은 그대로예요.'), findsOneWidget);
 
     // 미리보기가 열리며 레이아웃이 길어졌다 — 확정 버튼을 화면에 올린 뒤 누른다.
     final confirm = find.byKey(const Key('backup-confirm'));

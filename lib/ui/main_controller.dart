@@ -117,11 +117,12 @@ class MainController extends ChangeNotifier {
 
   Uint8List? _lastResizedPhoto;
 
-  /// 레시피 북이 비어 있고 아직 건너뛰지 않았으면 첫 방문 상태다 — 업로드 존 자리에 온보딩 카드가 온다.
+  /// 아직 3개를 못 채웠고 건너뛰지도 않았으면 첫 방문 상태다 — 업로드 존 자리에 온보딩 카드가 온다.
   ///
-  /// 별도 화면이 아니라 메인의 한 상태다(G1 #8).
+  /// 별도 화면이 아니라 메인의 한 상태이고, **거기서 3개를 다 채운다**(G1 #8 "0/3, 그 자리에서 완결").
+  /// 첫 1개에서 카드를 치우면 카운터가 0/3에서 영원히 멈추고 "그 자리에서 완결"이 성립하지 않는다.
   bool get showsOnboarding =>
-      !_onboardingSkipped && _storage.readRecipes().isEmpty;
+      !_onboardingSkipped && _storage.readRecipes().length < trustedRecipeGoal;
   bool _onboardingSkipped = false;
 
   /// 건너뛰기 — 빈 레시피 북으로도 루프는 돈다. 대신 넛지 칩이 상시로 남는다.
@@ -434,8 +435,13 @@ class MainController extends ChangeNotifier {
     await _recognize(photo);
   }
 
-  /// 실패 인라인 카드의 "직접 입력으로 계속" — 빈 체크리스트 폴백(G1 #8, 막다른 화면 없음).
+  /// 실패 인라인 카드의 "직접 입력으로 계속", 그리고 로딩 10초 후의 "취소".
+  ///
+  /// 빈 체크리스트 폴백이다(G1 #8, 막다른 화면 없음). 인식이 아직 날고 있을 수 있으므로
+  /// 그 호출을 버린다 — 안 버리면 사용자가 직접 넣은 재료를 나중에 덮어쓰고,
+  /// 실패하면 이미 넘어간 사람에게 에러 카드를 띄운다.
   Future<void> continueWithEmptyChecklist() async {
+    _abandonInFlightRecognition();
     _ingredients = [];
     _photo = null;
     _failure = null;
@@ -444,7 +450,15 @@ class MainController extends ChangeNotifier {
     await _saveSession();
   }
 
+  /// 지금 날고 있는 인식 호출을 버린다 — 취소·이탈에 쓴다.
+  ///
+  /// Future 자체는 못 끊는다(HTTP는 서버까지 갔다). 대신 세대 번호를 올려, 돌아온 응답이
+  /// 자기 세대가 아니면 조용히 버리게 한다.
+  void _abandonInFlightRecognition() => _recognizeGeneration++;
+  int _recognizeGeneration = 0;
+
   Future<void> _recognize(Uint8List jpegBytes) async {
+    final generation = ++_recognizeGeneration;
     _phase = MainPhase.recognizing;
     _failure = null;
     _recognizeStartedAt = _now();
@@ -452,6 +466,8 @@ class MainController extends ChangeNotifier {
 
     try {
       final result = await _gateway.recognize(jpegBytes);
+      // 사용자가 기다리다 취소하고 직접 입력으로 넘어갔다면, 이 응답은 남의 화면이다.
+      if (generation != _recognizeGeneration) return;
       final latency = _now().difference(_recognizeStartedAt!);
       await _storage.appendEvent(
         AppEvent.recognitionDone(
@@ -474,6 +490,8 @@ class MainController extends ChangeNotifier {
       _phase = MainPhase.checklist;
       await _saveSession();
     } on LlmFailure catch (e) {
+      // 취소하고 넘어간 사용자에게 뒤늦은 에러 카드를 띄우지 않는다.
+      if (generation != _recognizeGeneration) return;
       await _storage.appendEvent(
         AppEvent.errorShown(
           at: _now(),

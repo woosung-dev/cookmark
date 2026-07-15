@@ -161,9 +161,21 @@ void main() {
       expect(main.showsOnboarding, isFalse);
     });
 
-    test('레시피가 하나라도 있으면 온보딩이 사라진다', () async {
+    test('1개를 담아도 온보딩은 남는다 — "그 자리에서" 3개를 채운다', () async {
       final gateway = FakeLlmGateway();
       await bookWith(gateway).add(url: 'https://youtu.be/abc', title: '김치찌개');
+
+      final main = MainController(gateway, storage);
+      expect(main.showsOnboarding, isTrue);
+      expect(main.recipeCount, 1, reason: '카운터가 1/3을 보여줘야 한다');
+    });
+
+    test('3개를 채우면 온보딩이 끝난다', () async {
+      final gateway = FakeLlmGateway();
+      final book = bookWith(gateway);
+      for (final (i, title) in ['김치찌개', '계란찜', '애호박볶음'].indexed) {
+        await book.add(url: 'https://youtu.be/$i', title: title);
+      }
 
       expect(MainController(gateway, storage).showsOnboarding, isFalse);
     });

@@ -118,20 +118,26 @@ class _BackupSectionState extends State<BackupSection> {
                 children: [
                   Text(
                     merge.changesNothing
-                        ? '새로 들어올 게 없어요 — 이미 다 있어요.'
-                        : '레시피 ${merge.newRecipes.length}개, 기록 ${merge.newEventCount}건이 새로 들어와요.',
+                        ? '새로 들어올 레시피가 없어요 — 이미 다 있어요.'
+                        : '레시피 ${merge.newRecipes.length}개가 새로 들어와요.',
                     style: AppTypography.subhead,
                   ),
-                  if (merge.duplicateRecipeCount > 0 ||
-                      merge.duplicateEventCount > 0) ...[
+                  if (merge.duplicateRecipeCount > 0) ...[
                     const SizedBox(height: Space.xs),
                     Text(
-                      '겹치는 레시피 ${merge.duplicateRecipeCount}개, 기록 ${merge.duplicateEventCount}건은 건너뜁니다.',
+                      '겹치는 레시피 ${merge.duplicateRecipeCount}개는 건너뜁니다.',
                       style: AppTypography.footnote.copyWith(
                         color: AppColors.muted,
                       ),
                     ),
                   ],
+                  const SizedBox(height: Space.xs),
+                  Text(
+                    '레시피만 가져옵니다. 이 기기의 기록은 그대로예요.',
+                    style: AppTypography.footnote.copyWith(
+                      color: AppColors.muted,
+                    ),
+                  ),
                   if (merge.newRecipes.isNotEmpty) ...[
                     const SizedBox(height: Space.sm),
                     Text(

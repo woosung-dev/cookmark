@@ -1,16 +1,8 @@
 // 재료 인식 프록시 — API 키를 서버에 가두고, 토큰·추정 원가를 앱에 회신한다(스펙 #13).
+//
 // 앱과 분리된 서버리스 함수다. 클라이언트는 절대 Gemini를 직접 부르지 않는다.
-
-/// 모델은 환경변수로 주입해 교체 가능하게 둔다(스펙 #13). 파일럿 중에는 바꾸지 않는다.
-const MODEL = process.env.GEMINI_MODEL ?? 'gemini-3.1-flash-lite';
-
-/// 단가(USD per 1M 토큰). gemini-3.1-flash-lite = $0.25 / $1.50 — T1 #6이 공식 가격 페이지에서
-/// 확인하고 실측으로 검산한 값이다(1157 in / 295 out → $0.00073).
-/// 모델을 바꾸면 이 값도 함께 바꿔야 한다 — 안 바꾸면 원가 로그가 조용히 틀린다.
-const PRICE_INPUT_PER_M = Number(process.env.GEMINI_PRICE_INPUT_PER_M ?? 0.25);
-const PRICE_OUTPUT_PER_M = Number(process.env.GEMINI_PRICE_OUTPUT_PER_M ?? 1.5);
-
-const ENDPOINT = `https://generativelanguage.googleapis.com/v1beta/models/${MODEL}:generateContent`;
+// 모델·단가·원가 산식은 _gemini.mjs 한 곳에 있다.
+import { generateJson, rejectNonPost } from './_gemini.mjs';
 
 /// 인식 호출의 상한. 클라이언트도 30초에서 끊지만(G1 #8) 서버가 매달려 있을 이유는 없다.
 const UPSTREAM_TIMEOUT_MS = 28_000;
@@ -45,92 +37,29 @@ const RESPONSE_SCHEMA = {
   required: ['ingredients'],
 };
 
-function estimateCostUsd({ promptTokens, outputTokens, thoughtTokens }) {
-  // Gemini는 thinking 토큰을 output 단가로 과금한다(T1 #6). flash-lite는 thinking을 안 쓰지만,
-  // 모델명이 환경변수라 언젠가 thinking 모델이 들어올 수 있다 — 그때 원가의 78%가 증발하지 않게 한다.
-  const inputCost = (promptTokens * PRICE_INPUT_PER_M) / 1_000_000;
-  const outputCost = ((outputTokens + thoughtTokens) * PRICE_OUTPUT_PER_M) / 1_000_000;
-  return inputCost + outputCost;
-}
-
-function readUsage(usageMetadata = {}) {
-  const imageTokens = (usageMetadata.promptTokensDetails ?? [])
-    .filter((d) => d.modality === 'IMAGE')
-    .reduce((sum, d) => sum + (d.tokenCount ?? 0), 0);
-
-  const usage = {
-    promptTokens: usageMetadata.promptTokenCount ?? 0,
-    outputTokens: usageMetadata.candidatesTokenCount ?? 0,
-    thoughtTokens: usageMetadata.thoughtsTokenCount ?? 0,
-    imageTokens,
-    model: MODEL,
-  };
-  return { ...usage, costUsd: estimateCostUsd(usage) };
-}
-
 export default async function handler(req, res) {
-  if (req.method !== 'POST') {
-    return res.status(405).json({ message: 'POST만 받습니다' });
-  }
-  if (!process.env.GEMINI_API_KEY) {
-    return res.status(500).json({ message: 'GEMINI_API_KEY가 없습니다' });
-  }
+  if (rejectNonPost(req, res)) return;
 
   const { imageBase64 } = req.body ?? {};
   if (typeof imageBase64 !== 'string' || imageBase64.length === 0) {
     return res.status(400).json({ message: 'imageBase64가 필요합니다' });
   }
 
-  let upstream;
-  try {
-    upstream = await fetch(ENDPOINT, {
-      method: 'POST',
-      headers: {
-        'content-type': 'application/json',
-        'x-goog-api-key': process.env.GEMINI_API_KEY,
-      },
-      signal: AbortSignal.timeout(UPSTREAM_TIMEOUT_MS),
-      body: JSON.stringify({
-        contents: [
-          {
-            parts: [
-              { inlineData: { mimeType: 'image/jpeg', data: imageBase64 } },
-              { text: PROMPT },
-            ],
-          },
-        ],
-        generationConfig: {
-          responseMimeType: 'application/json',
-          responseSchema: RESPONSE_SCHEMA,
-        },
-      }),
-    });
-  } catch (e) {
-    return res.status(502).json({ message: `업스트림 호출 실패: ${e.name}` });
-  }
-
-  if (!upstream.ok) {
-    return res.status(502).json({ message: `업스트림 ${upstream.status}` });
-  }
-
-  const payload = await upstream.json();
-  const text = payload?.candidates?.[0]?.content?.parts?.[0]?.text;
-  if (!text) {
-    return res.status(502).json({ message: '업스트림 응답에 본문이 없습니다' });
-  }
-
-  let parsed;
-  try {
-    parsed = JSON.parse(text);
-  } catch {
-    return res.status(502).json({ message: '구조화 출력 파싱 실패' });
-  }
+  const { parsed, usage, error } = await generateJson({
+    parts: [
+      { inlineData: { mimeType: 'image/jpeg', data: imageBase64 } },
+      { text: PROMPT },
+    ],
+    schema: RESPONSE_SCHEMA,
+    timeoutMs: UPSTREAM_TIMEOUT_MS,
+  });
+  if (error) return res.status(error.status).json({ message: error.message });
 
   return res.status(200).json({
     ingredients: parsed.ingredients ?? [],
     lowQuality: parsed.lowQuality === true,
-    usage: readUsage(payload.usageMetadata),
+    usage,
   });
 }
 
-export const __testing = { estimateCostUsd, readUsage, RESPONSE_SCHEMA };
+export const __testing = { PROMPT, RESPONSE_SCHEMA };

@@ -192,6 +192,16 @@ class _MainPageState extends State<MainPage> {
         const SizedBox(height: Space.lg),
       ],
 
+      // 3개 미만이면 **상시** 넛지다(G1 #8) — 온보딩을 건너뛴 사람에게도 길을 남긴다.
+      // 온보딩 카드가 떠 있는 동안엔 카드 자체가 그 일을 하므로 중복해 띄우지 않는다.
+      if (controller.showsRecipeNudge && !controller.showsOnboarding) ...[
+        RecipeNudgeChip(
+          savedCount: controller.recipeCount,
+          onTap: _openRecipeBook,
+        ),
+        const SizedBox(height: Space.lg),
+      ],
+
       switch (controller.phase) {
         MainPhase.upload => _uploadSection(),
         MainPhase.recognizing => RecognitionLoading(
@@ -266,19 +276,7 @@ class _MainPageState extends State<MainPage> {
       );
     }
 
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.stretch,
-      children: [
-        UploadZone(onPick: _pickPhoto),
-        if (controller.showsRecipeNudge) ...[
-          const SizedBox(height: Space.lg),
-          RecipeNudgeChip(
-            savedCount: controller.recipeCount,
-            onTap: _openRecipeBook,
-          ),
-        ],
-      ],
-    );
+    return UploadZone(onPick: _pickPhoto);
   }
 
   Widget _checklistSection() {

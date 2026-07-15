@@ -77,16 +77,14 @@ class BackupController extends ChangeNotifier {
     final merge = _pendingMerge;
     if (merge == null) return;
 
-    await _storage.replaceAll(
-      recipes: merge.mergedRecipes,
-      events: merge.mergedEvents,
-    );
+    // 레시피만 갈아끼운다 — 이벤트 로그는 이 기기의 것이고, 남의 것과 섞으면 인별 귀속이 깨진다.
+    await _storage.writeRecipes(merge.mergedRecipes);
     await _storage.appendEvent(
       AppEvent.backup(
         at: _now(),
         direction: BackupDirection.import,
         recipeCount: merge.mergedRecipes.length,
-        eventCount: merge.mergedEvents.length,
+        eventCount: _storage.readEvents().length,
         mergeSummary: merge.toSummary(),
       ),
     );

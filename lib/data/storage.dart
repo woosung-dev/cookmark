@@ -126,18 +126,6 @@ class Storage {
   Future<void> writeLastBackupAt(DateTime at) =>
       _prefs.setString(_kLastBackupAt, at.toUtc().toIso8601String());
 
-  /// 가져오기가 확정될 때 로그와 레시피 북을 통째로 갈아끼운다 — 병합 결과가 이미 합쳐진 상태다.
-  Future<void> replaceAll({
-    required List<Recipe> recipes,
-    required List<AppEvent> events,
-  }) async {
-    await writeRecipes(recipes);
-    await _prefs.setString(
-      _kEvents,
-      jsonEncode([for (final e in events) e.toJson()]),
-    );
-  }
-
   /// E2E가 브라우저 localStorage를 비우고 시작할 수 있게 — 앱에는 데이터를 지우는 경로가 없다.
   @visibleForTesting
   Future<void> clear() => _prefs.clear();
