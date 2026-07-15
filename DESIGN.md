@@ -47,7 +47,7 @@ typography:
 spacing:  { base: 4, scale: [4,8,12,16,20,24,32], screen-pad: 16, row-min: 52, touch-min: 44 }
 rounded:  { chip: 8, control: 12, card: 16, pill: 9999, photo: 12 }
 elevation:
-  flat:   "none"                              # 네비바·탭바·리스트·카드 기본
+  flat:   "none"                              # 네비바·리스트·카드 기본
   photo:  "0 6px 20px rgba(29,29,31,.10)"     # 음식 사진이 표면 위에 놓일 때만(단일-그림자 철학)
   sheet:  "0 -8px 30px rgba(29,29,31,.12)"    # 바텀시트
 ---
@@ -72,7 +72,7 @@ elevation:
 
 ## 4. Layout & Spacing
 - iOS **그룹/인셋 리스트**. 4/8 스페이싱 스케일(4·8·12·16·20·24·32). 화면 좌우 여백 16.
-- 리스트 행 ≥52px, 터치 타깃 ≥44px. 상단 네비바 + 하단 **탭바**(메인 ↔ 레시피 북, 아이콘+라벨, 활성 하이라이트).
+- 리스트 행 ≥52px, 터치 타깃 ≥44px. 상단 네비바만 — 화면은 2개(메인 외길 + 레시피 북)이고 진입점은 **헤더 링크 1개**다. **탭 바·설정 화면 없음**(ADR-0001: 앱 내비게이션 마찰을 0에 수렴시켜 측정 오염을 막는다).
 - 앱 밀도 유지 — 마케팅용 큰 여백·40px+ 히어로 타이포 금지. 좌우 스크롤 금지.
 
 ## 5. Elevation & Depth (Apple 단일-그림자 철학)
@@ -84,7 +84,7 @@ elevation:
 
 ## 7. Components
 - **버튼(primary)**: action 배경 + 흰 텍스트, radius 12, 그림자 없음, active `scale(0.98)`. 화면당 1개. **secondary**: surface + 1px hairline.
-- **탭바**: frosted(backdrop-blur) 하단, 아이콘+라벨, 활성 action 하이라이트.
+- **헤더(네비바)**: 상단, 타이틀 + 우측 "레시피 북" 텍스트 링크 1개. 탭바 없음.
 - **리스트 셀**: 좌 썸네일(photo)/아이콘 + 제목(headline)+보조(footnote muted) + 우 chevron/액션. 1px hairline.
 - **제안 카드**: surface, radius 16, photo 그림자. 음식 사진(4:3/1:1) + 요리명 + 출처 뱃지 + 제안 라벨(색+아이콘) + 부족 재료 칩 + 매칭률(mono) + "영상 보기"(secondary)·"이거 했어요"(primary).
 - **confidence 체크박스**: 정사각. high=채워진 체크(action) / medium=체크+"확인" 앰버 배지 / low=빈 체크 dim.
