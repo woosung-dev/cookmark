@@ -51,7 +51,7 @@ enum AppEventType {
   }
 }
 
-/// 체크리스트 조작의 유형 — 전부 수동 수정 +1이다(ADR-0003). low 환각을 그냥 둔 것만 0.
+/// 체크리스트 조작의 유형. low 환각을 그냥 둔 것만 0이다(ADR-0003).
 enum EditKind {
   /// 오인식 제거
   uncheck,
@@ -64,6 +64,16 @@ enum EditKind {
 
   /// 뭉뚱그림 치환 (1시퀀스 = 1회)
   substitute,
+
+  /// 뭉뚱그림 오탐 복귀 — 칩을 탭 1회로 일반 항목으로 되돌린다(ADR-0002).
+  ///
+  /// **수동 수정 산식에 넣을지는 미결이다.** ADR-0003이 열거한 4종(해제·재체크·추가·치환)에
+  /// 이 조작은 없지만, 같은 ADR의 취지문은 "사용자 손이 간 횟수 전부가 계측 대상"이라고 한다.
+  /// 판정을 유보한 채 별도 kind로 남긴다 — 그래야 분석 단계에서 어느 쪽 산식이든 재산할 수 있다.
+  vagueDismiss;
+
+  /// ADR-0003이 열거한 수동 수정 산식의 대상. [vagueDismiss]는 미결이라 빠져 있다.
+  bool get countsAsManualEdit => this != EditKind.vagueDismiss;
 }
 
 /// 조작이 어느 경로로 들어왔는지 — 분석 단계에서 대안 산식을 재산할 해상도(ADR-0003).
@@ -116,8 +126,9 @@ class AppEvent {
     required EditKind kind,
     required EditPath path,
     required String name,
+    Map<String, Object?> extra = const {},
   }) : type = AppEventType.checklistEdit,
-       data = {'kind': kind.name, 'path': path.name, 'name': name};
+       data = {'kind': kind.name, 'path': path.name, 'name': name, ...extra};
 
   /// ⑫ 오류 표시
   AppEvent.errorShown({

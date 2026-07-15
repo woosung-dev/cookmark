@@ -246,6 +246,52 @@ void main() {
     expect(add.data, {'kind': 'add', 'path': 'typing', 'name': '두유'});
   });
 
+  testWidgets('뭉뚱그림 항목이 점선 칩으로 분리되고 인라인 치환된다 (#16)', (tester) async {
+    final controller = await pumpApp(tester);
+    await uploadAndWait(tester, controller);
+
+    // "반찬통"은 본문이 아니라 "이건 뭐였나요?" 칩으로 나온다.
+    expect(find.text('이건 뭐였나요?'), findsOneWidget);
+    expect(find.byKey(const Key('vague-chip-반찬통')), findsOneWidget);
+
+    // 칩을 탭하면 그 자리에서 입력창이 열린다 — 화면 전환 없음(ADR-0001).
+    await tester.tap(find.byKey(const Key('vague-chip-반찬통')));
+    await tester.pumpAndSettle();
+    await tester.enterText(find.byKey(const Key('vague-input-반찬통')), '멸치볶음, 김');
+    await tester.tap(find.byKey(const Key('vague-submit-반찬통')));
+    await tester.pumpAndSettle();
+
+    expect(find.byKey(const Key('vague-chip-반찬통')), findsNothing);
+    expect(find.text('멸치볶음'), findsOneWidget);
+    expect(find.text('김'), findsOneWidget);
+
+    // 몇 개로 갈리든 수동 수정 1회다(ADR-0003).
+    final edits = (await Storage.open()).readEvents().where(
+      (e) => e.type == AppEventType.checklistEdit,
+    );
+    expect(edits, hasLength(1));
+    expect(edits.single.data['kind'], 'substitute');
+    expect(edits.single.data['path'], 'vagueChip');
+  });
+
+  testWidgets('뭉뚱그림 오탐은 탭 1회로 일반 항목이 된다 (#16)', (tester) async {
+    final controller = await pumpApp(tester);
+    await uploadAndWait(tester, controller);
+
+    await tester.tap(find.byKey(const Key('vague-dismiss-반찬통')));
+    await tester.pumpAndSettle();
+
+    expect(find.byKey(const Key('vague-chip-반찬통')), findsNothing);
+    expect(find.text('이건 뭐였나요?'), findsNothing);
+    // 이제 체크리스트 본문의 한 행이다.
+    expect(find.byKey(const Key('ingredient-row-반찬통')), findsOneWidget);
+
+    final edits = (await Storage.open()).readEvents().where(
+      (e) => e.type == AppEventType.checklistEdit,
+    );
+    expect(edits.single.data['kind'], 'vagueDismiss');
+  });
+
   testWidgets('수정 카운터는 화면 어디에도 없다 (ADR-0004 단일맹검)', (tester) async {
     final controller = await pumpApp(tester);
     await uploadAndWait(tester, controller);

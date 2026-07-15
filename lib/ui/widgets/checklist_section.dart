@@ -22,12 +22,17 @@ class ChecklistSection extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final confident = [
+    // 뭉뚱그림 항목은 본문에 섞이지 않는다 — 점선 칩으로 따로 나간다(ADR-0002).
+    final items = [
       for (final i in ingredients)
+        if (!i.isVague) i,
+    ];
+    final confident = [
+      for (final i in items)
         if (i.confidence != Confidence.low) i,
     ];
     final uncertain = [
-      for (final i in ingredients)
+      for (final i in items)
         if (i.confidence == Confidence.low) i,
     ];
 

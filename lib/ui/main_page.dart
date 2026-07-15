@@ -11,6 +11,7 @@ import 'widgets/checklist_section.dart';
 import 'widgets/failure_card.dart';
 import 'widgets/recognition_loading.dart';
 import 'widgets/upload_zone.dart';
+import 'widgets/vague_chips.dart';
 
 class MainPage extends StatefulWidget {
   const MainPage({super.key, required this.controller, this.imagePicker});
@@ -107,6 +108,14 @@ class _MainPageState extends State<MainPage> {
             ingredients: controller.ingredients,
             onToggle: controller.toggle,
           ),
+          if (controller.vagueItems.isNotEmpty) ...[
+            const SizedBox(height: Space.xxl),
+            VagueChips(
+              items: controller.vagueItems,
+              onSubstitute: controller.substituteVague,
+              onDismiss: controller.dismissVague,
+            ),
+          ],
           const SizedBox(height: Space.xl),
           Text(
             '맞는 것만 남기고 아닌 건 체크를 풀어주세요.',

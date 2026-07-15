@@ -5,6 +5,7 @@ import '../data/storage.dart';
 import '../domain/app_event.dart';
 import '../domain/ingredient.dart';
 import '../domain/session_state.dart';
+import '../domain/vague_heuristic.dart';
 import '../image/resize.dart';
 import '../llm/llm_gateway.dart';
 
@@ -43,6 +44,18 @@ class MainController extends ChangeNotifier {
   DateTime? _recognizeStartedAt;
 
   Uint8List? _lastResizedPhoto;
+
+  /// 점선 칩으로 분리되는 뭉뚱그림 항목들(ADR-0002).
+  List<Ingredient> get vagueItems => [
+    for (final i in _ingredients)
+      if (i.isVague) i,
+  ];
+
+  /// 매칭에 실제로 보낼 재료 — 해제된 것과 미치환 뭉뚱그림은 조용히 빠진다(ADR-0002).
+  List<Ingredient> get matchableIngredients => [
+    for (final i in _ingredients)
+      if (i.goesToMatching) i,
+  ];
 
   /// "자주 쓰는 재료" 칩 — 빈도 기반, 이미 체크리스트에 있는 건 뺀다(#15).
   List<String> get frequentIngredients {
@@ -109,13 +122,67 @@ class MainController extends ChangeNotifier {
     await _recordEdit(kind: EditKind.add, path: path, name: name);
   }
 
+  /// 뭉뚱그림 칩의 인라인 치환 — "반찬통" → "멸치볶음, 김"(ADR-0002).
+  ///
+  /// 뭉뚱그림 항목은 사라지고 구체 재료들이 그 자리에 들어온다. 몇 개로 갈리든
+  /// 1시퀀스 = 수동 수정 1회다(ADR-0003) — 사용자가 한 번 손을 댄 것이므로.
+  Future<void> substituteVague(String vagueName, String raw) async {
+    final index = _ingredients.indexWhere(
+      (i) => i.name == vagueName && i.isVague,
+    );
+    if (index < 0) return;
+
+    final replacements = parseSubstitution(raw);
+    if (replacements.isEmpty) return;
+
+    final existing = {for (final i in _ingredients) i.name};
+    _ingredients
+      ..removeAt(index)
+      ..insertAll(index, [
+        for (final name in replacements)
+          if (!existing.contains(name)) Ingredient.added(name),
+      ]);
+    notifyListeners();
+
+    await _recordEdit(
+      kind: EditKind.substitute,
+      path: EditPath.vagueChip,
+      name: vagueName,
+      extra: {'replacements': replacements},
+    );
+  }
+
+  /// 뭉뚱그림 오탐 복귀 — 탭 1회로 일반 항목이 된다(ADR-0002).
+  ///
+  /// 휴리스틱이 클라이언트 추측이라 오탐이 구조적으로 가능하다. 성가시지 않아야 한다.
+  Future<void> dismissVague(String name) async {
+    final index = _ingredients.indexWhere((i) => i.name == name && i.isVague);
+    if (index < 0) return;
+
+    _ingredients[index] = _ingredients[index].copyWith(isVague: false);
+    notifyListeners();
+
+    await _recordEdit(
+      kind: EditKind.vagueDismiss,
+      path: EditPath.vagueChip,
+      name: name,
+    );
+  }
+
   Future<void> _recordEdit({
     required EditKind kind,
     required EditPath path,
     required String name,
+    Map<String, Object?> extra = const {},
   }) async {
     await _storage.appendEvent(
-      AppEvent.checklistEdit(at: _now(), kind: kind, path: path, name: name),
+      AppEvent.checklistEdit(
+        at: _now(),
+        kind: kind,
+        path: path,
+        name: name,
+        extra: extra,
+      ),
     );
     await _saveSession();
   }

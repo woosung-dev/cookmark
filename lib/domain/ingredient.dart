@@ -1,6 +1,8 @@
 // 재료 체크리스트의 항목 — 재료 인식 결과이자 사용자가 체크로 다듬는 대상(CONTEXT.md 글로서리).
 import 'package:flutter/foundation.dart';
 
+import 'vague_heuristic.dart';
+
 /// 재료 인식이 항목마다 붙이는 확신도 3단.
 enum Confidence {
   high,
@@ -28,16 +30,22 @@ class Ingredient {
     required this.name,
     required this.confidence,
     required this.checked,
+    this.isVague = false,
   });
 
-  /// 재료 인식이 내놓은 항목 — 초기 체크 상태는 confidence가 정한다.
+  /// 재료 인식이 내놓은 항목 — 초기 체크 상태는 confidence가 정하고,
+  /// 뭉뚱그림 여부는 클라이언트 휴리스틱이 태어날 때 붙인다(ADR-0002).
   Ingredient.recognized({
     required this.name,
     required Confidence this.confidence,
-  }) : checked = confidence.initiallyChecked;
+  }) : checked = confidence.initiallyChecked,
+       isVague = isVagueItem(name: name, confidence: confidence);
 
   /// 사용자가 직접 추가한 항목 — 인식을 거치지 않았으므로 confidence가 없고 항상 체크다.
-  const Ingredient.added(this.name) : confidence = null, checked = true;
+  const Ingredient.added(this.name)
+    : confidence = null,
+      checked = true,
+      isVague = false;
 
   final String name;
 
@@ -47,22 +55,33 @@ class Ingredient {
   /// 해제 = 매칭 제외. 삭제 개념은 없다(G1 #8).
   final bool checked;
 
-  Ingredient copyWith({bool? checked}) => Ingredient(
+  /// 뭉뚱그림 항목 — 점선 칩으로 분리되고, 치환 전에는 매칭에 전송되지 않는다(ADR-0002).
+  ///
+  /// 사용자가 오탐이라고 하면 false가 된다.
+  final bool isVague;
+
+  /// 매칭에 보낼 재료인가. 해제된 것과 미치환 뭉뚱그림은 조용히 빠진다(ADR-0002).
+  bool get goesToMatching => checked && !isVague;
+
+  Ingredient copyWith({bool? checked, bool? isVague}) => Ingredient(
     name: name,
     confidence: confidence,
     checked: checked ?? this.checked,
+    isVague: isVague ?? this.isVague,
   );
 
   Map<String, Object?> toJson() => {
     'name': name,
     if (confidence != null) 'confidence': confidence!.name,
     'checked': checked,
+    if (isVague) 'isVague': true,
   };
 
   factory Ingredient.fromJson(Map<String, Object?> json) => Ingredient(
     name: json['name']! as String,
     confidence: Confidence.parse(json['confidence'] as String?),
     checked: json['checked']! as bool,
+    isVague: json['isVague'] as bool? ?? false,
   );
 
   @override
@@ -70,11 +89,13 @@ class Ingredient {
       other is Ingredient &&
       other.name == name &&
       other.confidence == confidence &&
-      other.checked == checked;
+      other.checked == checked &&
+      other.isVague == isVague;
 
   @override
-  int get hashCode => Object.hash(name, confidence, checked);
+  int get hashCode => Object.hash(name, confidence, checked, isVague);
 
   @override
-  String toString() => 'Ingredient($name, $confidence, checked: $checked)';
+  String toString() =>
+      'Ingredient($name, $confidence, checked: $checked, vague: $isVague)';
 }
