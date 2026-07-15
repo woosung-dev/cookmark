@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import 'package:image_picker/image_picker.dart';
 
 import 'theme/app_theme.dart';
+import 'ui/backup_controller.dart';
 import 'ui/main_controller.dart';
 import 'ui/main_page.dart';
 import 'ui/recipe_book_controller.dart';
@@ -12,11 +13,13 @@ class CookmarkApp extends StatelessWidget {
     super.key,
     required this.controller,
     required this.recipeBookController,
+    required this.backupController,
     this.imagePicker,
   });
 
   final MainController controller;
   final RecipeBookController recipeBookController;
+  final BackupController backupController;
 
   /// E2E가 파일 선택창을 우회할 때 주입한다.
   final Future<XFile?> Function()? imagePicker;
@@ -30,6 +33,7 @@ class CookmarkApp extends StatelessWidget {
       home: MainPage(
         controller: controller,
         recipeBookController: recipeBookController,
+        backupController: backupController,
         imagePicker: imagePicker,
       ),
     );

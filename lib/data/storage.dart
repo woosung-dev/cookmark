@@ -20,8 +20,14 @@ class Storage {
   static const _kEvents = 'events';
   static const _kSession = 'session';
   static const _kRecipes = 'recipes';
+  static const _kLastBackupAt = 'lastBackupAt';
 
-  static const _allowList = <String>{_kEvents, _kSession, _kRecipes};
+  static const _allowList = <String>{
+    _kEvents,
+    _kSession,
+    _kRecipes,
+    _kLastBackupAt,
+  };
 
   static Future<Storage> open() async {
     final prefs = await SharedPreferencesWithCache.create(
@@ -101,6 +107,27 @@ class Storage {
         return byCount != 0 ? byCount : a.compareTo(b);
       });
     return names.take(limit).toList();
+  }
+
+  /// 마지막으로 백업한 시각. null이면 한 번도 안 했다.
+  DateTime? readLastBackupAt() {
+    final raw = _prefs.getString(_kLastBackupAt);
+    return raw == null ? null : DateTime.parse(raw);
+  }
+
+  Future<void> writeLastBackupAt(DateTime at) =>
+      _prefs.setString(_kLastBackupAt, at.toUtc().toIso8601String());
+
+  /// 가져오기가 확정될 때 로그와 레시피 북을 통째로 갈아끼운다 — 병합 결과가 이미 합쳐진 상태다.
+  Future<void> replaceAll({
+    required List<Recipe> recipes,
+    required List<AppEvent> events,
+  }) async {
+    await writeRecipes(recipes);
+    await _prefs.setString(
+      _kEvents,
+      jsonEncode([for (final e in events) e.toJson()]),
+    );
   }
 
   /// E2E가 브라우저 localStorage를 비우고 시작할 수 있게 — 앱에는 데이터를 지우는 경로가 없다.

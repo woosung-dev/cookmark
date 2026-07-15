@@ -2,6 +2,7 @@
 import 'package:cookmark/app.dart';
 import 'package:cookmark/data/storage.dart';
 import 'package:cookmark/llm/fake_llm_gateway.dart';
+import 'package:cookmark/ui/backup_controller.dart';
 import 'package:cookmark/ui/main_controller.dart';
 import 'package:cookmark/ui/recipe_book_controller.dart';
 import 'package:flutter/material.dart';
@@ -29,6 +30,7 @@ void main() {
       CookmarkApp(
         controller: MainController(llm, storage),
         recipeBookController: RecipeBookController(llm, storage),
+        backupController: BackupController(storage),
         imagePicker: () async =>
             XFile.fromData(fridgePhoto(), mimeType: 'image/jpeg'),
       ),

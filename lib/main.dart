@@ -4,6 +4,7 @@ import 'package:flutter/material.dart';
 import 'app.dart';
 import 'data/storage.dart';
 import 'llm/proxy_llm_gateway.dart';
+import 'ui/backup_controller.dart';
 import 'ui/main_controller.dart';
 import 'ui/recipe_book_controller.dart';
 
@@ -18,6 +19,7 @@ Future<void> main() async {
     CookmarkApp(
       controller: controller,
       recipeBookController: RecipeBookController(gateway, storage),
+      backupController: BackupController(storage),
     ),
   );
 }

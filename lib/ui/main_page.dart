@@ -9,10 +9,12 @@ import 'package:url_launcher/url_launcher.dart';
 import '../domain/suggestion.dart';
 import '../theme/app_colors.dart';
 import '../theme/app_theme.dart';
+import 'backup_controller.dart';
 import 'main_controller.dart';
 import 'recipe_book_controller.dart';
 import 'recipe_book_page.dart';
 import 'widgets/add_ingredient_bar.dart';
+import 'widgets/backup_section.dart';
 import 'widgets/checklist_section.dart';
 import 'widgets/failure_card.dart';
 import 'widgets/onboarding_card.dart';
@@ -28,11 +30,13 @@ class MainPage extends StatefulWidget {
     super.key,
     required this.controller,
     required this.recipeBookController,
+    required this.backupController,
     this.imagePicker,
   });
 
   final MainController controller;
   final RecipeBookController recipeBookController;
+  final BackupController backupController;
 
   /// 테스트가 사진 선택 다이얼로그를 건너뛸 수 있게 — 브라우저 파일 선택창은 자동화가 안 된다.
   final Future<XFile?> Function()? imagePicker;
@@ -57,7 +61,10 @@ class _MainPageState extends State<MainPage> {
   Future<void> _openRecipeBook() async {
     await Navigator.of(context).push(
       MaterialPageRoute<void>(
-        builder: (_) => RecipeBookPage(controller: widget.recipeBookController),
+        builder: (_) => RecipeBookPage(
+          controller: widget.recipeBookController,
+          backupController: widget.backupController,
+        ),
       ),
     );
     // 레시피 북에서 뭔가 바뀌었을 수 있다 — 미인식 칩·넛지가 이걸 따라간다.
@@ -124,6 +131,7 @@ class _MainPageState extends State<MainPage> {
           listenable: Listenable.merge([
             _controller,
             widget.recipeBookController,
+            widget.backupController,
           ]),
           builder: (context, _) => Column(
             children: [
@@ -157,9 +165,7 @@ class _MainPageState extends State<MainPage> {
 
   /// 체크리스트 섹션이 페이지에 있는가 — 인식이 끝난 뒤로는 계속 있다(접혀 있을 뿐).
   bool get _showsChecklist => switch (_controller.phase) {
-    MainPhase.checklist ||
-    MainPhase.matching ||
-    MainPhase.suggestions => true,
+    MainPhase.checklist || MainPhase.matching || MainPhase.suggestions => true,
     MainPhase.failed => _controller.failureStage == FailureStage.matching,
     MainPhase.upload || MainPhase.recognizing => false,
   };
@@ -169,6 +175,15 @@ class _MainPageState extends State<MainPage> {
     final controller = _controller;
 
     return [
+      // 7일이 지났으면 주간 성적표로 백업을 권한다(G1 #8). 수동 수정 수는 여기 없다(ADR-0004).
+      if (widget.backupController.needsBackup) ...[
+        WeeklyReportBanner(
+          copy: widget.backupController.weeklyReport.copy,
+          onTap: _openRecipeBook,
+        ),
+        const SizedBox(height: Space.lg),
+      ],
+
       switch (controller.phase) {
         MainPhase.upload => _uploadSection(),
         MainPhase.recognizing => RecognitionLoading(
@@ -176,7 +191,8 @@ class _MainPageState extends State<MainPage> {
           startedAt: controller.recognizeStartedAt!,
           onCancel: controller.continueWithEmptyChecklist,
         ),
-        MainPhase.failed when controller.failureStage == FailureStage.recognition =>
+        MainPhase.failed
+            when controller.failureStage == FailureStage.recognition =>
           FailureCard(
             kind: controller.failure!,
             stage: FailureStage.recognition,
@@ -213,7 +229,8 @@ class _MainPageState extends State<MainPage> {
           onOpenRecipe: _openRecipe,
           onCooked: _markCooked,
         ),
-        MainPhase.failed when controller.failureStage == FailureStage.matching =>
+        MainPhase.failed
+            when controller.failureStage == FailureStage.matching =>
           FailureCard(
             kind: controller.failure!,
             stage: FailureStage.matching,

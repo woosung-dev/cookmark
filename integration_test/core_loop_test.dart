@@ -4,14 +4,18 @@
 //
 // CheckedState는 dart:ui에 있고 flutter/semantics.dart가 export하지 않는다.
 import 'dart:async';
+import 'dart:convert';
 import 'dart:ui' show CheckedState;
 
 import 'package:cookmark/app.dart';
 import 'package:cookmark/data/storage.dart';
 import 'package:cookmark/domain/app_event.dart';
+import 'package:cookmark/domain/backup.dart';
+import 'package:cookmark/domain/recipe.dart';
 import 'package:cookmark/domain/suggestion.dart';
 import 'package:cookmark/llm/fake_llm_gateway.dart';
 import 'package:cookmark/llm/llm_gateway.dart';
+import 'package:cookmark/ui/backup_controller.dart';
 import 'package:cookmark/ui/main_controller.dart';
 import 'package:cookmark/ui/recipe_book_controller.dart';
 import 'package:flutter/material.dart';
@@ -63,6 +67,29 @@ Future<void> waitForPhase(
   controller.removeListener(listener);
 }
 
+/// 이벤트가 스토리지에 실제로 도착할 때까지 기다린다.
+///
+/// pumpAndSettle은 프레임만 기다린다 — 버튼을 눌러 시작된 스토리지 쓰기(async)까지
+/// 기다려주지는 않는다. 로그를 검증하려면 로그를 기다려야 한다.
+Future<List<AppEvent>> waitForEvents(
+  WidgetTester tester,
+  Storage storage,
+  bool Function(List<AppEvent>) predicate, {
+  Duration limit = const Duration(seconds: 10),
+}) async {
+  const step = Duration(milliseconds: 50);
+  var waited = Duration.zero;
+  while (true) {
+    final events = (await Storage.open()).readEvents();
+    if (predicate(events)) return events;
+    if (waited > limit) {
+      fail('이벤트를 $limit 안에 못 봤다. 지금 ${events.map((e) => e.type.name)}');
+    }
+    await tester.pump(step);
+    waited += step;
+  }
+}
+
 void main() {
   IntegrationTestWidgetsFlutterBinding.ensureInitialized();
 
@@ -85,6 +112,7 @@ void main() {
       CookmarkApp(
         controller: controller,
         recipeBookController: RecipeBookController(llm, storage),
+        backupController: BackupController(storage),
         imagePicker: () async => fridgePhotoFile(),
       ),
     );
@@ -629,6 +657,126 @@ void main() {
           .data['stale'],
       isFalse,
     );
+  });
+
+  testWidgets('레시피 북 최하단 백업 — 내보내기·미리보기·가져오기 (#20)', (tester) async {
+    final book = RecipeBookController(FakeLlmGateway(), storage);
+    await book.add(url: 'https://youtu.be/abc', title: '김치찌개');
+
+    await pumpApp(tester);
+    await tester.tap(find.byKey(const Key('recipe-book-link')));
+    await tester.pumpAndSettle();
+
+    // 백업은 이 화면 최하단이다.
+    final section = find.byKey(const Key('backup-section'));
+    await tester.ensureVisible(section);
+    await tester.pumpAndSettle();
+    expect(section, findsOneWidget);
+
+    // 한 동작 내보내기 — 클립보드로 나가고 이벤트가 남는다.
+    final exportButton = find.byKey(const Key('backup-export'));
+    await tester.ensureVisible(exportButton);
+    await tester.pumpAndSettle();
+    await tester.tap(exportButton);
+    await tester.pump();
+
+    final afterExport = await waitForEvents(
+      tester,
+      storage,
+      (events) => events.any((e) => e.type == AppEventType.backup),
+    );
+    final exported = afterExport.lastWhere(
+      (e) => e.type == AppEventType.backup,
+    );
+    expect(exported.data['direction'], 'export');
+    expect(exported.data['recipeCount'], 1);
+    await tester.pumpAndSettle();
+
+    // 다른 기기 백업을 붙여넣고 미리보기 → 확정.
+    final incoming = jsonEncode(
+      BackupData(
+        recipes: const [
+          Recipe(
+            url: 'https://youtu.be/xyz',
+            title: '계란찜',
+            ingredients: ['계란'],
+          ),
+        ],
+        events: const [],
+        exportedAt: DateTime.utc(2026, 7, 14),
+      ).toJson(),
+    );
+
+    final field = find.byKey(const Key('backup-import-field'));
+    await tester.ensureVisible(field);
+    await tester.pumpAndSettle();
+    await tester.enterText(field, incoming);
+    final preview = find.byKey(const Key('backup-preview'));
+    await tester.ensureVisible(preview);
+    await tester.pumpAndSettle();
+    await tester.tap(preview);
+    await tester.pumpAndSettle();
+
+    // 확정 전에 무엇이 들어올지 보여준다(C 이식).
+    expect(find.byKey(const Key('merge-preview')), findsOneWidget);
+    expect(find.textContaining('계란찜'), findsWidgets);
+    expect(find.text('레시피 1개, 기록 0건이 새로 들어와요.'), findsOneWidget);
+
+    // 미리보기가 열리며 레이아웃이 길어졌다 — 확정 버튼을 화면에 올린 뒤 누른다.
+    final confirm = find.byKey(const Key('backup-confirm'));
+    await tester.ensureVisible(confirm);
+    await tester.pumpAndSettle();
+    await tester.tap(confirm);
+    await tester.pump();
+
+    final afterImport = await waitForEvents(
+      tester,
+      storage,
+      (events) => events.any(
+        (e) => e.type == AppEventType.backup && e.data['direction'] == 'import',
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    expect(
+      find.byKey(const Key('recipe-tile-https://youtu.be/xyz')),
+      findsOneWidget,
+    );
+
+    final imported = afterImport.lastWhere(
+      (e) => e.type == AppEventType.backup && e.data['direction'] == 'import',
+    );
+    expect(imported.data['newRecipes'], 1);
+  });
+
+  testWidgets('7일이 지나면 주간 성적표 배너가 뜬다 — 수동 수정 수는 없다 (#20)', (tester) async {
+    // 8일 전 업로드 1건 + 이번 주 조작 여러 건.
+    await storage.appendEvent(
+      AppEvent.photoUpload(
+        at: DateTime.now().subtract(const Duration(days: 8)),
+        bytes: 1,
+        width: 768,
+      ),
+    );
+    for (var i = 0; i < 7; i++) {
+      await storage.appendEvent(
+        AppEvent.checklistEdit(
+          at: DateTime.now(),
+          kind: EditKind.uncheck,
+          path: EditPath.row,
+          name: '재료$i',
+        ),
+      );
+    }
+
+    await pumpApp(tester);
+
+    expect(find.byKey(const Key('weekly-report-banner')), findsOneWidget);
+    // 업로드는 8일 전이라 이번 주 집계는 0이다.
+    expect(find.text('이번 주 업로드 0회, 이거 했어요 0회 — 기록 저장하기'), findsOneWidget);
+    // 조작을 7번 했어도 그 숫자는 어디에도 없다(ADR-0004).
+    expect(find.textContaining('수정'), findsNothing);
+    expect(find.textContaining('7회'), findsNothing);
   });
 
   testWidgets('레시피 북은 헤더 링크 하나로만 들어간다 — 탭 바가 없다', (tester) async {

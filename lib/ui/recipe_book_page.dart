@@ -4,14 +4,20 @@ import 'package:flutter/material.dart';
 import '../domain/recipe.dart';
 import '../theme/app_colors.dart';
 import '../theme/app_theme.dart';
+import 'backup_controller.dart';
 import 'recipe_book_controller.dart';
+import 'widgets/backup_section.dart';
 import 'widgets/recipe_form.dart';
 
-/// 백업 섹션은 #20에서 이 화면 최하단에 붙는다.
 class RecipeBookPage extends StatelessWidget {
-  const RecipeBookPage({super.key, required this.controller});
+  const RecipeBookPage({
+    super.key,
+    required this.controller,
+    required this.backupController,
+  });
 
   final RecipeBookController controller;
+  final BackupController backupController;
 
   @override
   Widget build(BuildContext context) {
@@ -19,7 +25,7 @@ class RecipeBookPage extends StatelessWidget {
       appBar: AppBar(title: const Text('레시피 북')),
       body: SafeArea(
         child: ListenableBuilder(
-          listenable: controller,
+          listenable: Listenable.merge([controller, backupController]),
           builder: (context, _) {
             final recipes = controller.recipes;
             return ListView(
@@ -50,6 +56,9 @@ class RecipeBookPage extends StatelessWidget {
                         onRemove: () => controller.remove(recipe.url),
                       ),
                     ),
+                // 백업은 이 화면 최하단이다(G1 #8).
+                const SizedBox(height: Space.xxxl),
+                BackupSection(controller: backupController),
               ],
             );
           },

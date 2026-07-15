@@ -41,12 +41,11 @@ class SectionSummary extends StatelessWidget {
                 style: AppTypography.subhead.copyWith(color: AppColors.muted),
               ),
             ),
-            if (trailing != null) ...[trailing!, const SizedBox(width: Space.sm)],
-            const Icon(
-              Icons.expand_more,
-              size: 20,
-              color: AppColors.muted,
-            ),
+            if (trailing != null) ...[
+              trailing!,
+              const SizedBox(width: Space.sm),
+            ],
+            const Icon(Icons.expand_more, size: 20, color: AppColors.muted),
           ],
         ),
       ),

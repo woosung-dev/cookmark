@@ -80,6 +80,9 @@ enum EditKind {
 /// 레시피 북에 무슨 일이 일어났는지.
 enum RecipeBookAction { add, remove }
 
+/// 백업이 나간 건지 들어온 건지 — 카탈로그 ⑪은 하나이고 방향으로 갈린다.
+enum BackupDirection { export, import }
+
 /// 조작이 어느 경로로 들어왔는지 — 분석 단계에서 대안 산식을 재산할 해상도(ADR-0003).
 enum EditPath {
   /// 행 전체 탭 토글
@@ -219,6 +222,21 @@ class AppEvent {
          'title': title,
          'ingredientCount': ingredientCount,
          if (usage != null) ...usage.toJson(),
+       };
+
+  /// ⑪ 백업 export/import — 방향과 병합 요약.
+  AppEvent.backup({
+    required this.at,
+    required BackupDirection direction,
+    required int recipeCount,
+    required int eventCount,
+    Map<String, Object?> mergeSummary = const {},
+  }) : type = AppEventType.backup,
+       data = {
+         'direction': direction.name,
+         'recipeCount': recipeCount,
+         'eventCount': eventCount,
+         ...mergeSummary,
        };
 
   /// ⑫ 오류 표시
