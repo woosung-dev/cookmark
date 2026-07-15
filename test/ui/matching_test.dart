@@ -112,6 +112,25 @@ void main() {
 
       expect(controller.phase, MainPhase.checklist);
     });
+
+    test('앞선 매칭이 날고 있는데 다시 요청하면 앞선 응답은 버려진다 — 로그에도 안 남는다', () async {
+      final gateway = FakeLlmGateway(
+        latency: const Duration(milliseconds: 100),
+      );
+      final controller = await loadedWith(gateway);
+
+      // "다시 제안"이 인플라이트 중에 겹쳐 눌린 상황 — 응답 둘이 경합한다.
+      final first = controller.requestSuggestions();
+      await waitFor(controller, () => controller.phase == MainPhase.matching);
+      final second = controller.requestSuggestions();
+      await Future.wait([first, second]);
+
+      // 버려진 호출은 화면에도 로그에도 없다 — 인식(_recognizeGeneration)과 같은 계약.
+      expect(
+        storage.readEvents().where((e) => e.type == AppEventType.matchingDone),
+        hasLength(1),
+      );
+    });
   });
 
   group('계측', () {

@@ -8,6 +8,7 @@ import 'package:shared_preferences_platform_interface/in_memory_shared_preferenc
 import 'package:shared_preferences_platform_interface/shared_preferences_async_platform_interface.dart';
 
 import '../support/fixtures.dart';
+import '../support/wait_for.dart';
 
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
@@ -114,6 +115,23 @@ void main() {
       await controller.toggle('대파');
 
       expect(controller.isStale, isFalse);
+    });
+
+    test('매칭이 날고 있을 때 손댄 재료는 새 제안을 뜨자마자 낡게 만든다', () async {
+      final controller = MainController(
+        FakeLlmGateway(latency: const Duration(milliseconds: 100)),
+        storage,
+      );
+      await controller.uploadPhoto(fridgePhoto());
+
+      // 응답이 오기 전에 재료를 손댄다 — 뜨는 제안은 이미 낡은 재고의 답이다.
+      final pending = controller.requestSuggestions();
+      await waitFor(controller, () => controller.phase == MainPhase.matching);
+      await controller.toggle('대파');
+      await pending;
+
+      expect(controller.isStale, isTrue);
+      expect(eventOf(AppEventType.suggestionsShown).data['stale'], isTrue);
     });
 
     test('낡은 뒤 "이거 했어요"에는 stale이 붙는다 — 집계에서 분리된다', () async {

@@ -149,16 +149,20 @@ class AppEvent {
          'excludedCount': excludedCount,
        };
 
-  /// ⑤ 제안 노출 — 라벨·출처 분포. 갓 뽑은 제안이므로 stale은 늘 거짓이다.
+  /// ⑤ 제안 노출 — 라벨·출처 분포.
+  ///
+  /// [stale]은 보통 거짓이지만 늘 그렇지는 않다 — 매칭이 날아가는 동안 재료를 손대면
+  /// 제안은 뜨는 순간부터 낡은 재고의 답이다. 로그가 그걸 거짓으로 적으면 성공 지표 2가 오염된다.
   AppEvent.suggestionsShown({
     required this.at,
     required List<Suggestion> suggestions,
+    required bool stale,
   }) : type = AppEventType.suggestionsShown,
        data = {
          'labels': [for (final s in suggestions) s.label.name],
          'sources': [for (final s in suggestions) s.source.name],
          'menus': [for (final s in suggestions) s.menu],
-         'stale': false,
+         'stale': stale,
        };
 
   /// ⑥ 제안 선택 — "레시피 보기"로 원본을 열었다. 성공 지표의 앞단이다.

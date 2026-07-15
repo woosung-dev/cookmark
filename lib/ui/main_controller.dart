@@ -278,10 +278,15 @@ class MainController extends ChangeNotifier {
     );
   }
 
+  /// 지금 날고 있는 매칭의 세대 — 돌아온 응답이 자기 세대가 아니면 조용히 버린다.
+  /// 인식(_recognizeGeneration)과 같은 장치다.
+  int _matchGeneration = 0;
+
   /// 확정 재료를 레시피 북과 맞춰 "오늘 할 3개"를 얻는다 — 코어 루프의 심장(#18).
   Future<void> requestSuggestions() async {
     final ingredients = [for (final i in matchableIngredients) i.name];
     if (ingredients.isEmpty) return;
+    final generation = ++_matchGeneration;
 
     // 이미 제안이 있는데 다시 부르는 건 "다시 제안"이다 — 낡은 걸 갱신하는 행위(ADR-0001).
     if (_suggestions.isNotEmpty) {
@@ -301,9 +306,16 @@ class MainController extends ChangeNotifier {
         ingredients: ingredients,
         recipes: recipes,
       );
+      // "다시 제안"이 겹쳐 새 호출이 떴다면 이 응답은 남의 화면이다 — 인식과 같은 세대 가드.
+      if (generation != _matchGeneration) return;
       // 부족 4개 이상 제외와 3개 상한은 클라이언트가 한다 — 제외 수를 집계해야 하므로.
       final selection = selectSuggestions(result.suggestions);
       final latency = _now().difference(_matchStartedAt!);
+
+      // 날아가는 동안 재료를 손댔다면, 이 제안은 뜨는 순간부터 낡은 재고의 답이다(ADR-0001).
+      _stale = !listEquals(ingredients, [
+        for (final i in matchableIngredients) i.name,
+      ]);
 
       await _storage.appendEvent(
         AppEvent.matchingDone(
@@ -315,17 +327,21 @@ class MainController extends ChangeNotifier {
         ),
       );
       await _storage.appendEvent(
-        AppEvent.suggestionsShown(at: _now(), suggestions: selection.shown),
+        AppEvent.suggestionsShown(
+          at: _now(),
+          suggestions: selection.shown,
+          stale: _stale,
+        ),
       );
 
       _suggestions = selection.shown;
       _excludedCount = selection.excludedCount;
-      // 갓 뽑은 제안이다 — 낡음이 여기서 리셋된다.
-      _stale = false;
       // 제안이 뜨면 체크리스트는 요약 한 줄로 접힌다(G1 #8).
       _checklistExpanded = false;
       _phase = MainPhase.suggestions;
     } on LlmFailure catch (e) {
+      // 대체된 호출의 뒤늦은 실패 카드가 살아 있는 매칭을 덮지 않는다.
+      if (generation != _matchGeneration) return;
       await _storage.appendEvent(
         AppEvent.errorShown(at: _now(), kind: e.kind.name, stage: 'matching'),
       );
