@@ -120,10 +120,10 @@
 
 ## 11. 마감
 
-- [ ] `flutter analyze` 무이슈
-- [ ] `flutter test` 전체 통과
-- [ ] `flutter drive` E2E(Web 타깃) 통과
-- [ ] `flutter build web` 성공
-- [ ] `dart format` 적용
+- [x] `flutter analyze` 무이슈
+- [x] `flutter test` 전체 통과
+- [x] `flutter drive` E2E(Web 타깃) 통과
+- [x] `flutter build web` 성공
+- [x] `dart format` 적용
 - [ ] /code-review — 2축(standards·spec)
 - [ ] PR
