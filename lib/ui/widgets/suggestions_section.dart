@@ -12,13 +12,13 @@ class SuggestionsSection extends StatelessWidget {
     required this.suggestions,
     required this.excludedCount,
     required this.onOpenRecipe,
-    required this.onBack,
+    required this.onCooked,
   });
 
   final List<Suggestion> suggestions;
   final int excludedCount;
   final void Function(Suggestion) onOpenRecipe;
-  final VoidCallback onBack;
+  final void Function(Suggestion) onCooked;
 
   @override
   Widget build(BuildContext context) {
@@ -48,6 +48,7 @@ class SuggestionsSection extends StatelessWidget {
               child: SuggestionCard(
                 suggestion: suggestion,
                 onOpenRecipe: () => onOpenRecipe(suggestion),
+                onCooked: () => onCooked(suggestion),
               ),
             ),
         if (excludedCount > 0) ...[
@@ -60,14 +61,6 @@ class SuggestionsSection extends StatelessWidget {
             textAlign: TextAlign.center,
           ),
         ],
-        const SizedBox(height: Space.xl),
-        Center(
-          child: TextButton(
-            key: const Key('back-to-checklist'),
-            onPressed: onBack,
-            child: const Text('재료 다시 보기'),
-          ),
-        ),
       ],
     );
   }

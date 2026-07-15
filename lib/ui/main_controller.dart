@@ -56,6 +56,26 @@ class MainController extends ChangeNotifier {
   int get excludedCount => _excludedCount;
   int _excludedCount = 0;
 
+  /// 제안이 뜬 뒤 재료를 손대면 아래 제안이 낡는다(ADR-0001).
+  ///
+  /// 낡은 채로 발생한 이벤트에는 stale 플래그가 붙어 성공 지표 2 집계에서 분리된다 —
+  /// 화면에서 카드를 치우지 않는 대신 로그 층위에서 순도를 지킨다.
+  bool get isStale => _stale;
+  bool _stale = false;
+
+  /// 제안이 뜨면 체크리스트는 요약 한 줄로 접힌다(G1 #8). 탭하면 다시 펼쳐 손볼 수 있다.
+  bool get checklistExpanded => _checklistExpanded;
+  bool _checklistExpanded = true;
+
+  void toggleChecklistExpanded() {
+    _checklistExpanded = !_checklistExpanded;
+    notifyListeners();
+  }
+
+  /// "이거 했어요"를 눌렀지만 아직 5초 실행취소가 살아 있는 제안.
+  Suggestion? get pendingCooked => _pendingCooked;
+  Suggestion? _pendingCooked;
+
   /// 인식이 시작된 시각 — 로딩 단계식 문구가 여기서 경과를 잰다.
   DateTime? get recognizeStartedAt => _recognizeStartedAt;
   DateTime? _recognizeStartedAt;
@@ -227,6 +247,13 @@ class MainController extends ChangeNotifier {
     final ingredients = [for (final i in matchableIngredients) i.name];
     if (ingredients.isEmpty) return;
 
+    // 이미 제안이 있는데 다시 부르는 건 "다시 제안"이다 — 낡은 걸 갱신하는 행위(ADR-0001).
+    if (_suggestions.isNotEmpty) {
+      await _storage.appendEvent(
+        AppEvent.rematch(at: _now(), previousCount: _suggestions.length),
+      );
+    }
+
     final recipes = _storage.readRecipes();
     _phase = MainPhase.matching;
     _failure = null;
@@ -257,6 +284,10 @@ class MainController extends ChangeNotifier {
 
       _suggestions = selection.shown;
       _excludedCount = selection.excludedCount;
+      // 갓 뽑은 제안이다 — 낡음이 여기서 리셋된다.
+      _stale = false;
+      // 제안이 뜨면 체크리스트는 요약 한 줄로 접힌다(G1 #8).
+      _checklistExpanded = false;
       _phase = MainPhase.suggestions;
     } on LlmFailure catch (e) {
       await _storage.appendEvent(
@@ -273,8 +304,39 @@ class MainController extends ChangeNotifier {
   Future<void> openRecipe(Suggestion suggestion) async {
     if (suggestion.recipeUrl == null) return;
     await _storage.appendEvent(
-      AppEvent.suggestionOpened(at: _now(), suggestion: suggestion),
+      AppEvent.suggestionOpened(
+        at: _now(),
+        suggestion: suggestion,
+        stale: _stale,
+      ),
     );
+  }
+
+  /// "이거 했어요" — 성공 지표 2의 판정 장치. 5초 실행취소가 열린다.
+  Future<void> markCooked(Suggestion suggestion) async {
+    _pendingCooked = suggestion;
+    notifyListeners();
+    await _storage.appendEvent(
+      AppEvent.cooked(at: _now(), suggestion: suggestion, stale: _stale),
+    );
+  }
+
+  /// 5초 안에 되돌렸다. 취소도 이벤트다 — 실수인지 마음이 바뀐 건지는 분석이 판단한다.
+  Future<void> undoCooked() async {
+    final suggestion = _pendingCooked;
+    if (suggestion == null) return;
+    _pendingCooked = null;
+    notifyListeners();
+    await _storage.appendEvent(
+      AppEvent.cookedUndo(at: _now(), suggestion: suggestion, stale: _stale),
+    );
+  }
+
+  /// 실행취소 창이 닫혔다 — 되돌릴 수 없다.
+  void dismissUndo() {
+    if (_pendingCooked == null) return;
+    _pendingCooked = null;
+    notifyListeners();
   }
 
   /// 매칭 로딩 문구에 쓰는 수 — "레시피 북 N개와 맞춰보는 중".
@@ -294,6 +356,12 @@ class MainController extends ChangeNotifier {
     required String name,
     Map<String, Object?> extra = const {},
   }) async {
+    // 아래에 제안이 떠 있는데 재료를 손댔다면 그 제안은 낡은 재고로 뽑힌 것이다(ADR-0001).
+    if (_suggestions.isNotEmpty && !_stale) {
+      _stale = true;
+      notifyListeners();
+    }
+
     await _storage.appendEvent(
       AppEvent.checklistEdit(
         at: _now(),

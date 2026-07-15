@@ -149,7 +149,7 @@ class AppEvent {
          'excludedCount': excludedCount,
        };
 
-  /// ⑤ 제안 노출 — 라벨·출처 분포. stale 플래그는 #19에서 붙는다.
+  /// ⑤ 제안 노출 — 라벨·출처 분포. 갓 뽑은 제안이므로 stale은 늘 거짓이다.
   AppEvent.suggestionsShown({
     required this.at,
     required List<Suggestion> suggestions,
@@ -158,17 +158,51 @@ class AppEvent {
          'labels': [for (final s in suggestions) s.label.name],
          'sources': [for (final s in suggestions) s.source.name],
          'menus': [for (final s in suggestions) s.menu],
+         'stale': false,
        };
 
   /// ⑥ 제안 선택 — "레시피 보기"로 원본을 열었다. 성공 지표의 앞단이다.
-  AppEvent.suggestionOpened({required this.at, required Suggestion suggestion})
-    : type = AppEventType.suggestionOpened,
-      data = {
-        'menu': suggestion.menu,
-        'source': suggestion.source.name,
-        'label': suggestion.label.name,
-        if (suggestion.recipeUrl != null) 'url': suggestion.recipeUrl,
-      };
+  AppEvent.suggestionOpened({
+    required this.at,
+    required Suggestion suggestion,
+    required bool stale,
+  }) : type = AppEventType.suggestionOpened,
+       data = {
+         'menu': suggestion.menu,
+         'source': suggestion.source.name,
+         'label': suggestion.label.name,
+         'stale': stale,
+         if (suggestion.recipeUrl != null) 'url': suggestion.recipeUrl,
+       };
+
+  /// ⑦ 이거 했어요 — 성공 지표 2(행동 변화)의 판정 장치.
+  ///
+  /// [stale]이 참이면 낡은 재고로 뽑힌 제안에서 눌린 것이다. 성공 지표 2 집계에서
+  /// 분리할 수 있어야 한다(ADR-0001) — 그래서 플래그를 이벤트에 박아둔다.
+  AppEvent.cooked({
+    required this.at,
+    required Suggestion suggestion,
+    required bool stale,
+  }) : type = AppEventType.cooked,
+       data = {
+         'menu': suggestion.menu,
+         'source': suggestion.source.name,
+         'label': suggestion.label.name,
+         'stale': stale,
+       };
+
+  /// ⑧ 실행취소 — 5초 안에 되돌렸다. 취소도 데이터다.
+  AppEvent.cookedUndo({
+    required this.at,
+    required Suggestion suggestion,
+    required bool stale,
+  }) : type = AppEventType.cookedUndo,
+       data = {'menu': suggestion.menu, 'stale': stale};
+
+  /// ⑨ 다시 제안 — 재료를 손본 뒤 낡은 제안을 갱신했다.
+  AppEvent.rematch({required this.at, required int previousCount})
+    : type = AppEventType.rematch,
+      data = {'previousCount': previousCount};
 
   /// ⑩ 레시피 북 변경 — 질문 2(저장 레시피가 선택을 바꾸는가)의 분모가 여기서 자란다.
   AppEvent.recipeBookChanged({

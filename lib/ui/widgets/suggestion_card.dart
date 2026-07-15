@@ -33,12 +33,16 @@ class SuggestionCard extends StatelessWidget {
     super.key,
     required this.suggestion,
     required this.onOpenRecipe,
+    required this.onCooked,
   });
 
   final Suggestion suggestion;
 
   /// "레시피 보기" — 저장 카드만 가진다.
   final VoidCallback onOpenRecipe;
+
+  /// "이거 했어요" — 성공 지표 2의 판정 장치.
+  final VoidCallback onCooked;
 
   @override
   Widget build(BuildContext context) {
@@ -75,7 +79,7 @@ class SuggestionCard extends StatelessWidget {
             ),
           ],
           const SizedBox(height: Space.xl),
-          if (saved)
+          if (saved) ...[
             SizedBox(
               height: Space.touchMin,
               child: OutlinedButton(
@@ -84,6 +88,17 @@ class SuggestionCard extends StatelessWidget {
                 child: const Text('레시피 보기'),
               ),
             ),
+            const SizedBox(height: Space.sm),
+          ],
+          // 56px — 성공 지표 2를 판정하는 버튼이라 놓치기 어려워야 한다(G1 #8).
+          SizedBox(
+            height: 56,
+            child: FilledButton(
+              key: Key('cooked-${suggestion.menu}'),
+              onPressed: onCooked,
+              child: const Text('이거 했어요'),
+            ),
+          ),
         ],
       ),
     );

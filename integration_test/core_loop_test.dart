@@ -535,6 +535,102 @@ void main() {
     expect(find.text('부족 4개 이상이라 제외한 메뉴 1개'), findsOneWidget);
   });
 
+  testWidgets('"이거 했어요" → 5초 실행취소, 둘 다 로그에 남는다 (#19)', (tester) async {
+    final controller = await pumpApp(tester);
+    await uploadAndWait(tester, controller);
+    await tapRequestSuggestions(tester, controller);
+
+    final menu = controller.suggestions.first.menu;
+    final cooked = find.byKey(Key('cooked-$menu'));
+    await tester.ensureVisible(cooked);
+    await tester.pumpAndSettle();
+    await tester.tap(cooked);
+    await tester.pump();
+
+    // 5초 실행취소 토스트.
+    expect(find.text('실행취소'), findsOneWidget);
+    await tester.tap(find.text('실행취소'));
+    await tester.pumpAndSettle();
+
+    final events = (await Storage.open()).readEvents();
+    expect(
+      events.where((e) => e.type == AppEventType.cooked).single.data['menu'],
+      menu,
+    );
+    expect(
+      events
+          .where((e) => e.type == AppEventType.cookedUndo)
+          .single
+          .data['menu'],
+      menu,
+    );
+  });
+
+  testWidgets('재료를 재수정하면 "다시 제안" 배너가 뜨고 stale이 붙는다 (#19)', (tester) async {
+    final controller = await pumpApp(tester);
+    await uploadAndWait(tester, controller);
+    await tapRequestSuggestions(tester, controller);
+
+    // 제안이 뜨면 체크리스트는 요약 한 줄로 접힌다(G1 #8).
+    expect(find.byKey(const Key('checklist-summary')), findsOneWidget);
+    expect(find.byKey(const Key('rematch-banner')), findsNothing);
+
+    // 펼쳐서 재료를 손본다 — 아래 제안이 낡는다.
+    await tester.tap(find.byKey(const Key('checklist-summary')));
+    await tester.pumpAndSettle();
+    await tester.tap(find.byKey(const Key('ingredient-row-대파')));
+    await tester.pumpAndSettle();
+
+    expect(find.byKey(const Key('rematch-banner')), findsOneWidget);
+
+    // 낡은 카드에서 누른 "이거 했어요"에는 stale이 붙는다.
+    final menu = controller.suggestions.first.menu;
+    final cooked = find.byKey(Key('cooked-$menu'));
+    await tester.ensureVisible(cooked);
+    await tester.pumpAndSettle();
+    await tester.tap(cooked);
+    await tester.pump();
+
+    final staleCooked = (await Storage.open()).readEvents().lastWhere(
+      (e) => e.type == AppEventType.cooked,
+    );
+    expect(staleCooked.data['stale'], isTrue);
+  });
+
+  testWidgets('"다시 제안"이 이벤트로 남고 새 제안은 stale이 아니다 (#19)', (tester) async {
+    final controller = await pumpApp(tester);
+    await uploadAndWait(tester, controller);
+    await tapRequestSuggestions(tester, controller);
+
+    await tester.tap(find.byKey(const Key('checklist-summary')));
+    await tester.pumpAndSettle();
+    await tester.tap(find.byKey(const Key('ingredient-row-대파')));
+    await tester.pumpAndSettle();
+
+    final rematch = find.byKey(const Key('rematch-button'));
+    await tester.ensureVisible(rematch);
+    await tester.pumpAndSettle();
+    await tester.tap(rematch);
+    await tester.pump();
+    await waitForPhase(
+      tester,
+      controller,
+      () => controller.phase == MainPhase.suggestions,
+    );
+    await tester.pumpAndSettle();
+
+    expect(find.byKey(const Key('rematch-banner')), findsNothing);
+
+    final events = (await Storage.open()).readEvents();
+    expect(events.where((e) => e.type == AppEventType.rematch), hasLength(1));
+    expect(
+      events
+          .lastWhere((e) => e.type == AppEventType.suggestionsShown)
+          .data['stale'],
+      isFalse,
+    );
+  });
+
   testWidgets('레시피 북은 헤더 링크 하나로만 들어간다 — 탭 바가 없다', (tester) async {
     await pumpApp(tester);
 

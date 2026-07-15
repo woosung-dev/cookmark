@@ -1,4 +1,7 @@
 // 메인 「외길」 — 사진→재료 체크리스트→제안을 한 세로 페이지의 섹션으로 처리한다(ADR-0001, 화면 전환 0회).
+//
+// 섹션은 쌓이고, 지나간 섹션은 요약 한 줄로 접힌다(G1 #8). 접힌 체크리스트를 다시 펼쳐
+// 재료를 손보면 아래 제안이 낡고("다시 제안" 배너), 그때 발생한 이벤트엔 stale이 붙는다.
 import 'package:flutter/material.dart';
 import 'package:image_picker/image_picker.dart';
 import 'package:url_launcher/url_launcher.dart';
@@ -15,6 +18,7 @@ import 'widgets/failure_card.dart';
 import 'widgets/onboarding_card.dart';
 import 'widgets/recipe_book_chips.dart';
 import 'widgets/recognition_loading.dart';
+import 'widgets/section_summary.dart';
 import 'widgets/suggestions_section.dart';
 import 'widgets/upload_zone.dart';
 import 'widgets/vague_chips.dart';
@@ -38,11 +42,13 @@ class MainPage extends StatefulWidget {
 }
 
 class _MainPageState extends State<MainPage> {
+  MainController get _controller => widget.controller;
+
   Future<void> _pickPhoto() async {
     final picker = widget.imagePicker ?? _pickFromGallery;
     final file = await picker();
     if (file == null) return;
-    await widget.controller.uploadPhoto(await file.readAsBytes());
+    await _controller.uploadPhoto(await file.readAsBytes());
   }
 
   Future<XFile?> _pickFromGallery() =>
@@ -55,12 +61,47 @@ class _MainPageState extends State<MainPage> {
       ),
     );
     // 레시피 북에서 뭔가 바뀌었을 수 있다 — 미인식 칩·넛지가 이걸 따라간다.
-    widget.controller.refresh();
+    _controller.refresh();
   }
 
   Future<void> _saveRecipe(String url, String title) async {
     await widget.recipeBookController.add(url: url, title: title);
-    widget.controller.refresh();
+    _controller.refresh();
+  }
+
+  /// "레시피 보기" — 원본을 새 탭으로 연다. 레시피 실행(③)은 익숙한 유튜브에서 한다(스펙 #13).
+  Future<void> _openRecipe(Suggestion suggestion) async {
+    await _controller.openRecipe(suggestion);
+    final url = suggestion.recipeUrl;
+    if (url == null) return;
+    await launchUrl(
+      Uri.parse(url),
+      mode: LaunchMode.externalApplication,
+      webOnlyWindowName: '_blank',
+    );
+  }
+
+  /// "이거 했어요" → 5초 실행취소 토스트. 실수 입력을 바로 되돌린다(G1 #8).
+  Future<void> _markCooked(Suggestion suggestion) async {
+    await _controller.markCooked(suggestion);
+    if (!mounted) return;
+
+    final messenger = ScaffoldMessenger.of(context);
+    messenger.clearSnackBars();
+    messenger
+        .showSnackBar(
+          SnackBar(
+            key: const Key('cooked-toast'),
+            content: Text('${suggestion.menu} — 잘 드셨어요!'),
+            duration: const Duration(seconds: 5),
+            action: SnackBarAction(
+              label: '실행취소',
+              onPressed: _controller.undoCooked,
+            ),
+          ),
+        )
+        .closed
+        .then((_) => _controller.dismissUndo());
   }
 
   @override
@@ -81,7 +122,7 @@ class _MainPageState extends State<MainPage> {
       body: SafeArea(
         child: ListenableBuilder(
           listenable: Listenable.merge([
-            widget.controller,
+            _controller,
             widget.recipeBookController,
           ]),
           builder: (context, _) => Column(
@@ -94,15 +135,18 @@ class _MainPageState extends State<MainPage> {
                     Space.screenPad,
                     Space.xxxl,
                   ),
-                  child: _section(),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.stretch,
+                    children: _sections(),
+                  ),
                 ),
               ),
-              // 추가 바는 체크리스트를 다듬는 동안에만 하단에 고정된다.
-              if (widget.controller.phase == MainPhase.checklist)
+              // 추가 바는 체크리스트를 펼쳐 다듬는 동안에만 하단에 고정된다.
+              if (_showsChecklist && _controller.checklistExpanded)
                 AddIngredientBar(
-                  frequent: widget.controller.frequentIngredients,
+                  frequent: _controller.frequentIngredients,
                   onAdd: (name, path) =>
-                      widget.controller.addIngredient(name, path: path),
+                      _controller.addIngredient(name, path: path),
                 ),
             ],
           ),
@@ -111,53 +155,79 @@ class _MainPageState extends State<MainPage> {
     );
   }
 
-  Widget _section() {
-    final controller = widget.controller;
-    return switch (controller.phase) {
-      MainPhase.upload => _uploadSection(),
-      MainPhase.recognizing => RecognitionLoading(
-        photo: controller.photo,
-        startedAt: controller.recognizeStartedAt!,
-        onCancel: controller.continueWithEmptyChecklist,
-      ),
-      MainPhase.matching => MatchingLoading(
-        recipeCount: controller.matchingRecipeCount,
-      ),
-      MainPhase.failed => FailureCard(
-        kind: controller.failure!,
-        stage: controller.failureStage,
-        onRetry: controller.failureStage == FailureStage.matching
-            ? controller.requestSuggestions
-            : controller.retryRecognition,
-        onContinueManually: controller.failureStage == FailureStage.matching
-            ? controller.backToChecklist
-            : controller.continueWithEmptyChecklist,
-      ),
-      MainPhase.checklist => _checklistSection(),
-      MainPhase.suggestions => SuggestionsSection(
-        suggestions: controller.suggestions,
-        excludedCount: controller.excludedCount,
-        onOpenRecipe: _openRecipe,
-        onBack: controller.backToChecklist,
-      ),
-    };
-  }
+  /// 체크리스트 섹션이 페이지에 있는가 — 인식이 끝난 뒤로는 계속 있다(접혀 있을 뿐).
+  bool get _showsChecklist => switch (_controller.phase) {
+    MainPhase.checklist ||
+    MainPhase.matching ||
+    MainPhase.suggestions => true,
+    MainPhase.failed => _controller.failureStage == FailureStage.matching,
+    MainPhase.upload || MainPhase.recognizing => false,
+  };
 
-  /// "레시피 보기" — 원본을 새 탭으로 연다. 레시피 실행(③)은 익숙한 유튜브에서 한다(스펙 #13).
-  Future<void> _openRecipe(Suggestion suggestion) async {
-    await widget.controller.openRecipe(suggestion);
-    final url = suggestion.recipeUrl;
-    if (url == null) return;
-    await launchUrl(
-      Uri.parse(url),
-      mode: LaunchMode.externalApplication,
-      webOnlyWindowName: '_blank',
-    );
+  /// 쌓이는 섹션들. 위에서부터 사진 → 재료 → 제안 순이고, 지나간 것은 접힌다.
+  List<Widget> _sections() {
+    final controller = _controller;
+
+    return [
+      switch (controller.phase) {
+        MainPhase.upload => _uploadSection(),
+        MainPhase.recognizing => RecognitionLoading(
+          photo: controller.photo,
+          startedAt: controller.recognizeStartedAt!,
+          onCancel: controller.continueWithEmptyChecklist,
+        ),
+        MainPhase.failed when controller.failureStage == FailureStage.recognition =>
+          FailureCard(
+            kind: controller.failure!,
+            stage: FailureStage.recognition,
+            onRetry: controller.retryRecognition,
+            onContinueManually: controller.continueWithEmptyChecklist,
+          ),
+        _ => const SizedBox.shrink(),
+      },
+
+      if (_showsChecklist) ...[
+        if (controller.checklistExpanded)
+          _checklistSection()
+        else
+          SectionSummary(
+            key: const Key('checklist-summary'),
+            label: '냉장고에 있는 것 ${controller.matchableIngredients.length}개',
+            onTap: controller.toggleChecklistExpanded,
+          ),
+        // 재료를 손봐서 아래 제안이 낡았다면 갱신을 권한다(ADR-0001).
+        if (controller.isStale) ...[
+          const SizedBox(height: Space.md),
+          RematchBanner(onRematch: controller.requestSuggestions),
+        ],
+        const SizedBox(height: Space.xxl),
+      ],
+
+      switch (controller.phase) {
+        MainPhase.matching => MatchingLoading(
+          recipeCount: controller.matchingRecipeCount,
+        ),
+        MainPhase.suggestions => SuggestionsSection(
+          suggestions: controller.suggestions,
+          excludedCount: controller.excludedCount,
+          onOpenRecipe: _openRecipe,
+          onCooked: _markCooked,
+        ),
+        MainPhase.failed when controller.failureStage == FailureStage.matching =>
+          FailureCard(
+            kind: controller.failure!,
+            stage: FailureStage.matching,
+            onRetry: controller.requestSuggestions,
+            onContinueManually: controller.backToChecklist,
+          ),
+        _ => const SizedBox.shrink(),
+      },
+    ];
   }
 
   /// 첫 방문이면 업로드 존 자리에 온보딩 카드가 온다 — 별도 화면이 아니다(G1 #8).
   Widget _uploadSection() {
-    final controller = widget.controller;
+    final controller = _controller;
     if (controller.showsOnboarding) {
       return OnboardingCard(
         savedCount: controller.recipeCount,
@@ -183,7 +253,9 @@ class _MainPageState extends State<MainPage> {
   }
 
   Widget _checklistSection() {
-    final controller = widget.controller;
+    final controller = _controller;
+    final hasSuggestions = controller.suggestions.isNotEmpty;
+
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
@@ -217,16 +289,26 @@ class _MainPageState extends State<MainPage> {
           textAlign: TextAlign.center,
         ),
         const SizedBox(height: Space.lg),
-        SizedBox(
-          height: Space.touchMin + 4,
-          child: FilledButton(
-            key: const Key('request-suggestions'),
-            onPressed: controller.matchableIngredients.isEmpty
-                ? null
-                : controller.requestSuggestions,
-            child: const Text('오늘 뭐 해먹지'),
+        // 제안이 이미 있으면 이 버튼 대신 "다시 제안" 배너가 갱신을 맡는다.
+        if (!hasSuggestions)
+          SizedBox(
+            height: Space.touchMin + 4,
+            child: FilledButton(
+              key: const Key('request-suggestions'),
+              onPressed: controller.matchableIngredients.isEmpty
+                  ? null
+                  : controller.requestSuggestions,
+              child: const Text('오늘 뭐 해먹지'),
+            ),
+          )
+        else
+          Center(
+            child: TextButton(
+              key: const Key('collapse-checklist'),
+              onPressed: controller.toggleChecklistExpanded,
+              child: const Text('접기'),
+            ),
           ),
-        ),
       ],
     );
   }
