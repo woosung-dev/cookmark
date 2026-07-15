@@ -18,31 +18,31 @@
 - [x] §7 제안 카드의 **매칭률(mono)** → 삭제. G1 #8 확정 카드 구성에 없다
 - [x] §7 confidence **medium = "확인" 앰버 배지** → "물음표 점"으로 정정. G1 #8·ADR-0003 초기 상태와 한 몸
 - [x] 제안 라벨 색 대조 — DESIGN.md 시맨틱(그린/앰버/그레이) vs G1 #8 카피(초록/호박/파랑). 근거 남기고 하나로 확정
-- [ ] 커밋: `docs: DESIGN.md 화면 층위 충돌 정리 — G1 #8·ADR-0001 정합`
+- [x] 커밋: `docs: DESIGN.md 화면 층위 충돌 정리 — G1 #8·ADR-0001 정합`
 
 ## 1. 스캐폴드 (#14 일부)
 
 - [x] `flutter create --org dev.woosung --project-name cookmark --platforms=web .`
 - [x] `.gitignore` — 리포 고유 3줄(`.env*`·`.agents`·`.claude`) + Flutter SDK 표준 템플릿 병합
 - [x] 다른 arm의 빌드 산출물(.dart_tool·build·.idea·cookmark.iml) 작업트리에서 격리
-- [ ] `pubspec.yaml` — 의존성 확정(http·image·shared_preferences 계열·integration_test·flutter_lints)
-- [ ] `analysis_options.yaml` — flutter_lints 표준
-- [ ] 테마 — DESIGN.md 토큰(색·타이포·스페이싱·라운드)을 코드로
-- [ ] 앱 셸 — 헤더 + 레시피 북 링크 1개(탭바 없음), 화면 2개 라우팅
+- [x] `pubspec.yaml` — 의존성 확정(http·image·shared_preferences 계열·integration_test·flutter_lints)
+- [x] `analysis_options.yaml` — flutter_lints 표준
+- [x] 테마 — DESIGN.md 토큰(색·타이포·스페이싱·라운드)을 코드로
+- [x] 앱 셸 — 헤더 + 레시피 북 링크 1개(탭바 없음), 화면 2개 라우팅
       → 검증: `flutter analyze` 무이슈 · `flutter build web` 성공
 
 ## 2. #14 — 코어 관통 (사진→인식→재료 체크리스트)
 
-- [ ] LLM 경계 모듈 — 인식/매칭 단일 seam, 모델명 환경설정 주입, 페이크 주입 지점
-- [ ] 서버리스 프록시(인식) — API 키 서버측 전용, 토큰·추정 원가 회신
-- [ ] 클라이언트 768px 리사이즈
-- [ ] 단일 스토리지 모듈 — 이벤트 로그 쓰기/읽기 경계
-- [ ] 로딩 — 사진 위 스캔 시머 + 체크박스 스켈레톤 + 단계식 문구(0~3s / 3~10s / 10s 취소 등장 / 30s 타임아웃)
-- [ ] 재료 체크리스트 초기 상태 — high 체크 / medium 체크+물음표 점 / low 해제·"확실하지 않아요" 흐린 그룹
-- [ ] 이벤트 — ①사진 업로드 ②인식 완료(지연·토큰·원가), 새로고침 후 유지
-- [ ] E2E 하네스 — `integration_test` + `test_driver/integration_test.dart`, 페이크 주입 관통
+- [x] LLM 경계 모듈 — 인식/매칭 단일 seam, 모델명 환경설정 주입, 페이크 주입 지점
+- [x] 서버리스 프록시(인식) — API 키 서버측 전용, 토큰·추정 원가 회신
+- [x] 클라이언트 768px 리사이즈
+- [x] 단일 스토리지 모듈 — 이벤트 로그 쓰기/읽기 경계
+- [x] 로딩 — 사진 위 스캔 시머 + 체크박스 스켈레톤 + 단계식 문구(0~3s / 3~10s / 10s 취소 등장 / 30s 타임아웃)
+- [x] 재료 체크리스트 초기 상태 — high 체크 / medium 체크+물음표 점 / low 해제·"확실하지 않아요" 흐린 그룹
+- [x] 이벤트 — ①사진 업로드 ②인식 완료(지연·토큰·원가), 새로고침 후 유지
+- [x] E2E 하네스 — `integration_test` + `test_driver/integration_test.dart`, 페이크 주입 관통
 - [ ] **(사용자 필요)** Vercel 배포 → 배포 URL·실 Gemini 호출 AC 2건. `vercel login`은 사용자만 가능
-- [ ] 커밋
+- [x] 커밋
 
 ## 3. #15 — 체크리스트 조작·수동 수정 계측 (ADR-0003)
 

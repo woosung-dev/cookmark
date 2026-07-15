@@ -1,6 +1,7 @@
 // 클라이언트 로컬 영속의 유일한 경계 — 위젯은 스토리지 API를 직접 호출하지 않는다(coding-standards).
 import 'dart:convert';
 
+import 'package:flutter/foundation.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 import '../domain/app_event.dart';
@@ -46,4 +47,8 @@ class Storage {
       jsonEncode([for (final e in events) e.toJson()]),
     );
   }
+
+  /// E2E가 브라우저 localStorage를 비우고 시작할 수 있게 — 앱에는 데이터를 지우는 경로가 없다.
+  @visibleForTesting
+  Future<void> clear() => _prefs.clear();
 }

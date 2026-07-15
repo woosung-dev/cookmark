@@ -28,19 +28,21 @@ class RecognitionLoading extends StatefulWidget {
   State<RecognitionLoading> createState() => _RecognitionLoadingState();
 }
 
+// 티커가 둘이다 — 시머 애니메이션과 경과 시간 감시. SingleTickerProviderStateMixin은 하나만 허용한다.
 class _RecognitionLoadingState extends State<RecognitionLoading>
-    with SingleTickerProviderStateMixin {
-  late final AnimationController _shimmer = AnimationController(
-    vsync: this,
-    duration: const Duration(milliseconds: 1400),
-  )..repeat();
-
+    with TickerProviderStateMixin {
+  late final AnimationController _shimmer;
   late final Ticker _elapsedTicker;
   LoadingStage _stage = LoadingStage.early;
 
   @override
   void initState() {
     super.initState();
+    // late final의 지연 생성에 맡기면, 화면에 뜨기 전에 dispose될 때 dispose가 티커를 새로 만든다.
+    _shimmer = AnimationController(
+      vsync: this,
+      duration: const Duration(milliseconds: 1400),
+    )..repeat();
     _elapsedTicker = createTicker((_) {
       final stage = stageFor(widget.now().difference(widget.startedAt));
       if (stage != _stage) setState(() => _stage = stage);

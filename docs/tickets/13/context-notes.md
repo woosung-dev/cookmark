@@ -76,3 +76,65 @@ medium 배지 정정. 재발 방지로 §0 "이 문서의 관할"을 신설해 D
 
 **주의** — 이 결정은 지금 구현 중인 스펙 #13 본문과 어긋난다. #18 구현·리뷰 때 "스펙 위반"으로
 오판하지 말 것. 필요하면 #13/#18에 코멘트로 정정 기록을 남긴다.
+
+---
+
+## 2026-07-15 · #14 코어 관통
+
+### 원가 기록을 T1 #6이 지정한 필드로 되돌린 건
+
+처음엔 사용량을 `tokens: int` 하나로 뭉쳐 놨고, 페이크 fixture 숫자(1187 토큰 / $0.00054)도
+근거 없이 지어냈다. T1 #6(#6) resolution을 읽고 바로잡았다.
+
+- 실제 단가 — gemini-3.1-flash-lite **$0.25 / $1.50** per 1M in/out, thinking 토큰은 output 단가 과금.
+  (T1 #6이 2026-07-13 공식 가격 페이지에서 확인)
+- T1 #6이 못 박은 기록 필드 — `promptTokenCount`(+`promptTokensDetails` 모달리티) ·
+  `candidatesTokenCount` · `thoughtsTokenCount` · 계산 원가 · 지연.
+  **"thoughtsTokenCount 미기록 시 원가 78%가 누락될 수 있음"**. flash-lite는 thinking을 안 쓰지만
+  모델명이 환경변수라 언젠가 thinking 모델이 들어올 수 있다 — 그때 조용히 틀리지 않게 필드를 남긴다.
+- 원가 산식을 T1 #6 실측표 6행으로 검산했다(flash-lite 4행 + 3.5-flash 2행 전부 일치).
+- 페이크 fixture는 실측표의 `flash-lite 기본·768px` 행 그대로 — 1157/295, $0.00073, 이미지 1,064.
+
+교훈 — 스펙 본문만 읽고 짜면 선행 스파이크가 이미 확정한 계약을 놓친다. #6·#7은 스펙의 상류다.
+
+### 리사이즈 — dart:ui 디코드 + image 패키지 인코딩
+
+순수 Dart(image 패키지) 디코드는 12MP 사진에서 수 초가 걸린다 — 이 리사이즈가 없애려던 지연을
+도로 만든다. `ui.instantiateImageCodecWithSize`로 플랫폼(브라우저) 디코더에 축소를 맡기고,
+JPEG 재인코딩만 image 패키지가 한다. `getTargetSize` 콜백이 원본 크기를 주므로 768px 이하 확대를 막는다.
+
+dart:ui 문서에 "웹은 CanvasKit 렌더러만 리사이즈 지원(HTML 렌더러는 불가)"이라는 경고가 있으나,
+`--web-renderer` 플래그 자체가 Flutter 3.44에 없다(확인함) — HTML 렌더러는 폐기됐고 남은 렌더러는
+전부 리사이즈를 지원한다. 낡은 주석이다.
+
+### E2E가 유닛이 못 잡은 버그를 잡았다
+
+`_RecognitionLoadingState`가 `SingleTickerProviderStateMixin`인데 티커를 2개(시머 애니메이션 +
+경과 시간 감시) 만들고 있었다. 유닛·analyze 전부 통과했고 브라우저 E2E에서만 터졌다.
+`TickerProviderStateMixin`으로 고쳤고, `late final`의 지연 생성이 dispose 시점에 티커를 새로
+만드는 잠복 버그도 함께 제거했다(initState에서 명시 생성).
+
+이전 시즌 교훈("라이브 e2e가 유닛이 놓친 버그를 잡는다")이 첫 티켓에서 바로 재현됐다.
+
+### testWidgets로는 코어 루프를 검증할 수 없다
+
+`testWidgets`는 FakeAsync 존이라 `dart:ui` 이미지 디코드 같은 실제 I/O Future가 완료되지 않는다 —
+탭해도 phase가 `upload`에서 움직이지 않는다. 게다가 스캔 시머가 `repeat()`이라 로딩 중
+`pumpAndSettle`은 영영 정착하지 않는다.
+
+→ 업로드→인식→체크리스트 관통은 **E2E가 정본**이고(coding-standards와 일치), 위젯 테스트는
+async를 타지 않는 것만 본다. E2E도 프레임이 아니라 컨트롤러 상태를 기다린다(`waitForPhase`).
+
+### 서버리스 프록시 — Vercel 전제
+
+스펙은 "호스팅은 구현 재량"이라 했다. Vercel Node 함수(`api/recognize.mjs`)로 잡았다 —
+출처 = 세션 메모리의 "vercel login부터가 다음"(다른 arm의 이월 사항). 사용자 승인은 받지 않았다.
+SDK 없이 REST + `fetch`만 쓴다(의존성 0, 빌드 단계 0).
+
+`lowQuality`는 P1 확정 스키마에 없는 추가 필드다 — 실패 4종 중 "저품질"을 "0개 인식"과 가르려면
+모델이 알려주는 수밖에 없다(#21 AC).
+
+### 이월 — 배포
+
+`vercel login`은 사용자만 할 수 있어 #14의 AC 2건(배포된 URL 관통 · 실 Gemini 호출)이 열려 있다.
+D0 게이트(7/20)의 병목. 앱 코드·프록시 함수·빌드는 준비됐다.
