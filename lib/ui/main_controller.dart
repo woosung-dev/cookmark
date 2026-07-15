@@ -298,7 +298,8 @@ class MainController extends ChangeNotifier {
     final recipes = _storage.readRecipes();
     _phase = MainPhase.matching;
     _failure = null;
-    _matchStartedAt = _now();
+    // 지연은 호출별 지역 변수로 잰다 — 필드에 두면 겹친 호출이 덮어써 앞선 응답의 지연이 틀어진다.
+    final startedAt = _now();
     notifyListeners();
 
     try {
@@ -306,26 +307,29 @@ class MainController extends ChangeNotifier {
         ingredients: ingredients,
         recipes: recipes,
       );
-      // "다시 제안"이 겹쳐 새 호출이 떴다면 이 응답은 남의 화면이다 — 인식과 같은 세대 가드.
-      if (generation != _matchGeneration) return;
       // 부족 4개 이상 제외와 3개 상한은 클라이언트가 한다 — 제외 수를 집계해야 하므로.
       final selection = selectSuggestions(result.suggestions);
-      final latency = _now().difference(_matchStartedAt!);
+
+      // 대체된 호출도 Gemini까지 갔고 토큰을 썼다 — 원가 원장은 호출마다 남긴다(스펙 US 28:
+      // "LLM 호출마다 토큰 수와 추정 원가가 이벤트에 부착"). 세대 가드는 화면과 노출만 막는다.
+      await _storage.appendEvent(
+        AppEvent.matchingDone(
+          at: _now(),
+          latency: _now().difference(startedAt),
+          usage: result.usage,
+          shownCount: selection.shown.length,
+          excludedCount: selection.excludedCount,
+        ),
+      );
+
+      // "다시 제안"이 겹쳐 새 호출이 떴다면 이 응답은 남의 화면이다 — 인식과 같은 세대 가드.
+      if (generation != _matchGeneration) return;
 
       // 날아가는 동안 재료를 손댔다면, 이 제안은 뜨는 순간부터 낡은 재고의 답이다(ADR-0001).
       _stale = !listEquals(ingredients, [
         for (final i in matchableIngredients) i.name,
       ]);
 
-      await _storage.appendEvent(
-        AppEvent.matchingDone(
-          at: _now(),
-          latency: latency,
-          usage: result.usage,
-          shownCount: selection.shown.length,
-          excludedCount: selection.excludedCount,
-        ),
-      );
       await _storage.appendEvent(
         AppEvent.suggestionsShown(
           at: _now(),
@@ -393,8 +397,6 @@ class MainController extends ChangeNotifier {
 
   /// 매칭 로딩 문구에 쓰는 수 — "레시피 북 N개와 맞춰보는 중".
   int get matchingRecipeCount => _storage.readRecipes().length;
-
-  DateTime? _matchStartedAt;
 
   /// 체크리스트로 돌아간다 — 제안이 마음에 안 들면 재료부터 다시 본다.
   void backToChecklist() {

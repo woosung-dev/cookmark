@@ -113,7 +113,7 @@ void main() {
       expect(controller.phase, MainPhase.checklist);
     });
 
-    test('앞선 매칭이 날고 있는데 다시 요청하면 앞선 응답은 버려진다 — 로그에도 안 남는다', () async {
+    test('앞선 매칭이 날고 있는데 다시 요청하면 앞선 응답은 화면에서 버려진다', () async {
       final gateway = FakeLlmGateway(
         latency: const Duration(milliseconds: 100),
       );
@@ -125,10 +125,17 @@ void main() {
       final second = controller.requestSuggestions();
       await Future.wait([first, second]);
 
-      // 버려진 호출은 화면에도 로그에도 없다 — 인식(_recognizeGeneration)과 같은 계약.
+      // 노출은 살아남은 세대 하나뿐 — 버려진 응답은 화면에 뜬 적이 없다.
+      expect(
+        storage.readEvents().where(
+          (e) => e.type == AppEventType.suggestionsShown,
+        ),
+        hasLength(1),
+      );
+      // 그래도 원가 원장에는 둘 다 남는다 — 버려진 호출도 토큰을 썼다(스펙 US 28).
       expect(
         storage.readEvents().where((e) => e.type == AppEventType.matchingDone),
-        hasLength(1),
+        hasLength(2),
       );
     });
   });
