@@ -2,6 +2,8 @@
 import 'dart:typed_data';
 
 import '../domain/ingredient.dart';
+import '../domain/recipe.dart';
+import '../domain/suggestion.dart';
 import 'llm_gateway.dart';
 
 /// P1 실측을 닮은 인식 fixture — high/medium/low가 섞이고 뭉뚱그림 항목("반찬통")이 들어 있다.
@@ -35,6 +37,7 @@ class FakeLlmGateway implements LlmGateway {
     List<Ingredient>? ingredients,
     this.latency = Duration.zero,
     this.failure,
+    this.matchFailure,
   }) : ingredients = ingredients ?? defaultRecognitionFixture;
 
   final List<Ingredient> ingredients;
@@ -42,8 +45,11 @@ class FakeLlmGateway implements LlmGateway {
   /// 로딩 단계식 문구(0~3s / 3~10s / 10s 취소 등장)를 테스트하려면 여기를 늘린다.
   final Duration latency;
 
-  /// null이 아니면 인식이 이 실패로 끝난다.
+  /// null이 아니면 모든 호출이 이 실패로 끝난다.
   final LlmFailure? failure;
+
+  /// 매칭만 실패시킨다 — 인식은 성공해야 매칭 단계까지 갈 수 있다.
+  final LlmFailure? matchFailure;
 
   /// 이 페이크가 몇 번 호출됐는지 — "다시 시도"가 실제로 재호출하는지 검증할 때 쓴다.
   int recognizeCallCount = 0;
@@ -76,7 +82,67 @@ class FakeLlmGateway implements LlmGateway {
       usage: _extractionUsage,
     );
   }
+
+  @override
+  Future<MatchResult> match({
+    required List<String> ingredients,
+    required List<Recipe> recipes,
+  }) async {
+    matchCallCount++;
+    lastMatchedIngredients = ingredients;
+    lastMatchedRecipes = recipes;
+    if (latency > Duration.zero) await Future<void>.delayed(latency);
+    final fail = matchFailure ?? failure;
+    if (fail != null) throw fail;
+    return MatchResult(
+      suggestions: suggestions ?? defaultSuggestions(recipes),
+      usage: _matchingUsage,
+    );
+  }
+
+  int matchCallCount = 0;
+  List<String>? lastMatchedIngredients;
+  List<Recipe>? lastMatchedRecipes;
+
+  /// null이면 [defaultSuggestions]를 쓴다.
+  List<Suggestion>? suggestions;
 }
+
+/// 라벨 3종과 출처 2종이 다 나오는 fixture — 카드가 모든 모양을 보여줄 수 있게.
+///
+/// 저장 제안은 실제 레시피 북에서 제목을 빌린다. 레시피 북이 비면 생성 제안만 나온다.
+List<Suggestion> defaultSuggestions(List<Recipe> recipes) => [
+  if (recipes.isNotEmpty)
+    Suggestion(
+      menu: recipes.first.title,
+      source: SuggestionSource.saved,
+      missing: const [],
+      reason: '냉장고에 있는 재료로 다 돼요.',
+      recipeUrl: recipes.first.url,
+    ),
+  const Suggestion(
+    menu: '애호박볶음',
+    source: SuggestionSource.generated,
+    missing: [MissingIngredient(name: '식용유')],
+    reason: '애호박이 있어서 금방 만들 수 있어요.',
+  ),
+  const Suggestion(
+    menu: '두부조림',
+    source: SuggestionSource.generated,
+    missing: [MissingIngredient(name: '우유', substitute: '두유')],
+    reason: '두부가 있고 우유는 두유로 대신할 수 있어요.',
+  ),
+];
+
+/// T1 #6 실측의 매칭 호출 — 395/225, 1.2s, $0.00044.
+const _matchingUsage = LlmUsage(
+  promptTokens: 395,
+  outputTokens: 225,
+  thoughtTokens: 0,
+  imageTokens: 0,
+  costUsd: 0.00044,
+  model: 'fake-matcher',
+);
 
 /// T1 #6 실측의 매칭 호출(텍스트 온리, 395/225 → $0.00044) 자리를 빌린다 —
 /// 추출도 같은 모양의 텍스트 온리 호출이라 이미지 토큰이 0이다.

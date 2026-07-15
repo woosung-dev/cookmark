@@ -5,16 +5,20 @@ import '../data/storage.dart';
 import '../domain/app_event.dart';
 import '../domain/ingredient.dart';
 import '../domain/session_state.dart';
+import '../domain/suggestion.dart';
 import '../domain/vague_heuristic.dart';
 import '../image/resize.dart';
 import '../llm/llm_gateway.dart';
 import 'recipe_book_controller.dart';
 
-/// 단일 페이지 상태(ADR-0001). 제안은 #18에서 붙는다.
+/// 단일 페이지 상태(ADR-0001).
 ///
 /// "세션 복원"은 별도 상태가 아니라 [MainController.restoreSession]이 지나온 체크리스트로
 /// 되돌리는 경로다 — 사용자에게는 하던 화면이 그대로 보이는 게 전부다.
-enum MainPhase { upload, recognizing, checklist, failed }
+enum MainPhase { upload, recognizing, checklist, matching, suggestions, failed }
+
+/// 실패가 어느 단계에서 났는지 — 인라인 카드가 어느 섹션에 붙을지 정한다(G1 #8).
+enum FailureStage { recognition, matching }
 
 class MainController extends ChangeNotifier {
   MainController(this._gateway, this._storage, {DateTime Function()? now})
@@ -39,6 +43,18 @@ class MainController extends ChangeNotifier {
 
   LlmFailureKind? get failure => _failure;
   LlmFailureKind? _failure;
+
+  /// 실패가 인식에서 났는지 매칭에서 났는지 — 인라인 카드의 문구와 재시도 대상이 갈린다.
+  FailureStage get failureStage => _failureStage;
+  FailureStage _failureStage = FailureStage.recognition;
+
+  /// 화면에 올라간 "오늘 할 3개".
+  List<Suggestion> get suggestions => List.unmodifiable(_suggestions);
+  List<Suggestion> _suggestions = [];
+
+  /// 부족 4개 이상이라 제외된 메뉴 수 — 투명성 줄이 이걸 말한다(스펙 #13).
+  int get excludedCount => _excludedCount;
+  int _excludedCount = 0;
 
   /// 인식이 시작된 시각 — 로딩 단계식 문구가 여기서 경과를 잰다.
   DateTime? get recognizeStartedAt => _recognizeStartedAt;
@@ -206,6 +222,72 @@ class MainController extends ChangeNotifier {
     );
   }
 
+  /// 확정 재료를 레시피 북과 맞춰 "오늘 할 3개"를 얻는다 — 코어 루프의 심장(#18).
+  Future<void> requestSuggestions() async {
+    final ingredients = [for (final i in matchableIngredients) i.name];
+    if (ingredients.isEmpty) return;
+
+    final recipes = _storage.readRecipes();
+    _phase = MainPhase.matching;
+    _failure = null;
+    _matchStartedAt = _now();
+    notifyListeners();
+
+    try {
+      final result = await _gateway.match(
+        ingredients: ingredients,
+        recipes: recipes,
+      );
+      // 부족 4개 이상 제외와 3개 상한은 클라이언트가 한다 — 제외 수를 집계해야 하므로.
+      final selection = selectSuggestions(result.suggestions);
+      final latency = _now().difference(_matchStartedAt!);
+
+      await _storage.appendEvent(
+        AppEvent.matchingDone(
+          at: _now(),
+          latency: latency,
+          usage: result.usage,
+          shownCount: selection.shown.length,
+          excludedCount: selection.excludedCount,
+        ),
+      );
+      await _storage.appendEvent(
+        AppEvent.suggestionsShown(at: _now(), suggestions: selection.shown),
+      );
+
+      _suggestions = selection.shown;
+      _excludedCount = selection.excludedCount;
+      _phase = MainPhase.suggestions;
+    } on LlmFailure catch (e) {
+      await _storage.appendEvent(
+        AppEvent.errorShown(at: _now(), kind: e.kind.name, stage: 'matching'),
+      );
+      _failure = e.kind;
+      _failureStage = FailureStage.matching;
+      _phase = MainPhase.failed;
+    }
+    notifyListeners();
+  }
+
+  /// "레시피 보기" — 저장 카드만 가진다. 원본은 새 탭으로 열고, 여는 것 자체가 선택 이벤트다.
+  Future<void> openRecipe(Suggestion suggestion) async {
+    if (suggestion.recipeUrl == null) return;
+    await _storage.appendEvent(
+      AppEvent.suggestionOpened(at: _now(), suggestion: suggestion),
+    );
+  }
+
+  /// 매칭 로딩 문구에 쓰는 수 — "레시피 북 N개와 맞춰보는 중".
+  int get matchingRecipeCount => _storage.readRecipes().length;
+
+  DateTime? _matchStartedAt;
+
+  /// 체크리스트로 돌아간다 — 제안이 마음에 안 들면 재료부터 다시 본다.
+  void backToChecklist() {
+    _phase = MainPhase.checklist;
+    notifyListeners();
+  }
+
   Future<void> _recordEdit({
     required EditKind kind,
     required EditPath path,
@@ -290,6 +372,7 @@ class MainController extends ChangeNotifier {
         ),
       );
       _failure = e.kind;
+      _failureStage = FailureStage.recognition;
       _phase = MainPhase.failed;
     }
     notifyListeners();

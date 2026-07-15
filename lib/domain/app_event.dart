@@ -2,6 +2,7 @@
 import 'package:flutter/foundation.dart';
 
 import '../llm/llm_gateway.dart';
+import 'suggestion.dart';
 
 /// 이벤트 카탈로그 12종(스펙 #13 계측). export JSON의 `type` 값이 곧 이 이름이다.
 ///
@@ -132,6 +133,42 @@ class AppEvent {
     Map<String, Object?> extra = const {},
   }) : type = AppEventType.checklistEdit,
        data = {'kind': kind.name, 'path': path.name, 'name': name, ...extra};
+
+  /// ④ 매칭 완료 — 지연·토큰·원가·제외 수.
+  AppEvent.matchingDone({
+    required this.at,
+    required Duration latency,
+    required LlmUsage usage,
+    required int shownCount,
+    required int excludedCount,
+  }) : type = AppEventType.matchingDone,
+       data = {
+         'latencyMs': latency.inMilliseconds,
+         ...usage.toJson(),
+         'shownCount': shownCount,
+         'excludedCount': excludedCount,
+       };
+
+  /// ⑤ 제안 노출 — 라벨·출처 분포. stale 플래그는 #19에서 붙는다.
+  AppEvent.suggestionsShown({
+    required this.at,
+    required List<Suggestion> suggestions,
+  }) : type = AppEventType.suggestionsShown,
+       data = {
+         'labels': [for (final s in suggestions) s.label.name],
+         'sources': [for (final s in suggestions) s.source.name],
+         'menus': [for (final s in suggestions) s.menu],
+       };
+
+  /// ⑥ 제안 선택 — "레시피 보기"로 원본을 열었다. 성공 지표의 앞단이다.
+  AppEvent.suggestionOpened({required this.at, required Suggestion suggestion})
+    : type = AppEventType.suggestionOpened,
+      data = {
+        'menu': suggestion.menu,
+        'source': suggestion.source.name,
+        'label': suggestion.label.name,
+        if (suggestion.recipeUrl != null) 'url': suggestion.recipeUrl,
+      };
 
   /// ⑩ 레시피 북 변경 — 질문 2(저장 레시피가 선택을 바꾸는가)의 분모가 여기서 자란다.
   AppEvent.recipeBookChanged({

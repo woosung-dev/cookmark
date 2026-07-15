@@ -6,6 +6,8 @@ import 'dart:typed_data';
 import 'package:http/http.dart' as http;
 
 import '../domain/ingredient.dart';
+import '../domain/recipe.dart';
+import '../domain/suggestion.dart';
 import 'llm_gateway.dart';
 
 /// 프록시 함수의 베이스 URL. 웹 빌드는 같은 오리진이므로 기본값이 빈 문자열이다.
@@ -58,6 +60,69 @@ class ProxyLlmGateway implements LlmGateway {
     return ExtractionResult(
       ingredients: ingredients,
       usage: LlmUsage.fromJson((body['usage']! as Map).cast<String, Object?>()),
+    );
+  }
+
+  @override
+  Future<MatchResult> match({
+    required List<String> ingredients,
+    required List<Recipe> recipes,
+  }) async {
+    final body = await _post('/api/match', {
+      'ingredients': ingredients,
+      'recipes': [
+        for (final r in recipes)
+          {'title': r.title, 'ingredients': r.ingredients},
+      ],
+    });
+
+    final raw = body['suggestions'] as List<Object?>? ?? const [];
+    final suggestions = <Suggestion>[
+      for (final item in raw)
+        ?_parseSuggestion((item! as Map).cast<String, Object?>(), recipes),
+    ];
+
+    if (suggestions.isEmpty) throw const LlmFailure(LlmFailureKind.empty);
+
+    return MatchResult(
+      suggestions: suggestions,
+      usage: LlmUsage.fromJson((body['usage']! as Map).cast<String, Object?>()),
+    );
+  }
+
+  /// 메뉴명·출처가 없으면 카드로 세울 수 없다 — 버린다.
+  static Suggestion? _parseSuggestion(
+    Map<String, Object?> json,
+    List<Recipe> recipes,
+  ) {
+    final menu = (json['menu'] as String?)?.trim();
+    final source = SuggestionSource.parse(json['source'] as String?);
+    if (menu == null || menu.isEmpty || source == null) return null;
+
+    final missing = <MissingIngredient>[
+      for (final m in json['missing'] as List<Object?>? ?? const [])
+        if (((m! as Map).cast<String, Object?>()['name'] as String?)?.trim()
+            case final name? when name.isNotEmpty)
+          MissingIngredient(
+            name: name,
+            substitute: (m as Map)['substitute'] as String?,
+          ),
+    ];
+
+    // 저장 제안의 URL은 LLM이 아니라 우리 레시피 북에서 온다 — 모델이 URL을 지어내게 두지 않는다.
+    final url = source == SuggestionSource.saved
+        ? recipes.where((r) => r.title == menu).firstOrNull?.url
+        : null;
+
+    return Suggestion(
+      menu: menu,
+      // 저장이라 했는데 레시피 북에 없으면 생성으로 본다 — 출처 라벨이 거짓이면 신뢰가 깨진다.
+      source: source == SuggestionSource.saved && url == null
+          ? SuggestionSource.generated
+          : source,
+      missing: missing,
+      reason: (json['reason'] as String?)?.trim() ?? '',
+      recipeUrl: url,
     );
   }
 

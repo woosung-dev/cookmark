@@ -2,6 +2,7 @@
 import 'package:flutter/material.dart';
 
 import '../../llm/llm_gateway.dart';
+import '../main_controller.dart';
 import '../../theme/app_colors.dart';
 import '../../theme/app_theme.dart';
 
@@ -9,22 +10,34 @@ class FailureCard extends StatelessWidget {
   const FailureCard({
     super.key,
     required this.kind,
+    required this.stage,
     required this.onRetry,
     required this.onContinueManually,
   });
 
   final LlmFailureKind kind;
+
+  /// 인식 실패와 매칭 실패는 다른 자리에서 나고, 빠져나가는 길도 다르다.
+  final FailureStage stage;
+
   final VoidCallback onRetry;
 
-  /// "직접 입력으로 계속" — 빈 체크리스트 폴백. 인식이 죽어도 루프는 이어진다.
+  /// 인식 실패면 "직접 입력으로 계속"(빈 체크리스트 폴백), 매칭 실패면 재료로 돌아간다.
+  /// 어느 쪽이든 루프는 이어진다 — 막다른 화면이 없다(G1 #8).
   final VoidCallback onContinueManually;
 
-  String get _message => switch (kind) {
-    LlmFailureKind.empty => '재료를 하나도 찾지 못했어요.',
-    LlmFailureKind.lowQuality => '사진이 어두워서 잘 안 보여요.',
-    LlmFailureKind.timeout => '시간이 너무 오래 걸렸어요.',
-    LlmFailureKind.error => '인식에 실패했어요.',
+  String get _message => switch ((stage, kind)) {
+    (FailureStage.matching, LlmFailureKind.empty) => '지금 재료로 만들 만한 걸 찾지 못했어요.',
+    (FailureStage.matching, LlmFailureKind.timeout) => '메뉴를 고르는 데 시간이 너무 걸렸어요.',
+    (FailureStage.matching, _) => '메뉴를 고르지 못했어요.',
+    (_, LlmFailureKind.empty) => '재료를 하나도 찾지 못했어요.',
+    (_, LlmFailureKind.lowQuality) => '사진이 어두워서 잘 안 보여요.',
+    (_, LlmFailureKind.timeout) => '시간이 너무 오래 걸렸어요.',
+    (_, LlmFailureKind.error) => '인식에 실패했어요.',
   };
+
+  String get _fallbackLabel =>
+      stage == FailureStage.matching ? '재료 다시 보기' : '직접 입력으로 계속';
 
   @override
   Widget build(BuildContext context) {
@@ -44,7 +57,9 @@ class FailureCard extends StatelessWidget {
           ),
           const SizedBox(height: Space.sm),
           Text(
-            '다시 시도하거나, 재료를 직접 입력해서 계속할 수 있어요.',
+            stage == FailureStage.matching
+                ? '다시 시도하거나, 재료를 손보고 다시 올 수 있어요.'
+                : '다시 시도하거나, 재료를 직접 입력해서 계속할 수 있어요.',
             style: AppTypography.subhead.copyWith(color: AppColors.text),
           ),
           const SizedBox(height: Space.xl),
@@ -67,7 +82,7 @@ class FailureCard extends StatelessWidget {
                   child: OutlinedButton(
                     key: const Key('failure-manual'),
                     onPressed: onContinueManually,
-                    child: const Text('직접 입력으로 계속'),
+                    child: Text(_fallbackLabel),
                   ),
                 ),
               ),

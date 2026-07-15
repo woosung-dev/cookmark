@@ -1,7 +1,9 @@
 // 메인 「외길」 — 사진→재료 체크리스트→제안을 한 세로 페이지의 섹션으로 처리한다(ADR-0001, 화면 전환 0회).
 import 'package:flutter/material.dart';
 import 'package:image_picker/image_picker.dart';
+import 'package:url_launcher/url_launcher.dart';
 
+import '../domain/suggestion.dart';
 import '../theme/app_colors.dart';
 import '../theme/app_theme.dart';
 import 'main_controller.dart';
@@ -13,6 +15,7 @@ import 'widgets/failure_card.dart';
 import 'widgets/onboarding_card.dart';
 import 'widgets/recipe_book_chips.dart';
 import 'widgets/recognition_loading.dart';
+import 'widgets/suggestions_section.dart';
 import 'widgets/upload_zone.dart';
 import 'widgets/vague_chips.dart';
 
@@ -117,13 +120,39 @@ class _MainPageState extends State<MainPage> {
         startedAt: controller.recognizeStartedAt!,
         onCancel: controller.continueWithEmptyChecklist,
       ),
+      MainPhase.matching => MatchingLoading(
+        recipeCount: controller.matchingRecipeCount,
+      ),
       MainPhase.failed => FailureCard(
         kind: controller.failure!,
-        onRetry: controller.retryRecognition,
-        onContinueManually: controller.continueWithEmptyChecklist,
+        stage: controller.failureStage,
+        onRetry: controller.failureStage == FailureStage.matching
+            ? controller.requestSuggestions
+            : controller.retryRecognition,
+        onContinueManually: controller.failureStage == FailureStage.matching
+            ? controller.backToChecklist
+            : controller.continueWithEmptyChecklist,
       ),
       MainPhase.checklist => _checklistSection(),
+      MainPhase.suggestions => SuggestionsSection(
+        suggestions: controller.suggestions,
+        excludedCount: controller.excludedCount,
+        onOpenRecipe: _openRecipe,
+        onBack: controller.backToChecklist,
+      ),
     };
+  }
+
+  /// "레시피 보기" — 원본을 새 탭으로 연다. 레시피 실행(③)은 익숙한 유튜브에서 한다(스펙 #13).
+  Future<void> _openRecipe(Suggestion suggestion) async {
+    await widget.controller.openRecipe(suggestion);
+    final url = suggestion.recipeUrl;
+    if (url == null) return;
+    await launchUrl(
+      Uri.parse(url),
+      mode: LaunchMode.externalApplication,
+      webOnlyWindowName: '_blank',
+    );
   }
 
   /// 첫 방문이면 업로드 존 자리에 온보딩 카드가 온다 — 별도 화면이 아니다(G1 #8).
@@ -186,6 +215,17 @@ class _MainPageState extends State<MainPage> {
           '맞는 것만 남기고 아닌 건 체크를 풀어주세요.',
           style: AppTypography.footnote.copyWith(color: AppColors.muted),
           textAlign: TextAlign.center,
+        ),
+        const SizedBox(height: Space.lg),
+        SizedBox(
+          height: Space.touchMin + 4,
+          child: FilledButton(
+            key: const Key('request-suggestions'),
+            onPressed: controller.matchableIngredients.isEmpty
+                ? null
+                : controller.requestSuggestions,
+            child: const Text('오늘 뭐 해먹지'),
+          ),
         ),
       ],
     );

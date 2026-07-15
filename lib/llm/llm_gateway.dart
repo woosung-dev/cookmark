@@ -2,6 +2,8 @@
 import 'package:flutter/foundation.dart';
 
 import '../domain/ingredient.dart';
+import '../domain/recipe.dart';
+import '../domain/suggestion.dart';
 
 /// LLM 호출 1건의 사용량 메타데이터. 프록시가 회신하고 그대로 이벤트에 부착된다.
 ///
@@ -104,6 +106,17 @@ class ExtractionResult {
   final LlmUsage usage;
 }
 
+/// 매칭 1회의 결과.
+@immutable
+class MatchResult {
+  const MatchResult({required this.suggestions, required this.usage});
+
+  /// LLM이 준 그대로 — 부족 4개 이상 제외와 3개 상한은 클라이언트가 한다(스펙 #13).
+  final List<Suggestion> suggestions;
+
+  final LlmUsage usage;
+}
+
 /// 인식·추출·매칭을 감싸는 경계. 구현은 서버리스 프록시(운영)와 페이크(테스트) 둘뿐이다.
 abstract interface class LlmGateway {
   /// 냉장고 사진에서 재료 후보를 얻는다. [jpegBytes]는 이미 768px로 리사이즈된 것이어야 한다.
@@ -114,4 +127,12 @@ abstract interface class LlmGateway {
   /// 제목만 보낸다 — 본문·자막을 긁지 않는다(스펙 Out of scope, 수익화·법적 리서치 #5).
   /// "김치찌개"처럼 요리명이 또렷하면 잘 되고, "오늘의 저녁"처럼 모호하면 빈약해진다.
   Future<ExtractionResult> extractIngredients(String title);
+
+  /// 확정 재료와 저장 레시피를 맞춰 제안을 얻는다.
+  ///
+  /// 한 번의 호출로 끝낸다 — 한국어 동의어·정규화("대파"/"파")는 프롬프트 안에서 LLM이 처리한다.
+  Future<MatchResult> match({
+    required List<String> ingredients,
+    required List<Recipe> recipes,
+  });
 }

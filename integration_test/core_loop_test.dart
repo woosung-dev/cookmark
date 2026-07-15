@@ -9,6 +9,7 @@ import 'dart:ui' show CheckedState;
 import 'package:cookmark/app.dart';
 import 'package:cookmark/data/storage.dart';
 import 'package:cookmark/domain/app_event.dart';
+import 'package:cookmark/domain/suggestion.dart';
 import 'package:cookmark/llm/fake_llm_gateway.dart';
 import 'package:cookmark/llm/llm_gateway.dart';
 import 'package:cookmark/ui/main_controller.dart';
@@ -37,8 +38,9 @@ XFile fridgePhotoFile() {
 Future<void> waitForPhase(
   WidgetTester tester,
   MainController controller,
-  bool Function() predicate,
-) async {
+  bool Function() predicate, {
+  Duration limit = const Duration(seconds: 20),
+}) async {
   final completer = Completer<void>();
   void listener() {
     if (predicate() && !completer.isCompleted) completer.complete();
@@ -46,8 +48,17 @@ Future<void> waitForPhase(
 
   controller.addListener(listener);
   listener();
+
+  // 상한이 없으면 조건이 영영 안 맞을 때 테스트가 매달린다 — 읽을 수 있는 실패로 끝낸다.
+  const step = Duration(milliseconds: 50);
+  var waited = Duration.zero;
   while (!completer.isCompleted) {
-    await tester.pump(const Duration(milliseconds: 50));
+    if (waited > limit) {
+      controller.removeListener(listener);
+      fail('상태를 $limit 안에 못 봤다. 지금 phase=${controller.phase}');
+    }
+    await tester.pump(step);
+    waited += step;
   }
   controller.removeListener(listener);
 }
@@ -87,6 +98,26 @@ void main() {
       await tester.pumpAndSettle();
     }
     return controller;
+  }
+
+  /// 체크리스트가 길면 "오늘 뭐 해먹지"가 뷰포트 밖에 있다 — 스크롤해 올린 뒤 탭한다.
+  Future<void> tapRequestSuggestions(
+    WidgetTester tester,
+    MainController controller,
+  ) async {
+    final button = find.byKey(const Key('request-suggestions'));
+    await tester.ensureVisible(button);
+    await tester.pumpAndSettle();
+    await tester.tap(button);
+    await tester.pump();
+    await waitForPhase(
+      tester,
+      controller,
+      () =>
+          controller.phase == MainPhase.suggestions ||
+          controller.phase == MainPhase.failed,
+    );
+    await tester.pumpAndSettle();
   }
 
   /// 사진을 올리고 인식이 끝날 때까지 기다린다.
@@ -399,6 +430,109 @@ void main() {
       (e) => e.type == AppEventType.recipeBookChanged,
     );
     expect(events.map((e) => e.data['action']), ['add', 'remove']);
+  });
+
+  testWidgets('확정 재료로 "오늘 할 3개"가 뜬다 — 라벨·출처·부족 칩 (#18)', (tester) async {
+    final book = RecipeBookController(FakeLlmGateway(), storage);
+    await book.add(url: 'https://youtu.be/abc', title: '김치찌개');
+
+    final controller = await pumpApp(tester);
+    await uploadAndWait(tester, controller);
+
+    await tapRequestSuggestions(tester, controller);
+
+    expect(find.text('오늘 할 3개'), findsOneWidget);
+
+    // 저장 제안이 먼저 온다 — 출처 배지와 "레시피 보기"가 붙는다.
+    expect(find.byKey(const Key('suggestion-card-김치찌개')), findsOneWidget);
+    expect(find.text('내 레시피 북'), findsOneWidget);
+    expect(find.byKey(const Key('open-recipe-김치찌개')), findsOneWidget);
+
+    // 라벨 3종이 색+아이콘으로 뜬다.
+    expect(find.byKey(const Key('label-badge-ready')), findsOneWidget);
+    expect(find.byKey(const Key('label-badge-buyOne')), findsOneWidget);
+    expect(find.byKey(const Key('label-badge-maybe')), findsOneWidget);
+
+    // AI 제안엔 "레시피 보기"가 없다 — 열 원본이 없다.
+    expect(find.text('AI 제안'), findsWidgets);
+    expect(find.byKey(const Key('open-recipe-애호박볶음')), findsNothing);
+
+    // 부족 재료 칩 — 대체 해소는 화살표로.
+    expect(find.byKey(const Key('missing-chip-식용유')), findsOneWidget);
+    expect(find.text('우유→두유'), findsOneWidget);
+
+    final events = (await Storage.open()).readEvents();
+    final done = events.lastWhere((e) => e.type == AppEventType.matchingDone);
+    expect(done.data['costUsd'], 0.00044);
+    expect(done.data['shownCount'], 3);
+
+    final shown = events.lastWhere(
+      (e) => e.type == AppEventType.suggestionsShown,
+    );
+    expect(shown.data['sources'], ['saved', 'generated', 'generated']);
+  });
+
+  testWidgets('매칭 중에는 "레시피 북 N개와 맞춰보는 중"이 뜬다 (#18)', (tester) async {
+    final book = RecipeBookController(FakeLlmGateway(), storage);
+    await book.add(url: 'https://youtu.be/abc', title: '김치찌개');
+
+    final controller = await pumpApp(
+      tester,
+      gateway: FakeLlmGateway(latency: const Duration(seconds: 1)),
+    );
+    await uploadAndWait(tester, controller);
+
+    final button = find.byKey(const Key('request-suggestions'));
+    await tester.ensureVisible(button);
+    await tester.pumpAndSettle();
+    await tester.tap(button);
+    await tester.pump();
+    await waitForPhase(
+      tester,
+      controller,
+      () => controller.phase == MainPhase.matching,
+    );
+    await tester.pump();
+
+    expect(find.text('레시피 북 1개와 맞춰보는 중'), findsOneWidget);
+
+    await waitForPhase(
+      tester,
+      controller,
+      () => controller.phase == MainPhase.suggestions,
+    );
+    await tester.pumpAndSettle();
+  });
+
+  testWidgets('부족 4개 이상 메뉴는 제외되고 투명성 줄에 집계된다 (#18)', (tester) async {
+    final gateway = FakeLlmGateway()
+      ..suggestions = [
+        const Suggestion(
+          menu: '두부조림',
+          source: SuggestionSource.generated,
+          missing: [],
+          reason: '두부가 있어요.',
+        ),
+        const Suggestion(
+          menu: '불가능한메뉴',
+          source: SuggestionSource.generated,
+          missing: [
+            MissingIngredient(name: 'a'),
+            MissingIngredient(name: 'b'),
+            MissingIngredient(name: 'c'),
+            MissingIngredient(name: 'd'),
+          ],
+          reason: '',
+        ),
+      ];
+
+    final controller = await pumpApp(tester, gateway: gateway);
+    await uploadAndWait(tester, controller);
+    await tapRequestSuggestions(tester, controller);
+
+    expect(find.byKey(const Key('suggestion-card-불가능한메뉴')), findsNothing);
+    expect(find.byKey(const Key('transparency-line')), findsOneWidget);
+    expect(find.text('부족 4개 이상이라 제외한 메뉴 1개'), findsOneWidget);
   });
 
   testWidgets('레시피 북은 헤더 링크 하나로만 들어간다 — 탭 바가 없다', (tester) async {
