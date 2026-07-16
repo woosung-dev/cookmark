@@ -2,6 +2,7 @@
 import 'package:cookmark/app.dart';
 import 'package:cookmark/data/storage.dart';
 import 'package:cookmark/domain/app_event.dart';
+import 'package:cookmark/domain/recipe.dart';
 import 'package:cookmark/domain/session_state.dart';
 import 'package:cookmark/llm/fake_llm_gateway.dart';
 import 'package:cookmark/ui/backup_controller.dart';
@@ -91,6 +92,58 @@ void main() {
     await tester.tap(find.byKey(const Key('recipe-nudge-chip')));
     await tester.pumpAndSettle();
     expect(find.text('아직 저장한 레시피가 없어요.'), findsOneWidget);
+  });
+
+  // #34 — 추출 실패가 화면에 뜨는지. 컨트롤러 단위 테스트로는 이 결함을 못 잡는다:
+  // 실패는 `failure` 게터에 담겨 있었지만 UI가 그걸 읽지 않아 사용자가 몰랐다.
+  group('추출 실패 인라인 (#34)', () {
+    testWidgets('재료 0개 레시피에 "다시 시도"가 그 자리에 뜬다', (tester) async {
+      await storage.writeRecipes(const [
+        Recipe(url: 'https://youtu.be/abc', title: '김치찌개', ingredients: []),
+      ]);
+      await pumpApp(tester);
+      await tester.tap(find.byKey(const Key('recipe-book-link')));
+      await tester.pumpAndSettle();
+
+      expect(find.text('재료를 알아내지 못했어요 — 매칭에는 제목만 쓰입니다.'), findsOneWidget);
+      expect(
+        find.byKey(const Key('recipe-retry-https://youtu.be/abc')),
+        findsOneWidget,
+      );
+    });
+
+    testWidgets('"다시 시도"를 누르면 재료가 채워진다', (tester) async {
+      await storage.writeRecipes(const [
+        Recipe(url: 'https://youtu.be/abc', title: '김치찌개', ingredients: []),
+      ]);
+      await pumpApp(tester);
+      await tester.tap(find.byKey(const Key('recipe-book-link')));
+      await tester.pumpAndSettle();
+
+      await tester.tap(
+        find.byKey(const Key('recipe-retry-https://youtu.be/abc')),
+      );
+      await tester.pumpAndSettle();
+
+      // 페이크의 '김치찌개' 추출 fixture가 채워진다.
+      expect(find.textContaining('김치'), findsWidgets);
+      expect(find.text('재료를 알아내지 못했어요 — 매칭에는 제목만 쓰입니다.'), findsNothing);
+      expect(storage.readRecipes().single.ingredients, isNotEmpty);
+    });
+
+    testWidgets('재료가 있는 레시피엔 "다시 시도"가 없다', (tester) async {
+      await storage.writeRecipes(const [
+        Recipe(url: 'https://youtu.be/abc', title: '김치찌개', ingredients: ['김치']),
+      ]);
+      await pumpApp(tester);
+      await tester.tap(find.byKey(const Key('recipe-book-link')));
+      await tester.pumpAndSettle();
+
+      expect(
+        find.byKey(const Key('recipe-retry-https://youtu.be/abc')),
+        findsNothing,
+      );
+    });
   });
 
   group('실행취소 토스트', () {

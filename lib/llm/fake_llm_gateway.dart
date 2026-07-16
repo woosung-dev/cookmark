@@ -46,7 +46,10 @@ class FakeLlmGateway implements LlmGateway {
   final Duration latency;
 
   /// null이 아니면 모든 호출이 이 실패로 끝난다.
-  final LlmFailure? failure;
+  ///
+  /// 가변인 이유 — "실패했다가 다시 시도하면 성공한다"를 한 테스트 안에서 재현하려면
+  /// 도중에 꺼야 한다(#34 재추출). 프록시가 살아나는 상황이 그것이다.
+  LlmFailure? failure;
 
   /// 매칭만 실패시킨다 — 인식은 성공해야 매칭 단계까지 갈 수 있다.
   final LlmFailure? matchFailure;

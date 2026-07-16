@@ -75,7 +75,12 @@ enum EditKind {
 }
 
 /// 레시피 북에 무슨 일이 일어났는지.
-enum RecipeBookAction { add, remove }
+///
+/// [reextract]는 추출이 실패해 재료 0개로 저장된 레시피에 사용자가 "다시 시도"를 눌러
+/// **추출만** 다시 돌린 것이다 — 레시피 북의 구성원은 바뀌지 않는다. [add]로 뭉뚱그리지
+/// 않는 이유: 분석이 URL 하나를 두 번 담은 것으로 세면 질문 2의 분모가 부푼다.
+/// 카탈로그(12종)는 그대로다 — 이건 이벤트 ⑩의 데이터 필드 값이지 새 이벤트 유형이 아니다.
+enum RecipeBookAction { add, remove, reextract }
 
 /// 백업이 나간 건지 들어온 건지 — 카탈로그 ⑪은 하나이고 방향으로 갈린다.
 enum BackupDirection { export, import }

@@ -125,6 +125,58 @@ void main() {
       expect(error.data['stage'], 'extraction');
       expect(error.data['kind'], 'error');
     });
+
+    test('다시 시도하면 재료가 채워진다 — 0개 레시피는 영원히 매칭 안 된다 (#34)', () async {
+      final gateway = FakeLlmGateway(
+        failure: const LlmFailure(LlmFailureKind.error),
+      );
+      final book = bookWith(gateway);
+      await book.add(url: 'https://youtu.be/abc', title: '김치찌개');
+      expect(book.recipes.single.ingredients, isEmpty, reason: '전제');
+
+      // 프록시가 살아났다 — 사용자가 그 자리에서 다시 시도한다(US 22 인라인 원칙).
+      gateway.failure = null;
+      await book.retryExtraction('https://youtu.be/abc');
+
+      expect(book.recipes.single.ingredients, isNotEmpty);
+      expect(book.recipes.single.title, '김치찌개', reason: '제목·URL은 그대로');
+      expect(book.recipes, hasLength(1), reason: '레시피가 복제되면 안 된다');
+    });
+
+    test('다시 시도의 원가도 원장에 남는다 — LLM을 불렀으니까 (US 28)', () async {
+      final gateway = FakeLlmGateway(
+        failure: const LlmFailure(LlmFailureKind.error),
+      );
+      final book = bookWith(gateway);
+      await book.add(url: 'https://youtu.be/abc', title: '김치찌개');
+      gateway.failure = null;
+      await book.retryExtraction('https://youtu.be/abc');
+
+      // add는 실패해서 usage가 없다. 재추출이 실제 호출이므로 원가는 여기 붙는다.
+      final reextract = bookEvents().last;
+      expect(reextract.data['action'], 'reextract');
+      expect(reextract.data['ingredientCount'], isNonZero);
+      expect(reextract.data['costUsd'], isNotNull);
+    });
+
+    test('다시 시도가 또 실패하면 재료는 비어 있고 오류가 남는다', () async {
+      final gateway = FakeLlmGateway(
+        failure: const LlmFailure(LlmFailureKind.error),
+      );
+      final book = bookWith(gateway);
+      await book.add(url: 'https://youtu.be/abc', title: '김치찌개');
+      await book.retryExtraction('https://youtu.be/abc');
+
+      expect(book.recipes.single.ingredients, isEmpty);
+      expect(
+        storage
+            .readEvents()
+            .where((e) => e.type == AppEventType.errorShown)
+            .length,
+        2,
+        reason: 'add 1건 + 재시도 1건',
+      );
+    });
   });
 
   group('삭제', () {

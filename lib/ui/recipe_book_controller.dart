@@ -77,6 +77,53 @@ class RecipeBookController extends ChangeNotifier {
     notifyListeners();
   }
 
+  /// 추출만 다시 돌린다 — 레시피는 이미 저장돼 있고 재료만 비어 있다(#34, 스펙 US 22 인라인 원칙).
+  ///
+  /// 재료 0개 레시피는 영원히 매칭되지 않으므로, 사용자가 그 자리에서 복구할 길이 있어야 한다.
+  /// 없으면 질문 2가 망가진 레시피 북 위에서 측정된다.
+  Future<void> retryExtraction(String url) async {
+    final target = recipes.where((r) => r.url == url).firstOrNull;
+    if (target == null || _retryingUrl != null) return;
+
+    _retryingUrl = url;
+    _failure = null;
+    notifyListeners();
+
+    try {
+      final result = await _gateway.extractIngredients(target.title);
+      await _storage.writeRecipes([
+        for (final r in recipes)
+          if (r.url == url)
+            Recipe(url: r.url, title: r.title, ingredients: result.ingredients)
+          else
+            r,
+      ]);
+      // 재추출도 LLM 호출이다 — 원가는 호출마다 남긴다(스펙 US 28).
+      await _storage.appendEvent(
+        AppEvent.recipeBookChanged(
+          at: _now(),
+          action: RecipeBookAction.reextract,
+          url: url,
+          title: target.title,
+          ingredientCount: result.ingredients.length,
+          usage: result.usage,
+        ),
+      );
+    } on LlmFailure catch (e) {
+      _failure = e.kind;
+      await _storage.appendEvent(
+        AppEvent.errorShown(at: _now(), kind: e.kind.name, stage: 'extraction'),
+      );
+    }
+
+    _retryingUrl = null;
+    notifyListeners();
+  }
+
+  /// 지금 재추출 중인 레시피의 URL — 타일이 자기 자리에서만 진행 표시를 한다.
+  String? get retryingUrl => _retryingUrl;
+  String? _retryingUrl;
+
   Future<void> remove(String url) async {
     final target = recipes.where((r) => r.url == url).firstOrNull;
     if (target == null) return;

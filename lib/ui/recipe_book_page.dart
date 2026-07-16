@@ -54,6 +54,8 @@ class RecipeBookPage extends StatelessWidget {
                       child: _RecipeTile(
                         recipe: recipe,
                         onRemove: () => controller.remove(recipe.url),
+                        retrying: controller.retryingUrl == recipe.url,
+                        onRetry: () => controller.retryExtraction(recipe.url),
                       ),
                     ),
                 // 백업은 이 화면 최하단이다(G1 #8).
@@ -69,10 +71,19 @@ class RecipeBookPage extends StatelessWidget {
 }
 
 class _RecipeTile extends StatelessWidget {
-  const _RecipeTile({required this.recipe, required this.onRemove});
+  const _RecipeTile({
+    required this.recipe,
+    required this.onRemove,
+    required this.retrying,
+    required this.onRetry,
+  });
 
   final Recipe recipe;
   final VoidCallback onRemove;
+
+  /// 이 레시피의 재추출이 도는 중인가 — 진행 표시는 자기 자리에서만 뜬다.
+  final bool retrying;
+  final VoidCallback onRetry;
 
   @override
   Widget build(BuildContext context) {
@@ -101,14 +112,35 @@ class _RecipeTile extends StatelessWidget {
                   ),
                 ),
                 const SizedBox(height: Space.sm),
-                if (recipe.ingredients.isEmpty)
+                // 재료 0개면 이 레시피는 영원히 매칭되지 않는다 — 그 자리에서 복구할 길을 준다
+                // (US 22 인라인 원칙, 에러 화면 없음).
+                if (recipe.ingredients.isEmpty) ...[
                   Text(
                     '재료를 알아내지 못했어요 — 매칭에는 제목만 쓰입니다.',
                     style: AppTypography.footnote.copyWith(
                       color: AppColors.danger,
                     ),
-                  )
-                else
+                  ),
+                  const SizedBox(height: Space.xs),
+                  if (retrying)
+                    Text(
+                      '재료를 다시 찾는 중이에요…',
+                      style: AppTypography.footnote.copyWith(
+                        color: AppColors.muted,
+                      ),
+                    )
+                  else
+                    TextButton(
+                      key: Key('recipe-retry-${recipe.url}'),
+                      onPressed: onRetry,
+                      style: TextButton.styleFrom(
+                        padding: EdgeInsets.zero,
+                        minimumSize: const Size(0, 0),
+                        tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                      ),
+                      child: const Text('다시 시도'),
+                    ),
+                ] else
                   Text(
                     recipe.ingredients.join(' · '),
                     style: AppTypography.footnote.copyWith(
