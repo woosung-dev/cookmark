@@ -22,22 +22,25 @@
 - [x] **`lib/` 무변경 상태로** E2E 30 + 유닛 272 그린 = 순수 이관 증명
 - 주의 — 여기서 `lib/`를 건드리면 안전망 변경과 대상 변경이 섞여 증명이 깨진다.
 
-## Step 3 — build_runner + Riverpod + riverpod_lint + Failure (한 덩어리, 쪼갤 수 없음)
-- [ ] pubspec — flutter_riverpod·riverpod_annotation·go_router 제외(면제)·dev: build_runner·riverpod_generator·riverpod_lint 추가
-- [ ] `analysis_options.yaml` — `plugins: riverpod_lint` 배선(mobile.md §0.1)
-- [ ] `lib/domain/failure.dart` — `sealed class Failure` + 변종 (3버킷 면제라 `core/error/` 안 만듦·layer-first 유지, context-notes 참조). `LlmFailure` → `Failure` 변환은 gateway 경계 1곳
-- [ ] `MainController`·`RecipeBookController`·`BackupController` → `@riverpod` Notifier + `AsyncValue`
-- [ ] `main.dart` 수동 DI → `ProviderScope`. `ProviderScope(retry:)` 1회 정의(mobile.md §4)
-- [ ] 위젯 → `ConsumerWidget`, `build()`서 `ref.watch`·핸들러서 `ref.read`
-- [ ] 유닛 154건 → `ProviderContainer`+`overrideWith`로 이관 재작성
-- [ ] 인루프 4단계 + E2E 30 그린
+## Step 3 — freezed (모델 먼저 · 순서 뒤집음 2026-07-16 · Step 4 선행)
+- [x] deps — flutter_riverpod·riverpod_annotation·freezed·json_serializable·dev: build_runner·riverpod_generator·riverpod_lint (커밋 4ade2c7)
+- [x] `analysis_options.yaml` — riverpod_lint 플러그인 (mobile.md §0.1)
+- [x] `Recipe` (커밋 f5c6194) — json_serializable 기본 와이어 일치, 라운드트립 보존(#41)
+- [x] `suggestion` (MissingIngredient·Suggestion·SuggestionSelection) — 조건부 필드 `@JsonKey(includeIfNull:false)`로 와이어 보존
+- [ ] `ingredient` — 계산 팩토리(.recognized/.added) named factory로, 조건부 toJson (와이어 바뀜·D0 전 안전·테스트 조정)
+- [ ] `session_state` (Ingredient 의존 — Ingredient 후)
+- [ ] `app_event` — 명명 생성자 12개 → sealed union (가장 복잡, export JSON 와이어 계약)
+- [ ] `backup`(AppEvent 의존) · `debug_metrics`(직렬화·copyWith 없어 실익 낮음·선택)
+- [ ] 상태 클래스(MainState 등 — Riverpod Notifier용)
+- 단순 모델은 json_serializable 기본이 현재 와이어와 일치. 각 전환 후 인루프 4단계.
 
-## Step 4 — freezed 점진 (모델별, Recipe는 라운드트립 호환 필수)
-- [ ] pubspec — freezed·json_serializable·freezed_annotation·json_annotation 추가
-- [ ] 모델 1개당 1커밋 순서 — 의존 적은 것부터(`ingredient`→`suggestion`→`recipe`→…)
-- [ ] **`Recipe` — 기존 toJson/fromJson과 바이트 호환**. D0 초기화 때 `previewMerge`로 복원돼야(#41). 골든 파일 라운드트립 테스트 추가
-- [ ] `AppEvent` — 명명 생성자 12개 → sealed union. toJson 형태 변경은 D0 전이라 안전(이벤트는 초기화됨). 단 마지막에
-- [ ] 각 모델 전환 후 인루프 4단계
+## Step 4 — Riverpod + riverpod_lint + Failure (freezed 상태 클래스 위에)
+- [ ] `lib/domain/failure.dart` — `sealed class Failure` + 변종 (3버킷 면제·layer-first, context-notes). `LlmFailure` → `Failure` 변환 gateway 1곳
+- [ ] `MainController`·`RecipeBookController`·`BackupController` → `@riverpod` Notifier + `AsyncValue` (상태는 freezed MainState)
+- [ ] `main.dart` 수동 DI → `ProviderScope` + `ProviderScope(retry:)` (mobile.md §4)
+- [ ] 위젯 → `ConsumerWidget`, build서 `ref.watch`·핸들러서 `ref.read`
+- [ ] 유닛 154 → `ProviderContainer`+`overrideWith` 재작성
+- [ ] 인루프 4단계 + E2E 30 그린
 
 ## Step 5 — 재배포 + 관통 재확인 (7/21까지)
 - [ ] `flutter build web` 산출물 생성
