@@ -2,6 +2,18 @@
 
 작업 중 내린 결정과 근거. 세션이 끊겨도 여기서 재개한다. 최신이 위.
 
+## ⚠️ 방향 정정 (2026-07-16 후반) — wayfinder #48 정본 발견
+
+이 노트의 **"파일럿 전 착수"·"freezed 무료 창"·"3버킷 면제"는 철회됐다.** 세션 중 wayfinder 지도 #48(GitHub #49·#50·#55 CLOSED = 정본)이 이미 #38 실행 결정을 완주했음을 발견 — 세션 초입 조사에서 그 트랙을 놓쳤다.
+
+**정본 결정 (wayfinder #48, GitHub):**
+- **#51** — #38 실행은 **제품 계속 판정 후**(파일럿 ~8/5 후). 날짜가 아니라 판정이 연다.
+- **#49** — 단일 스토리지·LLM seam → `shared/storage/`·`shared/llm/`.
+- **#55** — 5개 도메인 모델(Recipe·Ingredient·AppEvent·SessionState·Suggestion) → `lib/shared/models/`.
+- **#50** — go_router 면제 + 트립와이어(`test/architecture/navigation_test.dart`). 예외는 coding-standards.md에 기록(새 ADR 안 만듦).
+
+**결과:** ADR-0007 철회(삭제) — wayfinder가 ADR 안 만들기로 했고 내용(3버킷 면제·파일럿 전)이 정본과 충돌. 이 브랜치 코드(안전망 디커플링·freezed 2모델)는 파일럿 후 재개 시 재활용하되 모델은 `shared/models/`로 이동. main 머지 금지(파일럿 배포 안전). **아래 논의는 방향이 철회됐으니 이력으로만 읽을 것.**
+
 ## Step 2 — 안전망 디커플링 (2026-07-16)
 
 E2E(`core_loop_test.dart`)를 `controller.phase`/`addListener`(ChangeNotifier) 의존에서 UI 관측(`waitForVisible` + `find`)으로 이관. `lib/` 런타임 코드 무변경(pubspec dev_dependencies만 추가). Riverpod 전환(Step 3)의 절대 선행.

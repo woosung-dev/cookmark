@@ -1,6 +1,8 @@
 # #38 리팩터 체크리스트 — mobile.md 정합 (Riverpod·Failure·freezed)
 
-브랜치 `worktree-fix-ach` · 시한 **7/21**(D0=7/22 유지) · 근거 ADR-0007 · baseline 272 그린(2026-07-16).
+브랜치 `worktree-fix-ach` · baseline 272 그린(2026-07-16).
+
+> ⚠️ **정정 (2026-07-16 후반)** — wayfinder #48 정본 발견. 실행 = **파일럿 판정 후**(#51), 배치 = **3버킷 도입**(모델→`shared/models/` #55, seam→`shared/` #49), go_router 면제(#50). 아래 "D0 전"·"3버킷 면제" 표기 철회. 코드 커밋은 파일럿 후 재개용(**main 머지 금지**). 정본 = GitHub #48 트랙. ADR-0007 철회(삭제). freezed 모델은 파일럿 후 `shared/models/`로 이동.
 
 각 단계는 mobile.md §0.1 인루프 4단계로 검증 — ① `dart run build_runner build --delete-conflicting-outputs`(codegen 있을 때만) → ② `dart format --output=none --set-exit-if-changed lib/ test/` → ③ `flutter analyze --fatal-infos` → ④ `flutter test`. E2E(`integration_test`)는 chromedriver 필요라 게이트에서.
 

@@ -21,10 +21,11 @@ freezed·Dio가 없다. `mobile.md`가 요구하는 3버킷(`features/`·`shared
 `mobile.md`는 **존재하지 않았다** — 안 지킨 게 아니라 없었다. 문서 모순(아래 §상태·경계)은
 실재하지만 **이 미정합의 원인이 아니다**. 둘은 별개다.
 
-**알면서 남긴 부채였고, 이제 갚는다.** 정합 리팩터를 **D0(2026-07-22) 전에 착수한다**
-(2026-07-16 파운더 결정 · ADR-0007). 실사용 측정은 D0부터이고(ADR-0004) 지금 앱 데이터는
-D0 전 전부 초기화되므로(#41), 지금이 freezed 와이어 계약을 바꿀 유일한 무료 창이다. 범위 —
-Riverpod·Failure·freezed 3축 정합, Dio·go_router·3버킷은 면제([#38](https://github.com/woosung-dev/cookmark/issues/38)).
+**알면서 남긴 부채다.** 정합 리팩터는 **제품 계속 판정 후**(파일럿 ~8/5 후)에 실행한다 —
+실행 트리거는 날짜가 아니라 판정이다(wayfinder [#51](https://github.com/woosung-dev/cookmark/issues/51)).
+실행 전 잠글 결정은 wayfinder 지도 [#48](https://github.com/woosung-dev/cookmark/issues/48)이 완주했다 —
+단일 스토리지·LLM seam과 5개 도메인 모델 → `shared/`(#49·#55), go_router 면제(#50), 3버킷 도입.
+범위·배치의 정본은 GitHub #48 트랙이다.
 E2E는 30건뿐이고 순수 안전망도 아니다 — 그중 24건이 `MainController`(ChangeNotifier)
 인스턴스를 직접 쥐어(`controller.addListener`·`controller.phase`) Riverpod 전환은
 안전망을 같은 PR에서 재작성한다. 그래서 리팩터 착수 순서는 **안전망 디커플링이 먼저**다
