@@ -5,6 +5,7 @@ import '../../llm/llm_gateway.dart';
 import '../main_controller.dart';
 import '../../theme/app_colors.dart';
 import '../../theme/app_theme.dart';
+import 'pressable_scale.dart';
 
 class FailureCard extends StatelessWidget {
   const FailureCard({
@@ -63,30 +64,25 @@ class FailureCard extends StatelessWidget {
             style: AppTypography.subhead.copyWith(color: AppColors.text),
           ),
           const SizedBox(height: Space.xl),
-          Row(
-            children: [
-              Expanded(
-                child: SizedBox(
-                  height: Space.touchMin,
-                  child: FilledButton(
-                    key: const Key('failure-retry'),
-                    onPressed: onRetry,
-                    child: const Text('다시 시도'),
-                  ),
-                ),
+          // 세로 스택 — 폴백 문구가 길어 반칸에서 두 줄로 접히지 않게(전폭 각각).
+          SizedBox(
+            height: Space.touchMin,
+            child: PressableScale(
+              child: FilledButton(
+                key: const Key('failure-retry'),
+                onPressed: onRetry,
+                child: const Text('다시 시도'),
               ),
-              const SizedBox(width: Space.md),
-              Expanded(
-                child: SizedBox(
-                  height: Space.touchMin,
-                  child: OutlinedButton(
-                    key: const Key('failure-manual'),
-                    onPressed: onContinueManually,
-                    child: Text(_fallbackLabel),
-                  ),
-                ),
-              ),
-            ],
+            ),
+          ),
+          const SizedBox(height: Space.sm),
+          SizedBox(
+            height: Space.touchMin,
+            child: OutlinedButton(
+              key: const Key('failure-manual'),
+              onPressed: onContinueManually,
+              child: Text(_fallbackLabel),
+            ),
           ),
         ],
       ),
