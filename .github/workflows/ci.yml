@@ -1,0 +1,53 @@
+# 냉파 CI — 리팩터(#38)가 흔들 154+E2E 안전망을 수동 게이트에서 자동으로 옮긴다.
+name: CI
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+
+# 같은 브랜치의 이전 런은 취소 — 러너 분 절약.
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  # 로컬 개발 = Flutter 3.44.4 stable (Dart 3.12.x). CI도 동일 핀 — 버전 드리프트 차단.
+  FLUTTER_VERSION: "3.44.4"
+
+jobs:
+  # 인루프 게이트 (mobile.md §0.1) — 빠르고 결정적. 현재 codegen 없음이라 build_runner 단계 불필요.
+  gate:
+    name: format · analyze · test
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: subosito/flutter-action@v2
+        with:
+          flutter-version: ${{ env.FLUTTER_VERSION }}
+          channel: stable
+          cache: true
+      - run: flutter pub get
+      - name: format (미적용 = 실패)
+        run: dart format --output=none --set-exit-if-changed lib/ test/ integration_test/ test_driver/
+      - name: analyze --fatal-infos (info까지 실패)
+        run: flutter analyze --fatal-infos
+      - name: unit + widget test
+        run: flutter test
+
+  # E2E 게이트 (검증의 정본, mobile.md §0.1 gate) — chromedriver + Web 타깃. 정본 러너 scripts/e2e.sh 재사용.
+  e2e:
+    name: integration_test (Web)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: subosito/flutter-action@v2
+        with:
+          flutter-version: ${{ env.FLUTTER_VERSION }}
+          channel: stable
+          cache: true
+      # ubuntu-latest에 Chrome 선탑재 → 버전 맞는 chromedriver만 PATH에 올린다.
+      - uses: nanasess/setup-chromedriver@v2
+      - run: flutter pub get
+      - name: E2E (scripts/e2e.sh — headless web-server)
+        run: bash scripts/e2e.sh
