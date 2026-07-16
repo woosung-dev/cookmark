@@ -25,8 +25,8 @@ class SuggestionsSection extends StatelessWidget {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
-        Padding(
-          padding: const EdgeInsets.only(left: Space.xs, bottom: Space.md),
+        const Padding(
+          padding: EdgeInsets.only(left: Space.xs, bottom: Space.md),
           child: Text('오늘 할 3개', style: AppTypography.largeTitle),
         ),
         if (suggestions.isEmpty)

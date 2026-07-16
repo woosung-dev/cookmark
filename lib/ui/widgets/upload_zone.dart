@@ -28,7 +28,7 @@ class UploadZone extends StatelessWidget {
             color: AppColors.brand,
           ),
           const SizedBox(height: Space.lg),
-          Text('냉장고 사진 한 장이면 돼요', style: AppTypography.headline),
+          const Text('냉장고 사진 한 장이면 돼요', style: AppTypography.headline),
           const SizedBox(height: Space.sm),
           Text(
             '안에 뭐가 있는지 찍어서 올려주세요.',

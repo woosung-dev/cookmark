@@ -293,8 +293,8 @@ class _MainPageState extends State<MainPage> {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
-        Padding(
-          padding: const EdgeInsets.only(left: Space.xs, bottom: Space.md),
+        const Padding(
+          padding: EdgeInsets.only(left: Space.xs, bottom: Space.md),
           child: Text('냉장고에 있는 것', style: AppTypography.largeTitle),
         ),
         // 첫 인식 결과 위 1회성 — 인식 오류를 실패로 느끼지 않게 한다(B 이식, G1 #8).

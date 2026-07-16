@@ -38,7 +38,7 @@ void main() {
     });
 
     test('앞선 버전이 만든 백업도 가져올 수 있다 — 모르는 이벤트가 있어도', () {
-      final restored = BackupData.fromJson({
+      final restored = BackupData.fromJson(const {
         'version': 1,
         'exportedAt': '2026-07-15T00:00:00.000Z',
         'recipes': <Object?>[],
@@ -75,15 +75,15 @@ void main() {
     });
 
     test('겹치면 지금 것을 남긴다 — 내 기기의 기록이 더 정확하다', () {
-      final mine = Recipe(
+      const mine = Recipe(
         url: 'https://youtu.be/a',
         title: '내 제목',
-        ingredients: const ['내 재료'],
+        ingredients: ['내 재료'],
       );
-      final theirs = Recipe(
+      const theirs = Recipe(
         url: 'https://youtu.be/a',
         title: '남의 제목',
-        ingredients: const ['남의 재료'],
+        ingredients: ['남의 재료'],
       );
       final merge = previewMerge(
         current: backupOf(recipes: [mine]),

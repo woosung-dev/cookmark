@@ -38,7 +38,7 @@ class OnboardingCard extends StatelessWidget {
         children: [
           Row(
             children: [
-              Expanded(
+              const Expanded(
                 child: Text(
                   '믿고 보는 레시피 3개만 저장해두세요',
                   style: AppTypography.headline,

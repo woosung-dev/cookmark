@@ -58,7 +58,7 @@ class _BackupSectionState extends State<BackupSection> {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
-          Text('백업', style: AppTypography.headline),
+          const Text('백업', style: AppTypography.headline),
           const SizedBox(height: Space.sm),
           Text(
             '일요일 저녁에 한 번, 기록을 복사해서 보내주세요.',
@@ -75,7 +75,7 @@ class _BackupSectionState extends State<BackupSection> {
           ),
 
           const SizedBox(height: Space.xxl),
-          Text('가져오기', style: AppTypography.headline),
+          const Text('가져오기', style: AppTypography.headline),
           const SizedBox(height: Space.sm),
           TextField(
             key: const Key('backup-import-field'),
