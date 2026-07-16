@@ -128,6 +128,14 @@ void main() {
         ['두유'],
         reason: '사용자가 직접 넣은 재료가 인식 결과에 덮이면 안 된다',
       );
+      // 그래도 원가 원장에는 남는다 — 버려진 호출도 Gemini까지 가서 토큰을 썼다(스펙 US 28).
+      expect(
+        storage.readEvents().where(
+          (e) => e.type == AppEventType.recognitionDone,
+        ),
+        hasLength(1),
+        reason: '취소된 호출의 토큰·원가가 원장에서 사라지면 실제 지출을 과소계상한다',
+      );
     });
 
     test('취소 후 늦게 온 인식 실패가 에러 카드를 띄우지 않는다', () async {
