@@ -21,7 +21,7 @@ colors:
   on-action:        "#FFFFFF"
   # 뉴트럴 (쿨 클린 — 크림 금지)
   bg:               "#F5F5F7"   # 앱 배경(iOS grouped)
-  surface:          "#FFFFFF"   # 카드·시트·리스트
+  surface:          "#FFFFFF"   # 카드·리스트·섹션
   text:             "#1D1D1F"   # 본문·제목(순수 검정 아님)
   muted:            "#6E6E73"   # 보조·캡션
   hairline:         "#D2D2D7"   # 1px 구분선
@@ -42,17 +42,22 @@ typography:
   subhead:     { size: 15, weight: 400 }
   footnote:    { size: 13, weight: 400 }
   caption:     { size: 12, weight: 500 }
-  numeric:     { family: mono, feature: tabular }          # 매칭률·23/30·수량
+  numeric:     { family: mono, feature: tabular }          # 0/3·부족 재료 수·측정 푸터 수치
 
 spacing:  { base: 4, scale: [4,8,12,16,20,24,32], screen-pad: 16, row-min: 52, touch-min: 44 }
 rounded:  { chip: 8, control: 12, card: 16, pill: 9999, photo: 12 }
 elevation:
-  flat:   "none"                              # 네비바·탭바·리스트·카드 기본
-  photo:  "0 6px 20px rgba(29,29,31,.10)"     # 음식 사진이 표면 위에 놓일 때만(단일-그림자 철학)
-  sheet:  "0 -8px 30px rgba(29,29,31,.12)"    # 바텀시트
+  flat:   "none"                              # 네비바·리스트·카드 기본
+  photo:  "0 6px 20px rgba(29,29,31,.10)"     # 업로드한 냉장고 사진이 표면 위에 놓일 때만(단일-그림자 철학)
 ---
 
 # 냉파(cookmark) 디자인 시스템
+
+## 0. 이 문서의 관할
+이 문서는 **디자인 언어**(색·타이포·스페이싱·라운드·깊이·컴포넌트 표현)의 정본이다.
+**화면 구조·플로우·UX 상세는 관할이 아니다** — 그쪽 정본은 G1 티켓 #8 resolution과 ADR-0001이고,
+충돌 시 그쪽이 이긴다(스펙 #13 정본 위계). 화면이 몇 개인지, 무엇으로 이동하는지, 카드에 어떤 항목이
+들어가는지를 이 문서에서 새로 정하지 말 것 — 여기서는 그것들이 **어떻게 보이는지**만 규정한다.
 
 ## 1. Overview — 브랜드 personality & 감정 톤
 냉파는 "냉장고를 파먹자(있는 재료로 해먹기·낭비 방지)"에서 출발해 "**요리·먹는 즐거움을 더한다**"로 확장된 제품이다. 그래서 톤은 **따뜻함 · 집밥 · 신뢰 · 그리고 즐거움(delight)**.
@@ -67,28 +72,27 @@ elevation:
 
 ## 3. Typography
 - **본문·UI·제목**: SF Pro / Pretendard / IBM Plex Sans KR. 제목은 타이트 네거티브 트래킹(-0.3~-0.4px), 위계는 크기·굵기·색으로.
-- **수치**: IBM Plex Mono(tabular) — 매칭률·23/30·수량·타이머.
+- **수치**: IBM Plex Mono(tabular) — 0/3 카운터·부족 재료 수·측정 푸터의 지연·토큰·원가.
 - **금지**: 세리프 디스플레이(taste-skill "세리프 디폴트=AI tell", Apple 관용과 상충). Inter를 디폴트로 쓰지 않음.
 
 ## 4. Layout & Spacing
 - iOS **그룹/인셋 리스트**. 4/8 스페이싱 스케일(4·8·12·16·20·24·32). 화면 좌우 여백 16.
-- 리스트 행 ≥52px, 터치 타깃 ≥44px. 상단 네비바 + 하단 **탭바**(메인 ↔ 레시피 북, 아이콘+라벨, 활성 하이라이트).
+- 리스트 행 ≥52px, 터치 타깃 ≥44px. 상단 네비바 + **헤더 링크 1개**(→ 레시피 북). 탭 바 없음 — 화면은 2개뿐이고 코어 루프는 화면 전환 0회다(ADR-0001).
 - 앱 밀도 유지 — 마케팅용 큰 여백·40px+ 히어로 타이포 금지. 좌우 스크롤 금지.
 
 ## 5. Elevation & Depth (Apple 단일-그림자 철학)
 - 깊이는 **표면 색 대비(bg↔surface) + 1px hairline**으로. 카드·버튼·바는 기본 flat(그림자 없음).
-- 그림자는 **음식 사진**이 표면 위에 놓일 때만 `0 6px 20px rgba(29,29,31,.10)`. 바텀시트만 `0 -8px 30px rgba(29,29,31,.12)`.
+- 그림자는 **업로드한 냉장고 사진**이 표면 위에 놓일 때만 `0 6px 20px rgba(29,29,31,.10)`. 그 외 전부 flat.
 
 ## 6. Shapes (라운드)
-칩/배지 8 · 버튼/입력/셀 12 · 카드/시트/미디어 16 · 제안 라벨·토글 pill · 음식 썸네일 12. **한 라운드 스케일로 잠금**.
+칩/배지 8 · 버튼/입력/셀 12 · 카드/미디어 16 · 제안 라벨·토글 pill · 냉장고 사진 12. **한 라운드 스케일로 잠금**.
 
 ## 7. Components
 - **버튼(primary)**: action 배경 + 흰 텍스트, radius 12, 그림자 없음, active `scale(0.98)`. 화면당 1개. **secondary**: surface + 1px hairline.
-- **탭바**: frosted(backdrop-blur) 하단, 아이콘+라벨, 활성 action 하이라이트.
-- **리스트 셀**: 좌 썸네일(photo)/아이콘 + 제목(headline)+보조(footnote muted) + 우 chevron/액션. 1px hairline.
-- **제안 카드**: surface, radius 16, photo 그림자. 음식 사진(4:3/1:1) + 요리명 + 출처 뱃지 + 제안 라벨(색+아이콘) + 부족 재료 칩 + 매칭률(mono) + "영상 보기"(secondary)·"이거 했어요"(primary).
-- **confidence 체크박스**: 정사각. high=채워진 체크(action) / medium=체크+"확인" 앰버 배지 / low=빈 체크 dim.
-- **제안 상세**: 바텀시트(16:9 히어로 + 있는/부족 재료 + 제휴 담기 + 영상 이어보기 + 이거 했어요).
+- **헤더**: 상단 네비바 + 우측 레시피 북 링크 1개(텍스트/아이콘). 하단 바 없음.
+- **리스트 셀**: 좌 아이콘 + 제목(headline)+보조(footnote muted) + 우 chevron/액션. 1px hairline.
+- **제안 카드**: surface, radius 16, flat. 제안 라벨(색+아이콘) + 출처 뱃지(북마크=내 레시피 북 / 반짝=AI 제안) + 메뉴명 대형 + 부족 재료 칩 ≤3(대체 해소는 "우유→두유" 화살표+흐림) + 근거 1줄 + "레시피 보기"(secondary, 저장 카드만)·"이거 했어요"(primary, 56px).
+- **confidence 체크박스**: 정사각. high=채워진 체크(action) / medium=체크+물음표 점 / low=빈 체크 dim("확실하지 않아요" 흐린 그룹).
 - **로딩**: 레이아웃 모양의 스켈레톤 시머(원형 스피너 지양). **빈/에러 상태**도 구성.
 - 아이콘: 일관된 SVG 세트, 스트로크 통일. 이모지 아이콘 금지.
 
@@ -96,7 +100,7 @@ elevation:
 **Do**
 - 온기·식욕·즐거움은 **홍시/곶감 액센트**에만. 뉴트럴은 쿨 클린 유지.
 - 액션 버튼은 `#C0391B`(AA), vivid `#E8552D`는 필/그래픽 전용(흰 텍스트 금지).
-- 제안 라벨은 색+아이콘 이중 신호. 수치는 mono tabular. 실제 음식 사진 사용.
+- 제안 라벨은 색+아이콘 이중 신호. 수치는 mono tabular.
 - 터치 ≥44px, 본문 ≥16px, 대비 WCAG AA.
 
 **Don't**
