@@ -4,5 +4,6 @@
   "installCommand": null,
   "framework": null,
   "outputDirectory": "build/web",
+  "git": { "deploymentEnabled": { "main": false } },
   "rewrites": [{ "source": "/((?!api/).*)", "destination": "/index.html" }]
 }
