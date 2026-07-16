@@ -3,7 +3,6 @@
 //        --driver=test_driver/integration_test.dart --target=integration_test/core_loop_test.dart -d chrome)
 //
 // CheckedState는 dart:ui에 있고 flutter/semantics.dart가 export하지 않는다.
-import 'dart:async';
 import 'dart:convert';
 import 'dart:ui' show CheckedState;
 
@@ -23,6 +22,8 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:image/image.dart' as img;
 import 'package:image_picker/image_picker.dart';
 import 'package:integration_test/integration_test.dart';
+import 'package:plugin_platform_interface/plugin_platform_interface.dart';
+import 'package:url_launcher_platform_interface/url_launcher_platform_interface.dart';
 
 /// 실제 JPEG — 리사이즈 경로(dart:ui 디코더)를 브라우저에서 진짜로 태운다.
 XFile fridgePhotoFile() {
@@ -35,36 +36,38 @@ XFile fridgePhotoFile() {
   return XFile.fromData(img.encodeJpg(image), mimeType: 'image/jpeg');
 }
 
-/// 상태가 [predicate]를 만족할 때까지 기다린다.
+/// 화면이 [ready]를 만족할 때까지 기다린다.
 ///
 /// 로딩 중에는 스캔 시머가 계속 돌아 pumpAndSettle이 영영 정착하지 않는다 — 그래서 프레임이 아니라
-/// 상태를 기다린다. 임의의 sleep으로 찍으면 느린 기계에서 깨진다.
-Future<void> waitForPhase(
+/// 화면 상태를 기다린다. 상태를 컨트롤러가 아니라 화면으로 관측하는 이유는 이 파일이 리팩터의
+/// 안전망이기 때문이다 — 상태 관리 구현(ChangeNotifier·Riverpod)이 바뀌어도 이 대기는 안 바뀐다(#38).
+Future<void> waitForVisible(
   WidgetTester tester,
-  MainController controller,
-  bool Function() predicate, {
+  bool Function() ready, {
   Duration limit = const Duration(seconds: 20),
 }) async {
-  final completer = Completer<void>();
-  void listener() {
-    if (predicate() && !completer.isCompleted) completer.complete();
-  }
-
-  controller.addListener(listener);
-  listener();
-
   // 상한이 없으면 조건이 영영 안 맞을 때 테스트가 매달린다 — 읽을 수 있는 실패로 끝낸다.
   const step = Duration(milliseconds: 50);
   var waited = Duration.zero;
-  while (!completer.isCompleted) {
+  while (!ready()) {
     if (waited > limit) {
-      controller.removeListener(listener);
-      fail('상태를 $limit 안에 못 봤다. 지금 phase=${controller.phase}');
+      fail('화면 상태를 $limit 안에 못 봤다.');
     }
     await tester.pump(step);
     waited += step;
   }
-  controller.removeListener(listener);
+}
+
+/// 위젯이 트리에 있으면 true — 대기 predicate를 짧게 쓴다.
+bool _visible(Finder finder) => finder.evaluate().isNotEmpty;
+
+/// "레시피 보기"의 launchUrl을 삼키는 페이크 — 실제 새 탭 열기는 headless 브라우저에서
+/// 응답 없이 매달린다(#38 안전망 이관 중 발견). 위젯은 이 seam만 안다.
+class _FakeUrlLauncher extends Fake
+    with MockPlatformInterfaceMixin
+    implements UrlLauncherPlatform {
+  @override
+  Future<bool> launchUrl(String url, LaunchOptions options) async => true;
 }
 
 /// 이벤트가 스토리지에 실제로 도착할 때까지 기다린다.
@@ -96,12 +99,14 @@ void main() {
   late Storage storage;
 
   setUp(() async {
+    // "레시피 보기"의 launchUrl을 삼킨다 — headless에서 실제 새 탭 열기는 매달린다.
+    UrlLauncherPlatform.instance = _FakeUrlLauncher();
     storage = await Storage.open();
     // 브라우저 localStorage는 테스트 사이에 살아남는다 — 비우고 시작해야 결정적이다.
     await storage.clear();
   });
 
-  Future<MainController> pumpApp(
+  Future<void> pumpApp(
     WidgetTester tester, {
     FakeLlmGateway? gateway,
     bool skipOnboarding = true,
@@ -132,7 +137,6 @@ void main() {
       await tester.tap(skip);
       await tester.pumpAndSettle();
     }
-    return controller;
   }
 
   /// 스크롤 안의 위젯은 뷰포트 밖이면 탭이 안 먹는다 — 올린 뒤 누른다.
@@ -144,49 +148,41 @@ void main() {
   }
 
   /// 체크리스트가 길면 "오늘 뭐 해먹지"가 뷰포트 밖에 있다 — 스크롤해 올린 뒤 탭한다.
-  Future<void> tapRequestSuggestions(
-    WidgetTester tester,
-    MainController controller,
-  ) async {
+  Future<void> tapRequestSuggestions(WidgetTester tester) async {
     final button = find.byKey(const Key('request-suggestions'));
     await tester.ensureVisible(button);
     await tester.pumpAndSettle();
     await tester.tap(button);
     await tester.pump();
-    await waitForPhase(
+    await waitForVisible(
       tester,
-      controller,
       () =>
-          controller.phase == MainPhase.suggestions ||
-          controller.phase == MainPhase.failed,
+          _visible(find.text('오늘 할 3개')) ||
+          _visible(find.byKey(const Key('failure-card'))),
     );
     await tester.pumpAndSettle();
   }
 
   /// 사진을 올리고 인식이 끝날 때까지 기다린다.
-  Future<void> uploadAndWait(
-    WidgetTester tester,
-    MainController controller,
-  ) async {
+  Future<void> uploadAndWait(WidgetTester tester) async {
     await tester.tap(find.byKey(const Key('upload-photo')));
     await tester.pump();
-    await waitForPhase(
+    await waitForVisible(
       tester,
-      controller,
       () =>
-          controller.phase == MainPhase.checklist ||
-          controller.phase == MainPhase.failed,
+          _visible(find.text('냉장고에 있는 것')) ||
+          _visible(find.byKey(const Key('failure-card'))),
     );
     await tester.pumpAndSettle();
   }
 
   testWidgets('사진 1장을 올리면 재료 체크리스트가 뜬다 — 코어 루프 관통', (tester) async {
-    final controller = await pumpApp(tester);
+    await pumpApp(tester);
 
     // 외길의 출발점.
     expect(find.byKey(const Key('upload-photo')), findsOneWidget);
 
-    await uploadAndWait(tester, controller);
+    await uploadAndWait(tester);
 
     // 화면 전환 없이 같은 페이지가 체크리스트로 바뀐다(ADR-0001).
     expect(find.text('냉장고에 있는 것'), findsOneWidget);
@@ -197,8 +193,8 @@ void main() {
 
   testWidgets('confidence 3단 초기 상태가 화면에 나타난다 (ADR-0003)', (tester) async {
     final semantics = tester.ensureSemantics();
-    final controller = await pumpApp(tester);
-    await uploadAndWait(tester, controller);
+    await pumpApp(tester);
+    await uploadAndWait(tester);
 
     CheckedState checkedOf(String name) =>
         tester.getSemantics(find.text(name)).flagsCollection.isChecked;
@@ -215,8 +211,8 @@ void main() {
   });
 
   testWidgets('업로드·인식 완료가 이벤트로 남고 스토리지를 다시 열어도 유지된다', (tester) async {
-    final controller = await pumpApp(tester);
-    await uploadAndWait(tester, controller);
+    await pumpApp(tester);
+    await uploadAndWait(tester);
 
     // 브라우저 스토리지에서 새로 읽는다 — 메모리 캐시가 아니라 진짜 영속층을 통과했는지.
     final reopened = await Storage.open();
@@ -241,17 +237,16 @@ void main() {
   });
 
   testWidgets('인식 중에는 사진 위 스캔 시머와 체크박스 스켈레톤이 뜬다', (tester) async {
-    final controller = await pumpApp(
+    await pumpApp(
       tester,
       gateway: FakeLlmGateway(latency: const Duration(seconds: 2)),
     );
 
     await tester.tap(find.byKey(const Key('upload-photo')));
     await tester.pump();
-    await waitForPhase(
+    await waitForVisible(
       tester,
-      controller,
-      () => controller.phase == MainPhase.recognizing,
+      () => _visible(find.byKey(const Key('loading-message'))),
     );
     await tester.pump(const Duration(milliseconds: 300));
 
@@ -262,21 +257,17 @@ void main() {
     // 10초 전에는 취소가 없다.
     expect(find.byKey(const Key('loading-cancel')), findsNothing);
 
-    await waitForPhase(
-      tester,
-      controller,
-      () => controller.phase == MainPhase.checklist,
-    );
+    await waitForVisible(tester, () => _visible(find.text('냉장고에 있는 것')));
     await tester.pumpAndSettle();
     expect(find.text('냉장고에 있는 것'), findsOneWidget);
   });
 
   testWidgets('인식이 실패하면 인라인 카드로 해소된다 — 에러 화면이 없다', (tester) async {
-    final controller = await pumpApp(
+    await pumpApp(
       tester,
       gateway: FakeLlmGateway(failure: const LlmFailure(LlmFailureKind.empty)),
     );
-    await uploadAndWait(tester, controller);
+    await uploadAndWait(tester);
 
     expect(find.byKey(const Key('failure-card')), findsOneWidget);
     expect(find.text('재료를 하나도 찾지 못했어요.'), findsOneWidget);
@@ -298,8 +289,8 @@ void main() {
   });
 
   testWidgets('행 전체를 탭해 재료를 토글하고, 그게 유형·경로와 함께 남는다 (#15)', (tester) async {
-    final controller = await pumpApp(tester);
-    await uploadAndWait(tester, controller);
+    await pumpApp(tester);
+    await uploadAndWait(tester);
 
     // 체크박스가 아니라 행을 탭한다.
     await tapVisible(tester, find.byKey(const Key('ingredient-row-대파')));
@@ -315,8 +306,8 @@ void main() {
   });
 
   testWidgets('하단 추가 바로 빠진 재료를 넣는다 — 경로 typing (#15)', (tester) async {
-    final controller = await pumpApp(tester);
-    await uploadAndWait(tester, controller);
+    await pumpApp(tester);
+    await uploadAndWait(tester);
 
     await tester.enterText(find.byKey(const Key('add-ingredient-field')), '두유');
     await tapVisible(tester, find.byKey(const Key('add-ingredient-submit')));
@@ -330,8 +321,8 @@ void main() {
   });
 
   testWidgets('뭉뚱그림 항목이 점선 칩으로 분리되고 인라인 치환된다 (#16)', (tester) async {
-    final controller = await pumpApp(tester);
-    await uploadAndWait(tester, controller);
+    await pumpApp(tester);
+    await uploadAndWait(tester);
 
     // "반찬통"은 본문이 아니라 "이건 뭐였나요?" 칩으로 나온다.
     expect(find.text('이건 뭐였나요?'), findsOneWidget);
@@ -356,8 +347,8 @@ void main() {
   });
 
   testWidgets('뭉뚱그림 오탐은 탭 1회로 일반 항목이 된다 (#16)', (tester) async {
-    final controller = await pumpApp(tester);
-    await uploadAndWait(tester, controller);
+    await pumpApp(tester);
+    await uploadAndWait(tester);
 
     await tapVisible(tester, find.byKey(const Key('vague-dismiss-반찬통')));
 
@@ -373,8 +364,8 @@ void main() {
   });
 
   testWidgets('수정 카운터는 화면 어디에도 없다 (ADR-0004 단일맹검)', (tester) async {
-    final controller = await pumpApp(tester);
-    await uploadAndWait(tester, controller);
+    await pumpApp(tester);
+    await uploadAndWait(tester);
 
     await tester.tap(find.byKey(const Key('ingredient-row-대파')));
     await tester.pumpAndSettle();
@@ -432,17 +423,17 @@ void main() {
   });
 
   testWidgets('넛지 칩은 체크리스트·제안 단계에서도 상시로 남는다 (#17)', (tester) async {
-    final controller = await pumpApp(tester);
+    await pumpApp(tester);
 
     // 건너뛰면 업로드 존 + 넛지.
     expect(find.byKey(const Key('recipe-nudge-chip')), findsOneWidget);
 
     // 체크리스트로 넘어가도 남는다 — "3개 미만 상시".
-    await uploadAndWait(tester, controller);
+    await uploadAndWait(tester);
     expect(find.byKey(const Key('recipe-nudge-chip')), findsOneWidget);
 
     // 제안 단계에서도.
-    await tapRequestSuggestions(tester, controller);
+    await tapRequestSuggestions(tester);
     expect(find.byKey(const Key('recipe-nudge-chip')), findsOneWidget);
   });
 
@@ -451,8 +442,8 @@ void main() {
     final book = RecipeBookController(FakeLlmGateway(), storage);
     await book.add(url: 'https://youtu.be/abc', title: '김치찌개');
 
-    final controller = await pumpApp(tester);
-    await uploadAndWait(tester, controller);
+    await pumpApp(tester);
+    await uploadAndWait(tester);
 
     // 김치찌개 재료 중 사진에서 안 나온 것들.
     expect(find.text('레시피 북에 있는 재료예요 — 혹시 있나요?'), findsOneWidget);
@@ -508,10 +499,10 @@ void main() {
     final book = RecipeBookController(FakeLlmGateway(), storage);
     await book.add(url: 'https://youtu.be/abc', title: '김치찌개');
 
-    final controller = await pumpApp(tester);
-    await uploadAndWait(tester, controller);
+    await pumpApp(tester);
+    await uploadAndWait(tester);
 
-    await tapRequestSuggestions(tester, controller);
+    await tapRequestSuggestions(tester);
 
     expect(find.text('오늘 할 3개'), findsOneWidget);
 
@@ -548,31 +539,23 @@ void main() {
     final book = RecipeBookController(FakeLlmGateway(), storage);
     await book.add(url: 'https://youtu.be/abc', title: '김치찌개');
 
-    final controller = await pumpApp(
+    await pumpApp(
       tester,
       gateway: FakeLlmGateway(latency: const Duration(seconds: 1)),
     );
-    await uploadAndWait(tester, controller);
+    await uploadAndWait(tester);
 
     final button = find.byKey(const Key('request-suggestions'));
     await tester.ensureVisible(button);
     await tester.pumpAndSettle();
     await tester.tap(button);
     await tester.pump();
-    await waitForPhase(
-      tester,
-      controller,
-      () => controller.phase == MainPhase.matching,
-    );
+    await waitForVisible(tester, () => _visible(find.textContaining('맞춰보는 중')));
     await tester.pump();
 
     expect(find.text('레시피 북 1개와 맞춰보는 중'), findsOneWidget);
 
-    await waitForPhase(
-      tester,
-      controller,
-      () => controller.phase == MainPhase.suggestions,
-    );
+    await waitForVisible(tester, () => _visible(find.text('오늘 할 3개')));
     await tester.pumpAndSettle();
   });
 
@@ -598,9 +581,9 @@ void main() {
         ),
       ];
 
-    final controller = await pumpApp(tester, gateway: gateway);
-    await uploadAndWait(tester, controller);
-    await tapRequestSuggestions(tester, controller);
+    await pumpApp(tester, gateway: gateway);
+    await uploadAndWait(tester);
+    await tapRequestSuggestions(tester);
 
     expect(find.byKey(const Key('suggestion-card-불가능한메뉴')), findsNothing);
     expect(find.byKey(const Key('transparency-line')), findsOneWidget);
@@ -608,12 +591,12 @@ void main() {
   });
 
   testWidgets('"이거 했어요" → 5초 실행취소, 둘 다 로그에 남는다 (#19)', (tester) async {
-    final controller = await pumpApp(tester);
-    await uploadAndWait(tester, controller);
-    await tapRequestSuggestions(tester, controller);
+    await pumpApp(tester);
+    await uploadAndWait(tester);
+    await tapRequestSuggestions(tester);
 
-    final menu = controller.suggestions.first.menu;
-    final cooked = find.byKey(Key('cooked-$menu'));
+    const menu = '애호박볶음'; // 레시피 북이 비어 첫 제안은 generated 애호박볶음(fake)
+    final cooked = find.byKey(const Key('cooked-$menu'));
     await tester.ensureVisible(cooked);
     await tester.pumpAndSettle();
     await tester.tap(cooked);
@@ -639,9 +622,9 @@ void main() {
   });
 
   testWidgets('재료를 재수정하면 "다시 제안" 배너가 뜨고 stale이 붙는다 (#19)', (tester) async {
-    final controller = await pumpApp(tester);
-    await uploadAndWait(tester, controller);
-    await tapRequestSuggestions(tester, controller);
+    await pumpApp(tester);
+    await uploadAndWait(tester);
+    await tapRequestSuggestions(tester);
 
     // 제안이 뜨면 체크리스트는 요약 한 줄로 접힌다(G1 #8).
     expect(find.byKey(const Key('checklist-summary')), findsOneWidget);
@@ -654,8 +637,8 @@ void main() {
     expect(find.byKey(const Key('rematch-banner')), findsOneWidget);
 
     // 낡은 카드에서 누른 "이거 했어요"에는 stale이 붙는다.
-    final menu = controller.suggestions.first.menu;
-    final cooked = find.byKey(Key('cooked-$menu'));
+    const menu = '애호박볶음'; // 레시피 북이 비어 첫 제안은 generated 애호박볶음(fake)
+    final cooked = find.byKey(const Key('cooked-$menu'));
     await tester.ensureVisible(cooked);
     await tester.pumpAndSettle();
     await tester.tap(cooked);
@@ -668,9 +651,9 @@ void main() {
   });
 
   testWidgets('"다시 제안"이 이벤트로 남고 새 제안은 stale이 아니다 (#19)', (tester) async {
-    final controller = await pumpApp(tester);
-    await uploadAndWait(tester, controller);
-    await tapRequestSuggestions(tester, controller);
+    await pumpApp(tester);
+    await uploadAndWait(tester);
+    await tapRequestSuggestions(tester);
 
     await tapVisible(tester, find.byKey(const Key('checklist-summary')));
     await tapVisible(tester, find.byKey(const Key('ingredient-row-대파')));
@@ -680,11 +663,7 @@ void main() {
     await tester.pumpAndSettle();
     await tester.tap(rematch);
     await tester.pump();
-    await waitForPhase(
-      tester,
-      controller,
-      () => controller.phase == MainPhase.suggestions,
-    );
+    await waitForVisible(tester, () => _visible(find.text('오늘 할 3개')));
     await tester.pumpAndSettle();
 
     expect(find.byKey(const Key('rematch-banner')), findsNothing);
@@ -840,27 +819,27 @@ void main() {
   });
 
   testWidgets('첫 인식 결과 위에 기대 세팅 문구가 1회만 뜬다 (#21)', (tester) async {
-    final controller = await pumpApp(tester);
-    await uploadAndWait(tester, controller);
+    await pumpApp(tester);
+    await uploadAndWait(tester);
 
     expect(find.byKey(const Key('expectation-note')), findsOneWidget);
     expect(find.text('인식이 틀려도 괜찮아요 — 체크로 다듬는 게 정상이에요.'), findsOneWidget);
 
     // 다시 열면(새 컨트롤러) 이제 안 뜬다 — 브라우저 스토리지에 남는 1회성이다.
-    final next = await pumpApp(tester);
-    await uploadAndWait(tester, next);
+    await pumpApp(tester);
+    await uploadAndWait(tester);
     expect(find.byKey(const Key('expectation-note')), findsNothing);
   });
 
   testWidgets('매칭 실패도 인라인 카드로 해소된다 — 에러 화면이 없다 (#21)', (tester) async {
-    final controller = await pumpApp(
+    await pumpApp(
       tester,
       gateway: FakeLlmGateway(
         matchFailure: const LlmFailure(LlmFailureKind.timeout),
       ),
     );
-    await uploadAndWait(tester, controller);
-    await tapRequestSuggestions(tester, controller);
+    await uploadAndWait(tester);
+    await tapRequestSuggestions(tester);
 
     expect(find.byKey(const Key('failure-card')), findsOneWidget);
     expect(find.text('메뉴를 고르는 데 시간이 너무 걸렸어요.'), findsOneWidget);
@@ -888,8 +867,8 @@ void main() {
   });
 
   testWidgets('측정 푸터는 debug 파라미터가 있을 때만 존재한다 (#22, ADR-0004)', (tester) async {
-    final controller = await pumpApp(tester, debug: true);
-    await uploadAndWait(tester, controller);
+    await pumpApp(tester, debug: true);
+    await uploadAndWait(tester);
 
     final footer = find.byKey(const Key('debug-footer'));
     await tester.ensureVisible(footer);
@@ -902,8 +881,8 @@ void main() {
   });
 
   testWidgets('debug가 없으면 측정 푸터가 트리에 없다 — 숨김이 아니라 부재다 (#22)', (tester) async {
-    final controller = await pumpApp(tester);
-    await uploadAndWait(tester, controller);
+    await pumpApp(tester);
+    await uploadAndWait(tester);
 
     expect(find.byKey(const Key('debug-footer')), findsNothing);
     // 배우자 화면 어디에도 계측이 새지 않는다(ADR-0004).
@@ -919,34 +898,30 @@ void main() {
     await book.add(url: 'https://youtu.be/abc', title: '김치찌개');
 
     // ⑫ 오류 표시 — 첫 시도를 실패시켜 오류를 만든 뒤 직접 입력으로 잇는다.
-    var controller = await pumpApp(
+    await pumpApp(
       tester,
       gateway: FakeLlmGateway(failure: const LlmFailure(LlmFailureKind.empty)),
     );
-    await uploadAndWait(tester, controller);
+    await uploadAndWait(tester);
     await tester.tap(find.byKey(const Key('failure-manual')));
     await tester.pumpAndSettle();
 
     // ① 사진 업로드 ② 인식 완료
-    controller = await pumpApp(tester);
-    await uploadAndWait(tester, controller);
+    await pumpApp(tester);
+    await uploadAndWait(tester);
 
     // ③ 체크리스트 조작
     await tapVisible(tester, find.byKey(const Key('ingredient-row-대파')));
 
     // ④ 매칭 완료 ⑤ 제안 노출
-    await tapRequestSuggestions(tester, controller);
+    await tapRequestSuggestions(tester);
 
-    // ⑥ 제안 선택 — 저장 카드만 "레시피 보기"를 가진다.
-    await controller.openRecipe(
-      controller.suggestions.firstWhere(
-        (s) => s.source == SuggestionSource.saved,
-      ),
-    );
+    // ⑥ 제안 선택 — 저장 카드만 "레시피 보기"를 가진다(김치찌개, 레시피 북 유래).
+    await tapVisible(tester, find.byKey(const Key('open-recipe-김치찌개')));
 
     // ⑦ 이거 했어요 ⑧ 실행취소
-    final menu = controller.suggestions.first.menu;
-    await tapVisible(tester, find.byKey(Key('cooked-$menu')));
+    const menu = '김치찌개'; // 레시피 북에 김치찌개가 있어 첫 제안은 saved 김치찌개(fake)
+    await tapVisible(tester, find.byKey(const Key('cooked-$menu')));
     await tester.tap(find.text('실행취소'));
     await tester.pumpAndSettle();
 
@@ -955,11 +930,7 @@ void main() {
     await tapVisible(tester, find.byKey(const Key('ingredient-row-계란')));
     await tapVisible(tester, find.byKey(const Key('rematch-button')));
     await tester.pump();
-    await waitForPhase(
-      tester,
-      controller,
-      () => controller.phase == MainPhase.suggestions,
-    );
+    await waitForVisible(tester, () => _visible(find.text('오늘 할 3개')));
     await tester.pumpAndSettle();
 
     // ⑪ 백업 export/import

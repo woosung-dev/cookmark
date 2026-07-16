@@ -33,6 +33,10 @@ dev_dependencies:
     sdk: flutter
   # 테스트에서 로컬 영속을 인메모리로 갈아끼운다 (InMemorySharedPreferencesAsync)
   shared_preferences_platform_interface: ^2.4.2
+  # "레시피 보기" launchUrl을 페이크로 갈아끼운다 — headless에서 새 탭 열기 hang 방지 (#38)
+  # url_launcher가 constraint를 쥐고 있으니 any로 그 버전에 묶는다.
+  url_launcher_platform_interface: any
+  plugin_platform_interface: any
   flutter_lints: ^6.0.0
 
 flutter:
