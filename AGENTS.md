@@ -10,10 +10,10 @@ This file provides guidance to AGENTS Code (AGENTS.ai/code) when working with co
 
 ## 리포 상태 (중요)
 
-**이 리포는 "문서가 계약"인 스펙 주도 리포다.** `main` 브랜치에는 코드가 없고 문서(CONTEXT.md·DESIGN.md·ADR·research·agents 가이드)만 있다. 실제 Flutter 코드는 피처 브랜치에 있다.
+**이 리포는 "문서가 계약"인 스펙 주도 리포다.** 2026-07-16부터 `main`에 Flutter 코드가 있다 — A/B 실험의 두 arm 중 **PR #26(`feat/13-mvp-context7`)이 랜딩됐다**(스펙 #13의 9티켓 전량).
 
-- `feat/14-core-tracer` — 코어 루프 구현이 가장 완성된 브랜치(아래 구조·명령은 이 브랜치 기준).
-- `feat/13-mvp-context7`, `feat/flutter-scaffold-theme` — 스캐폴드·초기 실험.
+- 닫힌 arm — `feat/14-core-tracer`(PR #25, #14 범위만·유닛 48) · `feat/flutter-scaffold-theme`(PR #24). **되살리지 말 것.** #25에는 프록시 오형식 200 응답 시 로딩이 영구 고착되는 결함이 있다.
+- 파일럿 배포 URL(정본) — `https://cookmark-woosungdevs-projects.vercel.app`. `cookmark.vercel.app`은 **남의 프로젝트다**(Vercel 전역 네임스페이스).
 
 작업 전 항상 관련 상류 문서를 먼저 읽어라 — 스펙 본문만 읽으면 토큰 필드·단어·섹션 구조를 놓친다. 산출물이 ADR과 충돌하면 조용히 덮지 말고 명시적으로 표면화한다(`docs/agents/domain.md`).
 
@@ -23,16 +23,20 @@ This file provides guidance to AGENTS Code (AGENTS.ai/code) when working with co
 - **로그인·서버 DB 없음** — 클라이언트 로컬 영속(브라우저 스토리지, `shared_preferences`)이 유일한 영속층.
 - **LLM 프록시(재료 인식·재료 추출·매칭) 3개는 앱과 분리된 서버리스 함수** — API 키는 절대 클라이언트에 두지 않는다.
 
+**Flutter 아키텍처의 정본은 `.claude/rules/mobile.md`다** — 상태 관리·폴더 구조(3버킷)·라우팅·모델(freezed)·네트워크(Dio)·에러 전파. 공개를 원하지 않아 gitignore 될 뿐 **규범이다**. 리포에 없다고 무시하지 말 것. ⚠️ **현재 코드는 여기에 미정합이며 알면서 남긴 부채다** — 파일럿 후 리팩터 트랙([#38](https://github.com/woosung-dev/cookmark/issues/38)). **새 코드는 `mobile.md`를 따른다. 기존 코드 관용구는 선례가 아니라 부채다.**
+
 경계 규칙(위반 금지):
 
-- **상태 관리**: Flutter 내장(setState/ValueNotifier/ChangeNotifier) + Riverpod까지 허용. Bloc·GetX 등 다른 상태 라이브러리 금지.
-- **로컬 영속은 단일 스토리지 모듈로만** — `lib/data/app_storage.dart`. 위젯에서 스토리지 API 직접 호출 금지. 이벤트 로그·레시피 북 읽기/쓰기 경계를 한 곳에 모은다.
+- **상태 관리**: `mobile.md` §0·§3(Riverpod v3 + `riverpod_generator`). 예전 이 줄이 "ChangeNotifier까지 허용"이라 적어 `mobile.md`와 충돌했다 — `mobile.md`가 이긴다(2026-07-16 화해).
+- **로컬 영속은 단일 스토리지 모듈로만** — `lib/data/storage.dart`. 위젯에서 스토리지 API 직접 호출 금지. 이벤트 로그·레시피 북 읽기/쓰기 경계를 한 곳에 모은다. **ADR이 정본이라 `mobile.md`의 feature별 `repositories/`보다 우선한다** — P2 킬 기준의 원본 데이터가 여기서 나오므로 흩어지면 안 된다.
 - **LLM 호출은 단일 경계 모듈로만** — 재료 인식·재료 추출·매칭을 **모두** 감싸는 인터페이스 하나가 앱의 유일한 seam이다. **프록시 엔드포인트는 3개지만 seam은 1개**다(테스트가 결정적 페이크를 꽂는 지점이 1곳이라는 뜻 — 두 수를 같이 세지 않는다). 구현은 서버리스 프록시이거나 테스트용 페이크이며, 위젯은 인터페이스 타입만 안다. 모델명은 환경설정 주입. 구체 파일·클래스명은 arm 랜딩 시 확정한다 — 계약이 규정하는 건 경계의 존재와 seam 수이지 식별자가 아니다(지도 #27 티켓 #30).
 - **화면은 메인 · 레시피 북 2개로 고정**(ADR-0001). 코어 루프는 화면 전환 없이 단일 세로 페이지의 섹션 확장/접힘으로 처리 — 앱 내비게이션 마찰을 0에 수렴시켜 측정 순도를 지킨다. 대가로 단일 페이지 상태 기계(온보딩/로딩/체크리스트/제안/에러/세션 복원)의 상태 수가 늘어난다.
 - **뭉뚱그림 항목**("반찬통"·"소스류" 등)은 구체 재료로 치환하기 전 매칭에 전송하지 않는다(ADR-0002).
 - **수동 수정**(체크리스트 조작 각 1회)은 P2 킬 기준의 계측 단위 — 로그에 유형·경로를 남긴다(ADR-0003).
 
-`lib/` 레이아웃(feat/14-core-tracer): `data/`(영속) · `llm/`(인식 경계) · `models/`(ingredient·app_event) · `screens/`(main_controller·main_page·loading_stage) · `widgets/`(upload_zone·recognition_section·checklist_section·failure_card) · `theme/`(app_colors·app_theme).
+**현재** `lib/` 레이아웃(랜딩된 arm — `mobile.md` 3버킷이 **아니다**, 위 부채 참조): `data/`(영속 — `storage.dart`) · `domain/`(ingredient·app_event·suggestion·recipe·backup·vague_heuristic 등) · `llm/`(LLM seam — `llm_gateway.dart` 인터페이스 + `proxy_llm_gateway`·`fake_llm_gateway`) · `ui/`(main_controller·main_page·recipe_book_* + `widgets/`) · `image/`(768px 리사이즈) · `platform/`(인앱 브라우저 판별) · `theme/`.
+
+**목표** 레이아웃은 `mobile.md` §1(`features/`·`shared/`·`core/`). 단 단일 스토리지 모듈·단일 LLM seam을 3버킷 어디에 두는지는 **미결**이다 — 둘 다 도메인을 알아서 `core/`의 "도메인을 모르는 인프라" 정의와 어긋난다. 리팩터 트랙([#38](https://github.com/woosung-dev/cookmark/issues/38))의 첫 결정이다.
 
 ## 명령 (코드가 있는 브랜치에서)
 
