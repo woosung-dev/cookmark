@@ -51,6 +51,8 @@ flutter run -d chrome           # Web 빌드 로컬 실행(우선 타깃)
 flutter build web               # 파일럿 배포 산출물
 ```
 
+이 게이트(format·analyze·test + E2E)는 `.github/workflows/ci.yml`로 매 PR·main push에서도 자동 실행된다(#59).
+
 **E2E가 검증의 정본이고 유닛은 보완이다**(coding-standards). E2E는 `integration_test/`에서 Web 타깃으로 돌리며, LLM 경계에 결정적 페이크를 주입한다. 테스트는 외부 행동만 검증한다 — 화면에 보이는 것과 export JSON에 남는 것. 내부 구현 세부에 비의존.
 
 ## Agent skills
