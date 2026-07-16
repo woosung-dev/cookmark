@@ -24,16 +24,16 @@
 - [x] U8 세션복원·공통 헤더 — AppBar flat·단일 링크·SectionSummary 접힘·하단바 없음
 
 ## EXIT 게이트
-- [ ] `dart format --set-exit-if-changed` 통과
-- [ ] `flutter analyze --fatal-infos` 무이슈
-- [ ] `flutter test` 전량 그린
-- [ ] `bash scripts/e2e.sh` (integration_test 31) 그린
-- [ ] 상태별 Playwright 스크린샷 DESIGN 대조 일치
-- [ ] `design-review` 1회 → 지적 반영
-- [ ] 하드 제약 4개 유지 증거
+- [x] `dart format --set-exit-if-changed` 통과
+- [x] `flutter analyze --fatal-infos` 무이슈
+- [x] `flutter test` 290 그린
+- [x] `bash scripts/e2e.sh` (integration_test 31) 그린
+- [x] 상태별 Playwright 스크린샷 DESIGN 대조 일치 (9개 상태 + after 2개)
+- [x] `design-review` 1회(독립 서브에이전트) → 지적 6건 반영·3건 기각(근거 기록)
+- [x] 하드 제약 4개 유지 증거
 
-## 하드 제약 유지 증거 (완료 시 채움)
-- [ ] 이벤트/산식/storage 무수정 (git diff로 확인)
-- [ ] 푸터 `수동 수정 <n>`/`이벤트 <n>` 포맷 보존
-- [ ] `navigation_test.dart` 그린 · NavigationBar/BottomNavigationBar 없음
-- [ ] E2E 키·텍스트·semantics 보존
+## 하드 제약 유지 증거
+- [x] 이벤트/산식/storage 무수정 — git diff에 app_event·storage·debug_metrics·debug_footer 없음
+- [x] 푸터 `수동 수정 <n>`/`이벤트 <n>` 포맷 보존 — debug_footer 무수정, E2E가 '수동 수정 0'/'이벤트 1' 통과
+- [x] `navigation_test.dart` 그린(flutter test 포함) · E2E가 NavigationBar/BottomNavigationBar findsNothing 통과
+- [x] E2E 키·텍스트·semantics 보존 — 31 케이스 그린

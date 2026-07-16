@@ -21,3 +21,10 @@
 ## B. 유닛 결정
 - **U3b 매칭 로딩**: 텍스트-only → 제안 카드형 스켈레톤 시머 추가. 시머 프리미티브를 `skeleton.dart`(`SkeletonBox`·`Shimmer`)로 추출, recognition_loading의 private `_Block`/`_Shimmer` 제거·공유(중복 제거). `matching-message` 키·'맞춰보는 중' 텍스트 보존.
 - **U6 레시피 북**: 개별 카드 → iOS 인셋 그룹 리스트(surface 카드 1개 + hairline Divider). 리스트 셀 = 좌 `bookmark_outline` 아이콘(muted) + 제목 headline + 보조 footnote + 우 remove(close). 키 recipe-tile/remove/retry·'아직 저장한 레시피가 없어요.' 텍스트 보존. 빈 상태를 아이콘+텍스트로 구성(§7).
+
+## 마감 감사 (design-review, 독립 서브에이전트 1회)
+토큰 레이어는 clean 확인(색·라운드·flat·스켈레톤·AI-slop 부재). 실행한 지적:
+- **F1(MEDIUM) 위계**: 제안 카드 메뉴명이 `largeTitle`(30, 화면 대제목)이라 섹션 헤더 '오늘 할 3개'와 동급 → `title`(20/600)로 강등해 헤더가 앵커 유지. 텍스트 불변이라 E2E 무영향.
+- **F3(MEDIUM) press 일관성**: press-scale가 3개 primary에만 있어 나머지 filled 버튼은 무반응 → 전 화면/섹션 전폭 primary(recipe-form·failure retry·rematch·backup export)로 확장. `PressableScale`에 `enabled` 추가해 비활성 버튼은 피드백 안 줌(request-suggestions·recipe-form). 컴팩트 인라인 제출(추가·vague·import)은 다른 어포던스 클래스라 제외.
+- **F5/F6/F8a(POLISH)**: 빈 제안 상태를 아이콘+문구로 구성(다른 빈 상태와 동일)·에러 카드 버튼 세로 스택(긴 폴백 라벨 2줄 접힘 제거)·매칭 스켈레톤 텍스트 라인 라운드 pill 통일.
+- **기각(근거)**: F2(backup/추가 primary 강등) — 백업 CTA 강조는 파일럿 데이터 유실(카톡 인앱) 대비라 유지·추가는 입력 옆 제출 명료성. F4(디바이더 인셋 48) — 체크리스트/레시피/스켈레톤 리스트 디바이더를 앱 전체에서 16으로 일관 유지(부분 변경이 오히려 불일치). F8b(문장 속 숫자 mono) — `find.text`/`find.textContaining` 잠금이라 하드제약4 우선, §3 명명 mono 타깃(0/3·푸터)은 이미 충족.

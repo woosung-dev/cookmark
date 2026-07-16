@@ -31,15 +31,28 @@ class SuggestionsSection extends StatelessWidget {
           child: Text('오늘 할 3개', style: AppTypography.largeTitle),
         ),
         if (suggestions.isEmpty)
+          // 빈 상태도 구성한다 — 아이콘 + 문구(DESIGN.md §7, 다른 빈 상태와 동일 패턴).
           Container(
+            width: double.infinity,
             padding: const EdgeInsets.all(Space.xl),
             decoration: BoxDecoration(
               color: AppColors.surface,
               borderRadius: BorderRadius.circular(Radii.card),
             ),
-            child: Text(
-              '지금 재료로 만들 만한 걸 찾지 못했어요.',
-              style: AppTypography.body.copyWith(color: AppColors.muted),
+            child: Column(
+              children: [
+                const Icon(
+                  Icons.no_meals_outlined,
+                  size: 40,
+                  color: AppColors.hairline,
+                ),
+                const SizedBox(height: Space.md),
+                Text(
+                  '지금 재료로 만들 만한 걸 찾지 못했어요.',
+                  style: AppTypography.body.copyWith(color: AppColors.muted),
+                  textAlign: TextAlign.center,
+                ),
+              ],
             ),
           )
         else
@@ -146,7 +159,7 @@ class _SuggestionCardSkeleton extends StatelessWidget {
                 child: const SkeletonBox(
                   width: 56,
                   height: 14,
-                  radius: Radii.chip,
+                  radius: Radii.pill,
                 ),
               ),
             ],
@@ -157,7 +170,7 @@ class _SuggestionCardSkeleton extends StatelessWidget {
             child: const SkeletonBox(
               width: 160,
               height: 26,
-              radius: Radii.chip,
+              radius: Radii.pill,
             ),
           ),
           const SizedBox(height: Space.md),
