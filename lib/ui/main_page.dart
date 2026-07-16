@@ -337,6 +337,7 @@ class _MainPageState extends State<MainPage> {
           SizedBox(
             height: Space.touchMin + 4,
             child: PressableScale(
+              enabled: controller.matchableIngredients.isNotEmpty,
               child: FilledButton(
                 key: const Key('request-suggestions'),
                 onPressed: controller.matchableIngredients.isEmpty

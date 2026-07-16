@@ -5,6 +5,7 @@ import 'package:flutter/services.dart';
 import '../../theme/app_colors.dart';
 import '../../theme/app_theme.dart';
 import '../backup_controller.dart';
+import 'pressable_scale.dart';
 
 class BackupSection extends StatefulWidget {
   const BackupSection({super.key, required this.controller});
@@ -67,10 +68,12 @@ class _BackupSectionState extends State<BackupSection> {
           const SizedBox(height: Space.lg),
           SizedBox(
             height: Space.touchMin + 4,
-            child: FilledButton(
-              key: const Key('backup-export'),
-              onPressed: _copyExport,
-              child: const Text('기록 복사하기'),
+            child: PressableScale(
+              child: FilledButton(
+                key: const Key('backup-export'),
+                onPressed: _copyExport,
+                child: const Text('기록 복사하기'),
+              ),
             ),
           ),
 
