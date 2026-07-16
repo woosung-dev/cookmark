@@ -10,15 +10,16 @@
 - [x] #38 코멘트 2건(안전망 전제 정정 + 착수 시점 정정)
 - [x] `docs/refactor-38/` checklist·context-notes 세팅
 
-## Step 1 — 경량 CI 배선
-- [ ] `.github/workflows/flutter.yml` — pub get → format check → analyze --fatal-infos → test
-- [ ] 현재 main(리팩터 전)에서 그린 확인 = 회귀 감지 기준선
+## Step 1 — 경량 CI 배선 ✅
+- [x] `.github/workflows/flutter.yml` — pub get → format check → analyze --fatal-infos → test (커밋 40adb76)
+- [x] 로컬 format·analyze·test 그린으로 검증 (push는 PR 시)
 - 근거 — 154+24 테스트 흔드는데 수동 게이트는 도박(ADR-0007). E2E는 chromedriver라 CI 제외, 유닛/위젯만.
 
-## Step 2 — 안전망 디커플링 (Riverpod 절대 선행)
-- [ ] `integration_test/core_loop_test.dart`의 `waitForPhase`를 `controller.addListener`/`.phase` → UI 관측(`find.byKey`/`find.text`)으로 이관
-- [ ] `pumpApp`이 `MainController` 핸들 반환하는 24곳 → UI 셀렉터 기반으로
-- [ ] **`lib/` 무변경 상태로** E2E 30건 그린 = 순수 이관 증명
+## Step 2 — 안전망 디커플링 (Riverpod 절대 선행) ✅
+- [x] `waitForPhase`(controller.addListener/.phase) → `waitForVisible`(UI 관측) 이관
+- [x] `pumpApp` 반환 void화 — controller 참조는 내부 주입(105·113)에만
+- [x] url_launcher fake 주입 — openRecipe 버튼 탭이 launchUrl로 headless hang (context-notes 참조)
+- [x] **`lib/` 무변경 상태로** E2E 30 + 유닛 272 그린 = 순수 이관 증명
 - 주의 — 여기서 `lib/`를 건드리면 안전망 변경과 대상 변경이 섞여 증명이 깨진다.
 
 ## Step 3 — build_runner + Riverpod + riverpod_lint + Failure (한 덩어리, 쪼갤 수 없음)

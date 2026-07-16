@@ -2,6 +2,15 @@
 
 작업 중 내린 결정과 근거. 세션이 끊겨도 여기서 재개한다. 최신이 위.
 
+## Step 2 — 안전망 디커플링 (2026-07-16)
+
+E2E(`core_loop_test.dart`)를 `controller.phase`/`addListener`(ChangeNotifier) 의존에서 UI 관측(`waitForVisible` + `find`)으로 이관. `lib/` 런타임 코드 무변경(pubspec dev_dependencies만 추가). Riverpod 전환(Step 3)의 절대 선행.
+
+### 진단한 hang — url_launcher (Step 3에서도 주의)
+E2E 30건 중 **29번(export JSON)이 20분 hang**. 이분 탐색(앞15→1-23→1-27→1-29)으로 openRecipe 라인 특정. 원인 — 원본은 `controller.openRecipe(제안)`을 **직접 호출**해 suggestionOpened 이벤트만 만들고 `launchUrl`을 우회했다. UI 버튼 탭으로 바꾸니 `main_page._openRecipe`(main_page.dart:82)가 `launchUrl(externalApplication, _blank)`을 실행 → headless 브라우저에서 새 탭 열기가 응답 없이 매달림.
+해결 — `UrlLauncherPlatform.instance = _FakeUrlLauncher()`를 setUp에 주입. dev_dependencies에 `url_launcher_platform_interface`·`plugin_platform_interface` 추가.
+**교훈** — UI 관통 테스트로 바꿀 때, 원본이 controller 직접 호출로 **의도적으로 우회했던 외부 부작용**(launchUrl·image_picker 등)이 드러난다. 그 seam도 fake로 막아야 한다. pumpAndSettle/ensureVisible이 아니라 tap이 트리거하는 async가 범인일 수 있다.
+
 ## 방향 전환 — 파일럿 후 → D0 전 (2026-07-16)
 
 원래 계획은 "파일럿 후 리팩터"였다. 파운더가 "미루는 게 좋지 않다"며 뒤집었고, 사실 확인 결과 **지금이 오히려 최적 창**이었다.
