@@ -67,7 +67,9 @@ class SuggestionCard extends StatelessWidget {
             ],
           ),
           const SizedBox(height: Space.md),
-          Text(suggestion.menu, style: AppTypography.largeTitle),
+          // 메뉴명은 카드의 대형 요소지만 화면 대제목(largeTitle)보다 한 단계 아래다 —
+          // 섹션 헤더 '오늘 할 3개'가 앵커로 남게(DESIGN.md §3 위계).
+          Text(suggestion.menu, style: AppTypography.title),
           if (suggestion.missing.isNotEmpty) ...[
             const SizedBox(height: Space.md),
             _MissingChips(missing: suggestion.missing),
