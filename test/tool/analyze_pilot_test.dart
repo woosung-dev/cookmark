@@ -37,6 +37,15 @@ void main() {
     });
   });
 
+  group('readBackupEvents — 잘못된 입력은 FormatException (main 이 깔끔한 에러로 잡는다)', () {
+    test('events 배열이 없으면 던진다', () {
+      expect(() => readBackupEvents('{"recipes":[]}'), throwsFormatException);
+    });
+    test('깨진 JSON이면 던진다', () {
+      expect(() => readBackupEvents('not json'), throwsFormatException);
+    });
+  });
+
   group('countSessions — 30분 윈도', () {
     test('빈 목록은 0', () {
       expect(countSessions([], const Duration(minutes: 30)), 0);

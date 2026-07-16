@@ -439,7 +439,15 @@ void main(List<String> argv) {
       stderr.writeln('파일 없음: $path');
       exit(1);
     }
-    final events = readBackupEvents(file.readAsStringSync());
+    final List<PilotEvent> events;
+    try {
+      events = readBackupEvents(file.readAsStringSync());
+    } on FormatException catch (e) {
+      // 잘못된 파일(깨진 JSON·events 배열 없음)을 판정일에 넘겼을 때 스택 트레이스 대신
+      // 읽을 수 있는 에러로 끝낸다 — 어느 파일이 문제인지 짚어준다.
+      stderr.writeln('export JSON을 못 읽는다 ($path): ${e.message}');
+      exit(1);
+    }
     devices.add(
       aggregate(
         label: file.uri.pathSegments.last,
