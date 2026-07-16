@@ -7,6 +7,7 @@ import 'package:flutter/scheduler.dart';
 import '../../domain/loading_stage.dart';
 import '../../theme/app_colors.dart';
 import '../../theme/app_theme.dart';
+import 'skeleton.dart';
 
 class RecognitionLoading extends StatefulWidget {
   const RecognitionLoading({
@@ -163,17 +164,21 @@ class _ChecklistSkeleton extends StatelessWidget {
                 padding: const EdgeInsets.symmetric(horizontal: Space.lg),
                 child: Row(
                   children: [
-                    _Shimmer(
-                      shimmer: shimmer,
-                      child: const _Block(width: 22, height: 22, radius: 6),
+                    Shimmer(
+                      animation: shimmer,
+                      child: const SkeletonBox(
+                        width: 22,
+                        height: 22,
+                        radius: Radii.chip,
+                      ),
                     ),
                     const SizedBox(width: Space.md),
-                    _Shimmer(
-                      shimmer: shimmer,
-                      child: _Block(
+                    Shimmer(
+                      animation: shimmer,
+                      child: SkeletonBox(
                         width: 96.0 + (i.isEven ? 40 : 0),
                         height: 14,
-                        radius: 7,
+                        radius: Radii.pill,
                       ),
                     ),
                   ],
@@ -183,47 +188,6 @@ class _ChecklistSkeleton extends StatelessWidget {
           ],
         ],
       ),
-    );
-  }
-}
-
-class _Block extends StatelessWidget {
-  const _Block({
-    required this.width,
-    required this.height,
-    required this.radius,
-  });
-
-  final double width;
-  final double height;
-  final double radius;
-
-  @override
-  Widget build(BuildContext context) => Container(
-    width: width,
-    height: height,
-    decoration: BoxDecoration(
-      color: AppColors.sunken,
-      borderRadius: BorderRadius.circular(radius),
-    ),
-  );
-}
-
-class _Shimmer extends StatelessWidget {
-  const _Shimmer({required this.shimmer, required this.child});
-
-  final Animation<double> shimmer;
-  final Widget child;
-
-  @override
-  Widget build(BuildContext context) {
-    return AnimatedBuilder(
-      animation: shimmer,
-      builder: (context, child) => Opacity(
-        opacity: 0.55 + 0.45 * (1 - (shimmer.value * 2 - 1).abs()),
-        child: child,
-      ),
-      child: child,
     );
   }
 }
