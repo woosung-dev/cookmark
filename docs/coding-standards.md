@@ -44,6 +44,7 @@ E2E 144건이 행동을 고정하고 있어 안전망은 있다.
 ## 상태·경계
 
 - **상태 관리는 `mobile.md` §0·§3을 따른다** — Riverpod v3 + `riverpod_generator`. 이 파일이 예전에 "Flutter 내장(ChangeNotifier)까지 허용"이라 적어 `mobile.md`의 "`ChangeNotifierProvider` 신규 금지"와 정면 충돌했다. **`mobile.md`가 이긴다** (2026-07-16 화해).
+- **`go_router`는 면제한다** (`mobile.md` §5 예외, [#50](https://github.com/woosung-dev/cookmark/issues/50)) — ADR-0001의 화면 2개 상한이 유지되는 동안. 현 구조(`MaterialApp` + `home: MainPage` + 단일 `Navigator.push`)를 유지한다. 근거 — in-app 네비게이션 그래프가 1개 엣지(MainPage→RecipeBookPage)뿐이라 `routes.dart`/`router.dart` 분리가 풀 순환이 없고, 웹 뒤로가기는 Navigator 1.0의 히스토리 통합으로 이미 동작하며, 1개 엣지짜리 라우터 + `go_router_builder` codegen은 순수 비용이다. **재검토 트리거 = `test/architecture/navigation_test.dart`** — 명령형 화면 push가 2건이 되면 실패해 go_router 재결정을 강제한다. 새 ADR은 만들지 않는다(파일럿 한정 툴링 면제).
 - 아래 둘은 **ADR이 정본이라 `mobile.md`의 구조 규칙보다 우선한다** — 측정 순도에 직결되기 때문이다:
   - 로컬 영속 접근은 **단일 스토리지 모듈**을 통해서만 — 위젯에서 스토리지 API 직접 호출 금지. 이벤트 로그·레시피 북의 읽기/쓰기 경계를 한 곳에 모은다. P2 킬 기준의 원본 데이터가 여기서 나온다.
   - LLM 호출은 **단일 경계 모듈**을 통해서만 — 테스트 페이크 주입 지점이자 유일한 seam. 프록시 엔드포인트는 3개지만 seam은 1개다. 모델명은 환경설정 주입.

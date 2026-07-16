@@ -60,6 +60,9 @@ class _MainPageState extends State<MainPage> {
   Future<XFile?> _pickFromGallery() =>
       ImagePicker().pickImage(source: ImageSource.gallery);
 
+  /// mobile.md §5 예외(#50): 2화면 한정 축복받은 단일 화면 이동.
+  /// 2번째 이동을 추가하기 전에 go_router 도입을 재결정하라
+  /// — test/architecture/navigation_test.dart가 이 1건을 강제한다.
   Future<void> _openRecipeBook() async {
     await Navigator.of(context).push(
       MaterialPageRoute<void>(
