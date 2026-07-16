@@ -479,22 +479,28 @@ class MainController extends ChangeNotifier {
     final generation = ++_recognizeGeneration;
     _phase = MainPhase.recognizing;
     _failure = null;
-    _recognizeStartedAt = _now();
+    // 지연은 호출별 지역 변수로 잰다 — 필드에 두면 겹친 호출이 덮어써 앞선 응답의 지연이 틀어진다.
+    // 필드는 로딩 문구가 경과를 재는 데 계속 쓰이므로 같은 시각으로 함께 남긴다.
+    final startedAt = _now();
+    _recognizeStartedAt = startedAt;
     notifyListeners();
 
     try {
       final result = await _gateway.recognize(jpegBytes);
-      // 사용자가 기다리다 취소하고 직접 입력으로 넘어갔다면, 이 응답은 남의 화면이다.
-      if (generation != _recognizeGeneration) return;
-      final latency = _now().difference(_recognizeStartedAt!);
+      // 버려진 호출도 Gemini까지 갔고 토큰을 썼다 — 원가 원장은 호출마다 남긴다(스펙 US 28:
+      // "LLM 호출마다 토큰 수와 추정 원가가 이벤트에 부착"). 세대 가드는 화면만 막는다.
       await _storage.appendEvent(
         AppEvent.recognitionDone(
           at: _now(),
-          latency: latency,
+          latency: _now().difference(startedAt),
           usage: result.usage,
           count: result.ingredients.length,
         ),
       );
+
+      // 사용자가 기다리다 취소하고 직접 입력으로 넘어갔다면, 이 응답은 남의 화면이다.
+      if (generation != _recognizeGeneration) return;
+
       // 첫 인식 결과에만 붙는다. 이 앱은 인식이 틀리는 걸 전제로 설계됐고(재료 체크리스트가 그 장치다),
       // 사용자가 그걸 모르면 첫 오인식에서 앱을 접는다.
       if (!_storage.readExpectationNoteSeen()) {
