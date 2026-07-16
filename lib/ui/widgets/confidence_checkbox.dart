@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 
 import '../../domain/ingredient.dart';
 import '../../theme/app_colors.dart';
+import '../../theme/app_theme.dart';
 
 /// high=채워진 체크 / medium=체크+물음표 점 / low=빈 체크 dim.
 ///
@@ -32,7 +33,7 @@ class ConfidenceCheckbox extends StatelessWidget {
           color: checked ? AppColors.action : AppColors.hairline,
           width: 1.5,
         ),
-        borderRadius: BorderRadius.circular(6),
+        borderRadius: BorderRadius.circular(Radii.chip),
       ),
       child: checked
           ? const Icon(Icons.check, size: 16, color: AppColors.onAction)

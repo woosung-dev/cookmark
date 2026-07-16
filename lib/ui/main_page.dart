@@ -20,6 +20,7 @@ import 'widgets/debug_footer.dart';
 import 'widgets/failure_card.dart';
 import 'widgets/in_app_browser_banner.dart';
 import 'widgets/onboarding_card.dart';
+import 'widgets/pressable_scale.dart';
 import 'widgets/recipe_book_chips.dart';
 import 'widgets/recognition_loading.dart';
 import 'widgets/section_summary.dart';
@@ -335,12 +336,14 @@ class _MainPageState extends State<MainPage> {
         if (!hasSuggestions)
           SizedBox(
             height: Space.touchMin + 4,
-            child: FilledButton(
-              key: const Key('request-suggestions'),
-              onPressed: controller.matchableIngredients.isEmpty
-                  ? null
-                  : controller.requestSuggestions,
-              child: const Text('오늘 뭐 해먹지'),
+            child: PressableScale(
+              child: FilledButton(
+                key: const Key('request-suggestions'),
+                onPressed: controller.matchableIngredients.isEmpty
+                    ? null
+                    : controller.requestSuggestions,
+                child: const Text('오늘 뭐 해먹지'),
+              ),
             ),
           )
         else

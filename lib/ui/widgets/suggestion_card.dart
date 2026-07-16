@@ -4,6 +4,7 @@ import 'package:flutter/material.dart';
 import '../../domain/suggestion.dart';
 import '../../theme/app_colors.dart';
 import '../../theme/app_theme.dart';
+import 'pressable_scale.dart';
 
 /// 라벨의 색과 아이콘 — 색만으로 말하지 않는다(DESIGN.md §8 "색+아이콘 이중 신호").
 ///
@@ -93,10 +94,12 @@ class SuggestionCard extends StatelessWidget {
           // 56px — 성공 지표 2를 판정하는 버튼이라 놓치기 어려워야 한다(G1 #8).
           SizedBox(
             height: 56,
-            child: FilledButton(
-              key: Key('cooked-${suggestion.menu}'),
-              onPressed: onCooked,
-              child: const Text('이거 했어요'),
+            child: PressableScale(
+              child: FilledButton(
+                key: Key('cooked-${suggestion.menu}'),
+                onPressed: onCooked,
+                child: const Text('이거 했어요'),
+              ),
             ),
           ),
         ],
@@ -150,7 +153,8 @@ class _SourceBadge extends StatelessWidget {
       mainAxisSize: MainAxisSize.min,
       children: [
         Icon(
-          saved ? Icons.bookmark : Icons.auto_awesome,
+          // 스트로크 통일 — 은유 아이콘은 outlined로(DESIGN.md §7).
+          saved ? Icons.bookmark_outline : Icons.auto_awesome_outlined,
           size: 14,
           color: AppColors.muted,
         ),
