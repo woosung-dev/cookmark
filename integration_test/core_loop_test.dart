@@ -1004,6 +1004,82 @@ void main() {
     expect(exported['recipes'], isNotEmpty);
   });
 
+  testWidgets('D0 전 기록 초기화 리허설 — 지우고 가져와도 레시피만 돌아온다 (#41)', (tester) async {
+    // 관통 테스트 흔적을 실 UI로 만든다 — 레시피 저장 + 업로드·인식 + 체크 수정 + 매칭.
+    final book = RecipeBookController(FakeLlmGateway(), storage);
+    await book.add(url: 'https://youtu.be/abc', title: '김치찌개');
+
+    await pumpApp(tester);
+    await uploadAndWait(tester);
+    await tapVisible(tester, find.byKey(const Key('ingredient-row-대파')));
+    await tapRequestSuggestions(tester);
+
+    // 절차 ① 기록 복사하기 — 관통 이벤트 4종이 백업에 실제로 담겨 있어야 리허설이 성립한다.
+    // 버튼 대신 컨트롤러로 export 한다(#22 관용구) — 클립보드는 헤드리스 브라우저에서 못 읽는다.
+    final backupJson = await BackupController(storage).exportJson();
+    final backedUpTypes =
+        ((jsonDecode(backupJson) as Map<String, Object?>)['events'] as List)
+            .cast<Map<String, Object?>>()
+            .map((e) => e['type'])
+            .toSet();
+    for (final type in [
+      'photoUpload',
+      'recognitionDone',
+      'checklistEdit',
+      'matchingDone',
+    ]) {
+      expect(backedUpTypes, contains(type), reason: '관통 이벤트 $type이(가) 백업에 없다');
+    }
+
+    // 절차 ② 브라우저 사이트 데이터 삭제 — 이벤트·레시피 전부 소멸.
+    await storage.clear();
+
+    // 절차 ③ 앱을 다시 열고 보관한 JSON을 가져오기에 붙여넣는다.
+    // 재열기 = 이전 트리를 완전히 내리고 새로 pump — 엘리먼트 재사용에 기대지 않는다.
+    await tester.pumpWidget(const SizedBox.shrink());
+    await pumpApp(tester);
+    await tester.tap(find.byKey(const Key('recipe-book-link')));
+    await tester.pumpAndSettle();
+
+    final field = find.byKey(const Key('backup-import-field'));
+    await tester.ensureVisible(field);
+    await tester.pumpAndSettle();
+    await tester.enterText(field, backupJson);
+    await tapVisible(tester, find.byKey(const Key('backup-preview')));
+    await tapVisible(tester, find.byKey(const Key('backup-confirm')));
+
+    final events = await waitForEvents(
+      tester,
+      storage,
+      (events) => events.any((e) => e.type == AppEventType.backup),
+    );
+    await tester.pumpAndSettle();
+
+    // 레시피만 돌아온다 — 관통 이벤트는 무시되고, 로그에는 방금의 가져오기 1건뿐이다.
+    expect(
+      find.byKey(const Key('recipe-tile-https://youtu.be/abc')),
+      findsOneWidget,
+    );
+    expect(events, hasLength(1));
+    expect(events.single.type, AppEventType.backup);
+    expect(events.single.data['direction'], 'import');
+
+    // 절차 ④ ?debug 푸터 확인 — 이슈 #41의 "이벤트가 비었는지"는 정확히는
+    // "이벤트 1"이다. 가져오기 자체가 backup/import 이벤트 1건을 남기기 때문이고,
+    // 지표를 오염시키는 관통 이벤트·수동 수정은 0이어야 한다.
+    //
+    // 트리를 먼저 완전히 내린다 — 같은 CookmarkApp을 다시 pump하면 엘리먼트가
+    // 재사용돼 위에 쌓인 레시피 북 라우트가 남고, 그 아래 메인 페이지(푸터)는
+    // offstage라 finder에 안 잡힌다. 주소에 ?debug를 붙여 새로 여는 동작과도 같다.
+    await tester.pumpWidget(const SizedBox.shrink());
+    await pumpApp(tester, debug: true);
+    final footer = find.byKey(const Key('debug-footer'));
+    await tester.ensureVisible(footer);
+    await tester.pumpAndSettle();
+    expect(find.text('이벤트 1'), findsOneWidget);
+    expect(find.text('수동 수정 0'), findsOneWidget);
+  });
+
   testWidgets('레시피 북은 헤더 링크 하나로만 들어간다 — 탭 바가 없다', (tester) async {
     await pumpApp(tester);
 
