@@ -17,15 +17,15 @@
 - [x] PR-2 커밋 2 — `mobile.yml`(working-directory·paths 필터·main 무필터)·`vercel.json`·`.vercelignore`·`.gitignore` 분할
 - [x] PR-2 커밋 3 — AGENTS.md·coding-standards:10·README 토폴로지·HANDOFF·apps/mobile/README
 
-## EXIT 게이트 (#69 검증 프로토콜, prod 무접촉 수정안)
+## EXIT 게이트 (#69 검증 프로토콜, prod 무접촉 수정안) — 전량 통과, 증거는 #69 해소 코멘트
 
-- [ ] `cd apps/mobile` 인루프 4게이트 green (format·analyze·test)
-- [ ] E2E 로컬 green (`bash apps/mobile/scripts/e2e.sh`)
-- [ ] PR CI — `mobile` 워크플로 실제 실행 green (스킵 아님 확인)
-- [ ] `flutter build web` + `vercel build` parity (`static/index.html` 존재·diff clean·함수 3개 존재)
-- [ ] preview 배포 스모크 4종 (`/` 200 · SPA rewrite · 프록시 POST · GET rejectNonPost)
-- [ ] ~~prod 재배포~~ — 재결정으로 제외, 파일럿 아티팩트 동결 유지
-- [ ] 머지 후 main push 무필터 CI green → #69 해소 코멘트·클로즈
+- [x] `cd apps/mobile` 인루프 4게이트 green — format 0변경 · analyze 무이슈 · test 290
+- [x] E2E 로컬 green (`bash apps/mobile/scripts/e2e.sh` 전부 통과)
+- [x] PR CI — `mobile` 워크플로 실제 실행 green (PR #72, gate 1m15s · e2e 3m31s, 스킵 아님)
+- [x] `flutter build web` + `vercel build` parity — `static/index.html` 존재 · diff 0 · 함수 3개 존재
+- [x] preview 배포 스모크 4종 통과 (cookmark-nr94vvtxv — `/` 200 · SPA rewrite · 프록시 400 검증 · GET 405)
+- [x] ~~prod 재배포~~ — 재결정으로 제외, 파일럿 아티팩트 동결 유지(정본 URL 200 확인)
+- [x] 머지 후 main push 무필터 CI green (`mobile`@4312ec4 success) → #69 해소 코멘트·클로즈 완료
 
 ## 파운더 수동 항목 (gitignored — PR 불가)
 
