@@ -1,42 +1,31 @@
-# #98 api-2 배포 파이프라인 — 체크리스트 (walking skeleton 원격 절반)
+# #102 api-6 og:image 프록시 — 체크리스트
 
-티켓 정본은 [#98](https://github.com/woosung-dev/cookmark/issues/98), 결정 정본은 ADR-0009 + 그릴링 [#88](https://github.com/woosung-dev/cookmark/issues/88)(인프라)·[#76](https://github.com/woosung-dev/cookmark/issues/76)(스택·배포) 해소 코멘트다. 직전 태스크 #97 체크리스트는 전량 완료(PR #105 머지 · 56dc4ea).
-
-## 세션 범위 (사용자 확정)
-
-**절차 문서 먼저** — 티켓이 명시한 순서(*"절차를 먼저 문서로 쓰고 검수받는다"*). 코드·워크플로·README를 쓰고 Docker 절반을 로컬 실증한다. GCP 프로비저닝(프로젝트·과금·WIF·시크릿)은 README 검수 후 파운더가 집행하며, 라이브 AC 2개는 그때 닫힌다.
+티켓 정본은 [#102](https://github.com/woosung-dev/cookmark/issues/102), 상류는 스펙 [#96](https://github.com/woosung-dev/cookmark/issues/96) + ADR-0009 1기 범위 절(그릴링 [#75](https://github.com/woosung-dev/cookmark/issues/75) 이월 2건). 선행 #97(스캐폴드)·#100(인증) 머지 완료. 계획 전문은 세션 플랜 파일, 결정 로그는 context-notes.md.
 
 ## 구현
 
-- [x] 브랜치 `feat/98-deploy-pipeline` + 작업 문서(checklist·context-notes)
-- [x] `apps/api/.dockerignore` — 빌드 컨텍스트 최소화(`.venv`·캐시·비밀·테스트 제외)
-- [x] `apps/api/Dockerfile` — uv 멀티스테이지 · 내부 8000 고정 · non-root — **로컬 관통 실증 완료**
-- [x] `.github/workflows/api.yml` — deploy job(`needs: gate` · main push · WIF · 빌드/푸시/배포/스모크) — YAML 파싱 확인
-- [x] `infra/README.md` 재작성 — 프로비저닝 절차 + IaC 트리거 + 함정. **"자동 배포 금지 규약의 정신(#57)" 오독 제거**(ADR-0008 36행은 #92가 이미 정정했으나 이 파일엔 남아 있었다)
-- [ ] **마이그레이션 스텝 — 파운더 결정 대기**(A entrypoint / B Cloud Run Job / D GHA docker run / F 이연). 나머지 산출물과 무관하게 +3~12줄이다
-- [ ] `apps/api/README.md` — 배포 절 갱신(#98 몫이라 적힌 자리 채우기)
+- [ ] 작업 문서(checklist·context-notes) — #102로 갱신
+- [ ] `apps/api/pyproject.toml` — httpx를 `[project].dependencies`로 이동(dev 그룹 제거) + `uv lock` 재생성
+- [ ] `src/ogimage/parser.py` — og:image 추출(HTMLParser, property/name 허용) — 유닛 테스트 선행(TDD)
+- [ ] `src/ogimage/guard.py` — SSRF 가드(`is_global` + multicast/reserved 보강 · IPv4-mapped 언랩 · 대괄호 IPv6 · userinfo 거부 · getaddrinfo 전 주소 검사) — 유닛 테스트 선행
+- [ ] `src/ogimage/service.py` — 수동 리다이렉트 루프(≤5, hop마다 가드+scheme 재검사) · 스트리밍 1 MiB 상한 · incremental 디코딩 · `asyncio.timeout(10)` 전체 데드라인
+- [ ] `src/ogimage/{schemas,exceptions,router}.py` + `main.py` 등록 — GET `/api/v1/og-image?url=`, 401/400 문서화
+- [ ] `src/auth/` — `UNAUTHORIZED` 상수를 dependencies.py로 이동(도메인 횡단 import 해소, 계약 무변경)
+- [ ] `contracts/openapi.yaml` 재생성 커밋
 
-## AC 검증
+## AC 검증 (tests/test_og_image.py)
 
-- [ ] **로컬 실증** — `docker build` → 실 Postgres 상대로 `docker run` → entrypoint가 alembic 적용 → health 200
-- [ ] WIF 인증 — 리포·CI 어디에도 키 파일·서비스 계정 JSON 없음 (grep 증거)
-- [ ] 비밀이 코드·워크플로에 평문 0 (grep 증거) · 5개 목록·생성 절차는 infra README
-- [ ] 배포 시 Alembic 자동 적용 — entrypoint 경로로 로컬 증명(원격은 프로비저닝 후)
-- [ ] `apps/mobile`·`vercel.json`·루트 `api/` 무접촉 — 파일럿 가드(~8/5) (diff 증거)
-- [ ] 프로비저닝 전 main push가 빨개지지 않음 — deploy job이 skip (가드 검증)
-- [ ] ~~main push → 자동 배포 → Cloud Run URL health 200~~ — **파운더 프로비저닝 후** (세션 범위 밖)
-- [ ] ~~infra README 절차만 따라 재현 가능~~ — **파운더 검수** (세션 범위 밖)
+- [ ] og:image 있는 페이지 → 이미지 URL 반환 (mock — respx 전용 `pages` fixture)
+- [ ] og:image 없음·비HTML·fetch 실패(연결·upstream 5xx) → 200 `{"image_url": null}`, 500 아님
+- [ ] 사설 IP·localhost 직접(리터럴 7종 parametrize + 사설 resolve 호스트네임) → 400 + fetch 0건 증거
+- [ ] 리다이렉트 경유 사설 대상 → 400
+- [ ] 타임아웃 → null · 응답 크기 상한(상한 밖 og:image → null, 상한 안 → 발견)
+- [ ] 무세션 → 401 (+ 로그인 상태 쓰레기 URL → 422)
+- [ ] 계약 가드 green — 스냅샷 갱신 포함(`export_openapi.py --check`)
 
 ## 마무리
 
-- [x] 인루프 게이트 — `ruff format` · `ruff check` · `mypy src/` · `pytest`(7 passed) green — 회귀 없음(변경이 src/ 무접촉)
-- [x] `/code-review` 2축 — **Standards PASS · Spec PASS**. 반영 3건 — syntax 지시자 1행 이동·스크립트 인젝션 방어(env 경유)·한국어 종결 콜론 2곳. `--max-instances 3` 근거 주석 추가
-- [ ] 시맨틱 커밋 → push → PR → CI green → 티켓 코멘트(잔여 파운더 항목 명시)
-
-## 파운더에게 넘길 잔여 (세션 범위 밖 — 티켓 코멘트에도 남긴다)
-
-1. **리포 하드닝**(private 전환 또는 branch protection + 액션 SHA 핀) — D 방식의 선결 조건(infra/README §0.5).
-2. **GCP 프로비저닝** — infra/README 절차대로. 마지막에 리포 변수 4개를 넣으면 파이프라인 발화.
-3. **backend.md §8 개정** — 괄호 "(Docker entrypoint)"를 "리비전/레플리카 런타임이면 배포 전 단발 실행"으로. 규범절은 무변경. 선례 = §9 개정 이력 블록.
-4. **티켓 #98 AC 문구** — "entrypoint 자동 실행" → "배포 전 docker run", "시크릿 5" → "1(1기 시점)".
-5. (선택) **AWS 이동 시 DB의 VPC 진입 의도** — Neon public 유지면 D 그대로, RDS/PrivateLink면 D가 죽고 B로 재결정(트립와이어).
+- [ ] 인루프 게이트 — `pytest` · `ruff format --check` · `ruff check` · `mypy src/ scripts/` · 스냅샷 `--check` 전부 green
+- [ ] schemathesis 로컬 1회(플레이스홀더 env + uvicorn 8090 — 로컬 8000 상시 점유)
+- [ ] `/code-review` 2축(Standards·Spec) → 지적 반영
+- [ ] 시맨틱 커밋 → `push worktree-feat-w-102:feat/102-og-image-proxy` → PR → CI green
