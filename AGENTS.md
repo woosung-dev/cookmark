@@ -12,6 +12,8 @@ This file provides guidance to AGENTS Code (AGENTS.ai/code) when working with co
 
 **이 리포는 "문서가 계약"인 스펙 주도 리포다.** 2026-07-16부터 `main`에 Flutter 코드가 있다 — A/B 실험의 두 arm 중 **PR #26(`feat/13-mvp-context7`)이 랜딩됐다**(스펙 #13의 9티켓 전량).
 
+리포 구조는 폴리글랏 모노레포 전환이 결정돼 있다(`docs/adr/0008`) — 물리 이동은 파일럿 판정·#38 이후다([#69](https://github.com/woosung-dev/cookmark/issues/69)). 아래 레이아웃·명령 서술은 이동 전까지 유효하다.
+
 - 닫힌 arm — `feat/14-core-tracer`(PR #25, #14 범위만·유닛 48) · `feat/flutter-scaffold-theme`(PR #24). **되살리지 말 것.** #25에는 프록시 오형식 200 응답 시 로딩이 영구 고착되는 결함이 있다.
 - 파일럿 배포 URL(정본) — `https://cookmark-woosungdevs-projects.vercel.app`. `cookmark.vercel.app`은 **남의 프로젝트다**(Vercel 전역 네임스페이스).
 
