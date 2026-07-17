@@ -51,10 +51,7 @@ void main() {
     await tester.tap(skip);
     await tester.pumpAndSettle();
     // ensureVisible가 남긴 스크롤을 상단으로 되돌린다 — 이후 넛지 칩 등 상단 요소 탭이 화면 안에 들어오도록.
-    await tester.drag(
-      find.byType(SingleChildScrollView),
-      const Offset(0, 600),
-    );
+    await tester.drag(find.byType(SingleChildScrollView), const Offset(0, 600));
     await tester.pumpAndSettle();
   }
 

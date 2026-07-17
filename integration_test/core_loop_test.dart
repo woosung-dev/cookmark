@@ -621,6 +621,58 @@ void main() {
     );
   });
 
+  testWidgets('카드를 탭하면 제안 상세로 가고, 상세의 "이거 했어요"가 메인에 토스트를 띄운다 (P4)', (
+    tester,
+  ) async {
+    // 저장 제안(김치찌개)은 recipeUrl이 있어 영상 pill·있는 재료가 뜬다.
+    final book = RecipeBookController(FakeLlmGateway(), storage);
+    await book.add(url: 'https://youtu.be/abc', title: '김치찌개');
+
+    await pumpApp(tester);
+    await uploadAndWait(tester);
+    await tapRequestSuggestions(tester);
+
+    // 카드 루트(사진 영역)를 탭하면 상세로 push된다 — 버튼이 아니라 카드 몸통.
+    final card = find.byKey(const Key('suggestion-card-김치찌개'));
+    await tester.ensureVisible(card);
+    await tester.pumpAndSettle();
+    await tester.tap(card);
+    await tester.pumpAndSettle();
+
+    // 상세 전용 키가 뜬다(카드에는 없다).
+    expect(find.byKey(const Key('detail-cooked-김치찌개')), findsOneWidget);
+    expect(find.byKey(const Key('detail-open-recipe-김치찌개')), findsOneWidget);
+    expect(find.byKey(const Key('detail-back')), findsOneWidget);
+
+    // 뒤로가면 메인으로 복귀한다(pop만, push 아님).
+    await tester.tap(find.byKey(const Key('detail-back')));
+    await tester.pumpAndSettle();
+    expect(find.byKey(const Key('detail-cooked-김치찌개')), findsNothing);
+    expect(find.byKey(const Key('suggestion-card-김치찌개')), findsOneWidget);
+
+    // 다시 열어 상세에서 "이거 했어요"를 누른다.
+    await tester.ensureVisible(card);
+    await tester.pumpAndSettle();
+    await tester.tap(card);
+    await tester.pumpAndSettle();
+
+    final detailCooked = find.byKey(const Key('detail-cooked-김치찌개'));
+    await tester.ensureVisible(detailCooked);
+    await tester.pumpAndSettle();
+    await tester.tap(detailCooked);
+    await tester.pumpAndSettle();
+
+    // 상세는 닫히고, 실행취소 토스트는 메인 위에 뜬다(오펀 아님).
+    expect(find.byKey(const Key('detail-cooked-김치찌개')), findsNothing);
+    expect(find.byKey(const Key('cooked-toast')), findsOneWidget);
+    expect(find.text('실행취소'), findsOneWidget);
+
+    final cooked = (await Storage.open()).readEvents().where(
+      (e) => e.type == AppEventType.cooked,
+    );
+    expect(cooked.single.data['menu'], '김치찌개');
+  });
+
   testWidgets('재료를 재수정하면 "다시 제안" 배너가 뜨고 stale이 붙는다 (#19)', (tester) async {
     await pumpApp(tester);
     await uploadAndWait(tester);

@@ -14,12 +14,16 @@ class SuggestionsSection extends StatelessWidget {
     required this.excludedCount,
     required this.onOpenRecipe,
     required this.onCooked,
+    this.onOpenDetail,
   });
 
   final List<Suggestion> suggestions;
   final int excludedCount;
   final void Function(Suggestion) onOpenRecipe;
   final void Function(Suggestion) onCooked;
+
+  /// 카드 탭 → 제안 상세(P4). null이면 탭 비활성.
+  final void Function(Suggestion suggestion, int rank)? onOpenDetail;
 
   @override
   Widget build(BuildContext context) {
@@ -64,6 +68,9 @@ class SuggestionsSection extends StatelessWidget {
                 rank: index + 1,
                 onOpenRecipe: () => onOpenRecipe(suggestion),
                 onCooked: () => onCooked(suggestion),
+                onTap: onOpenDetail == null
+                    ? null
+                    : () => onOpenDetail!(suggestion, index + 1),
               ),
             ),
         if (excludedCount > 0) ...[

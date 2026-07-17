@@ -9,8 +9,8 @@ import '../../theme/app_theme.dart';
 import 'photo_placeholder.dart';
 import 'pressable_scale.dart';
 
-/// 라벨의 색과 아이콘 — 색만으로 말하지 않는다(DESIGN.md §8 "색+아이콘 이중 신호").
-({Color fg, Color bg, IconData icon}) _styleOf(SuggestionLabel label) =>
+/// 라벨의 색과 아이콘 — 색만으로 말하지 않는다(DESIGN.md §8 "색+아이콘 이중 신호"). 카드·상세 공유.
+({Color fg, Color bg, IconData icon}) styleOf(SuggestionLabel label) =>
     switch (label) {
       SuggestionLabel.ready => (
         fg: AppColors.goFg,
@@ -28,6 +28,19 @@ import 'pressable_scale.dart';
         icon: Icons.swap_horiz,
       ),
     };
+
+/// 매칭% placeholder — 실 점수는 백엔드 이월. 부족(대체 미해소) 수로 근사한다(카드·상세 공유, ADR-0007).
+int matchPercentOf(Suggestion suggestion) {
+  final missing = suggestion.missing
+      .where((m) => !m.resolvedBySubstitute)
+      .length;
+  return switch (missing) {
+    0 => 96,
+    1 => 88,
+    2 => 79,
+    _ => 72,
+  };
+}
 
 class SuggestionCard extends StatelessWidget {
   const SuggestionCard({
@@ -53,19 +66,6 @@ class SuggestionCard extends StatelessWidget {
   /// 카드 탭 → 제안 상세(P4). null이면 탭 비활성.
   final VoidCallback? onTap;
 
-  /// 매칭% placeholder — 실 점수는 백엔드 이월. 부족(대체 미해소) 수로 근사한다.
-  int get _matchPercent {
-    final missing = suggestion.missing
-        .where((m) => !m.resolvedBySubstitute)
-        .length;
-    return switch (missing) {
-      0 => 96,
-      1 => 88,
-      2 => 79,
-      _ => 72,
-    };
-  }
-
   @override
   Widget build(BuildContext context) {
     final saved = suggestion.source == SuggestionSource.saved;
@@ -84,7 +84,10 @@ class SuggestionCard extends StatelessWidget {
           children: [
             PhotoPlaceholder(
               aspectRatio: 16 / 9,
-              overlay: MatchBadge(rank: rank, percent: _matchPercent),
+              overlay: MatchBadge(
+                rank: rank,
+                percent: matchPercentOf(suggestion),
+              ),
             ),
             Padding(
               padding: const EdgeInsets.all(Space.xl),
@@ -166,7 +169,7 @@ class _LabelBadge extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final style = _styleOf(label);
+    final style = styleOf(label);
     return Container(
       key: Key('label-badge-${label.name}'),
       padding: const EdgeInsets.symmetric(

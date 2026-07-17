@@ -12,6 +12,7 @@ import '../theme/app_theme.dart';
 import 'backup_controller.dart';
 import 'main_controller.dart';
 import 'recipe_book_controller.dart';
+import 'suggestion_detail_page.dart';
 import 'widgets/add_ingredient_bar.dart';
 import 'widgets/backup_section.dart';
 import 'widgets/brand_hero.dart';
@@ -110,6 +111,42 @@ class _MainPageState extends State<MainPage> {
           if (reason == SnackBarClosedReason.hide) return;
           _controller.dismissUndo();
         });
+  }
+
+  /// 카드 탭 → 제안 상세로 push한다 — 앱의 유일한 명령형 push다(ADR-0007, navigation_test).
+  ///
+  /// 상세의 "이거 했어요"는 결과와 함께 pop하고, 상세가 사라진 뒤 여기서 _markCooked를 부른다 —
+  /// 토스트/undo가 상세가 아니라 메인 위에 뜨게 한다(오펀 방지).
+  Future<void> _openDetail(Suggestion suggestion, int rank) async {
+    final action = await Navigator.of(context).push<SuggestionDetailAction>(
+      MaterialPageRoute(
+        builder: (_) => SuggestionDetailPage(
+          suggestion: suggestion,
+          rank: rank,
+          onOpenRecipe: () => _openRecipe(suggestion),
+          available: _availableFor(suggestion),
+        ),
+      ),
+    );
+    if (!mounted) return;
+    if (action == SuggestionDetailAction.cooked) {
+      await _markCooked(suggestion);
+    }
+  }
+
+  /// 있는 재료 = 저장 레시피의 재료 − 부족. AI 제안(recipeUrl 없음)·재료 빈 레시피면 빈 목록(파생, 저장소 무변경).
+  List<String> _availableFor(Suggestion suggestion) {
+    final url = suggestion.recipeUrl;
+    if (url == null) return const [];
+    final matches = widget.recipeBookController.recipes.where(
+      (r) => r.url == url,
+    );
+    if (matches.isEmpty) return const [];
+    final missing = suggestion.missing.map((m) => m.name).toSet();
+    return [
+      for (final ingredient in matches.first.ingredients)
+        if (!missing.contains(ingredient)) ingredient,
+    ];
   }
 
   @override
@@ -245,6 +282,7 @@ class _MainPageState extends State<MainPage> {
           excludedCount: controller.excludedCount,
           onOpenRecipe: _openRecipe,
           onCooked: _markCooked,
+          onOpenDetail: _openDetail,
         ),
         MainPhase.failed
             when controller.failureStage == FailureStage.matching =>
