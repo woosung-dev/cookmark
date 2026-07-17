@@ -40,4 +40,4 @@
 - [x] 로컬 schemathesis 재현 — 미문서 400 발견·문서화 후 546/546 통과
 - [x] 실 Gemini 스모크 (`scripts/smoke_llm.py`) — 총 $0.00146, image_tokens=1064 재현. 결과는 context-notes
 - [x] README·infra 시크릿 인벤토리 문서
-- [ ] `/code-review` → 반영 → push → PR
+- [x] `/code-review` → 반영(공개 명명·캐스트 제거·노트 정정) → push → PR #110 (CI green)
