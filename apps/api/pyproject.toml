@@ -14,6 +14,8 @@ dependencies = [
     "uvicorn[standard]",
     "authlib>=1.7.2",
     "itsdangerous>=2.2.0",
+    "google-genai>=2.12.1",
+    "httpx>=0.28.1",
 ]
 
 [dependency-groups]

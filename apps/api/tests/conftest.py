@@ -13,6 +13,7 @@ from testcontainers.postgres import PostgresContainer
 
 from src.auth.oidc import Provider
 from tests.idp import CLIENT_IDS, FakeIdp
+from tests.llm import FakeLLMService
 
 # 테스트 전용 허용 origin — 앱 코드가 아니라 env로 주입된다 (하드코딩 금지 AC의 검증 데이터)
 ALLOWED_ORIGIN = "http://localhost:5566"
@@ -38,16 +39,20 @@ def database_url() -> Iterator[str]:
         os.environ["GOOGLE_CLIENT_ID"] = CLIENT_IDS[Provider.GOOGLE]
         os.environ["GOOGLE_CLIENT_SECRET"] = "test-google-secret"
         os.environ["SESSION_SECRET"] = "test-session-secret-0123456789abcdef"
+        # 필수 필드라 env가 없으면 부팅이 죽는다(#103). 실 호출은 seam 페이크(tests/llm.py)가 막는다.
+        os.environ["GEMINI_API_KEY"] = "test-gemini-key"
 
         from src.auth.oidc import get_oauth
         from src.common.database import get_engine, get_sessionmaker
         from src.core.config import get_settings
+        from src.services.ai_processing import get_llm_service
 
         # 캐시 전부 클리어 — settings만 지우면 engine·oauth가 이전 값(.env.local)에 묶인 채 남는다
         get_settings.cache_clear()
         get_engine.cache_clear()
         get_sessionmaker.cache_clear()
         get_oauth.cache_clear()
+        get_llm_service.cache_clear()
         yield url
 
 
@@ -90,3 +95,20 @@ async def db_session(migrated_db: str) -> AsyncIterator[AsyncSession]:
 
     async with get_sessionmaker()() as session:
         yield session
+
+
+@pytest.fixture
+async def llm(migrated_db: str) -> AsyncIterator[FakeLLMService]:
+    """LLM seam 페이크 — dependency override는 스펙 #96이 승인한 seam ①에만 쓴다.
+
+    app이 모듈 싱글턴이라 override가 테스트 밖으로 새지 않게 finally로 반드시 걷는다.
+    """
+    from src.main import app
+    from src.services.ai_processing import get_llm_service
+
+    fake = FakeLLMService()
+    app.dependency_overrides[get_llm_service] = lambda: fake
+    try:
+        yield fake
+    finally:
+        app.dependency_overrides.pop(get_llm_service, None)

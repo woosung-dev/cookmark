@@ -23,6 +23,12 @@ class Settings(BaseSettings):
     # SessionMiddleware 서명 키 — OAuth state·nonce 운반 전용이고 우리 인증 세션과 무관하다(§9).
     session_secret: SecretStr
 
+    # LLM (#103 · ADR-0009 편차 ① — 구현체는 google-genai). 필수 필드로 둔다 —
+    # 없으면 부팅이 실패하는 편이 조용한 추출 장애보다 낫다 (IdP 자격증명 동형).
+    gemini_api_key: SecretStr
+    # 승계 프록시의 기본 모델 (api/_gemini.mjs) — env GEMINI_MODEL로 교체 가능, 파일럿 중 불변.
+    gemini_model: str = "gemini-3.1-flash-lite"
+
     @field_validator("cors_allowed_origins", mode="before")
     @classmethod
     def _split_comma_separated(cls, value: str | list[str]) -> list[str]:
