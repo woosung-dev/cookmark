@@ -22,6 +22,10 @@ dev = [
     "testcontainers[postgres]",
     "ruff",
     "mypy",
+    # 계약 게이트 — schemathesis(발행 계약 fuzzing) · pyyaml(스냅샷 렌더, 배포물 밖 도구라 dev)
+    "schemathesis",
+    "pyyaml",
+    "types-pyyaml",
 ]
 
 # backend.md §2·§11 — 앱은 `src.main:app`으로 구동된다. `src`를 그대로 패키지로 설치해
