@@ -35,3 +35,14 @@
 - **구글 `iss` 오버라이드(`claims_options`)는 채택하지 않았다.** 리서치는 `values: ["https://accounts.google.com", "accounts.google.com"]` 허용을 권했으나, **두 형태를 다 받으면 같은 사람이 계정 2개로 갈린다**(iss가 계정 키의 일부다). 기본값이면 bare 형태는 로그인 실패로 **시끄럽게** 터진다 — 조용한 계정 분열보다 낫다. 실제로 구글은 코드 플로우에서 `https://` 형태를 준다. **트리거 = 파운더 데모에서 iss 불일치가 나면 그때 정규화로 재결정.**
 - **미채택: metadata naming_convention** — 그린필드에 넣는 게 정석이나(제약 rename이 나중엔 아프다) 티켓 범위 밖이고 `SQLModel.metadata`는 #103 테이블과 공유된다. 지금 비용 ~7줄, #103 후 비용도 아직 낮다. **사용자 판단 사항으로 올린다.**
 - **미처리: 신규 (iss, sub) 동시 로그인 경합** — UNIQUE 위반으로 한쪽이 500, 사용자가 재시도하면 성공. 발현 조건이 좁아(같은 신규 사용자의 동시 첫 로그인) 1기 감수. 트리거 = 실제 발현.
+
+## 코드리뷰 반영 (2축)
+
+리뷰 결과 — Standards 하드 위반 0, Spec 결함 1(실재·수정함).
+
+- **[Spec·실결함] `test_migrations.py`가 전체 스위트에서 항상 실패했다** — 단독 실행만 해보고 전체를 안 돌린 내 누락이다(전체 스위트는 이 파일 추가 **전**에 돌렸다). 원인은 추측이 아니라 실측 — `get_engine()`이 lru_cache라 풀에 pytest-asyncio 세션 루프의 커넥션이 남는데, `command.check()`가 `asyncio.run()`으로 **새 루프**를 만들어 그걸 재사용하다 asyncpg가 `attached to a different loop`로 터진다. **고친 위치 = env.py**(호출부가 아니라) — 자기 루프에서 도는 걸 아는 모듈이 거기다. `dispose(close=False)`로 **실행 전에** 풀만 버린다(남의 루프 커넥션은 닫으려 드는 순간 같은 이유로 터지므로 close=False가 필수). 뒷정리 dispose는 #97이 이미 넣어둔 대칭짝이었다 — 앞쪽이 비어 있었다.
+- **[Standards] `# type: ignore` 3개 제거** — `_COOKIE_KWARGS` dict 언패킹이 시그니처 매칭을 깨서 붙였던 것. 타입 있는 `_set_session_cookie`/`_clear_session_cookie`로 바꿔 ignore 0·중복 0. 테스트의 `count_rows(statement: object)`도 `Select[tuple[int]]`로 정직하게.
+- **[Standards·수용] `auth_callback`이 §3의 "라우터 10줄 이하"를 넘는다(~13줄)** — authlib이 `Request`를 요구하고 §3은 서비스가 `Request`를 아는 걸 금지하므로 이 왕복은 라우터에 남을 수밖에 없다. 비즈니스 로직·DB 접근은 0이라 규칙의 의도("HTTP 전용")는 지킨다.
+- **[Standards·수용] repo `commit()` 2개가 동일 1줄** — §3이 commit을 Repository에 두라고 규정한 결과다(같은 session을 공유하니 어느 쪽을 불러도 같다). 서비스가 session을 들면 §3 위반이라 seam을 하나로 못 줄인다. login의 §3 주석이 이걸 설명한다.
+- **[Standards·수용] `kakao_client_id`가 `SecretStr`이 아니다** — OAuth `client_id`는 authorize URL에 실려 나가는 공개값이라 비밀이 아니다. 카카오가 "REST API 키"라 부르는 게 혼동의 원인. `client_secret`만 `SecretStr`이다.
+- **CI 조건 확인** — `.env.local`을 치우고(=CI 환경) 전체 스위트 green 확인. 병렬 #99 세션이 "`.env.local`이 로컬 green을 가린다"는 함정을 남겨 교차 확인했다.

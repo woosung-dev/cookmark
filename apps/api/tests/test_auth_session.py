@@ -3,7 +3,7 @@ from datetime import UTC, datetime, timedelta
 from uuid import UUID
 
 import httpx
-from sqlalchemy import func, select, update
+from sqlalchemy import Select, func, select, update
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlmodel import col
 
@@ -15,8 +15,8 @@ from tests.idp import FakeIdp
 ME = "/api/v1/auth/me"
 
 
-async def count_rows(db_session: AsyncSession, statement: object) -> int:
-    result = await db_session.execute(statement)  # type: ignore[arg-type]
+async def count_rows(db_session: AsyncSession, statement: Select[tuple[int]]) -> int:
+    result = await db_session.execute(statement)
     return result.scalar_one()
 
 

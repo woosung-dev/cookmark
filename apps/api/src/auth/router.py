@@ -22,7 +22,25 @@ Service = Annotated[AuthService, Depends(get_auth_service)]
 
 # 쿠키 속성은 §9 고정 — HttpOnly(스크립트 차단)·Secure(평문 전송 차단)·Lax(cross-site 전송 차단).
 # 브라우저는 localhost를 보안 컨텍스트로 취급하므로 Secure가 로컬 http 데모를 막지 않는다.
-_COOKIE_KWARGS = {"path": "/", "httponly": True, "secure": True, "samesite": "lax"}
+# 세팅과 삭제가 같은 속성을 써야 브라우저가 같은 쿠키로 알아본다 — 그래서 둘을 나란히 둔다.
+
+
+def _set_session_cookie(response: Response, token: str) -> None:
+    response.set_cookie(
+        SESSION_COOKIE,
+        token,
+        max_age=int(SESSION_TTL.total_seconds()),
+        path="/",
+        httponly=True,
+        secure=True,
+        samesite="lax",
+    )
+
+
+def _clear_session_cookie(response: Response) -> None:
+    response.delete_cookie(
+        SESSION_COOKIE, path="/", httponly=True, secure=True, samesite="lax"
+    )
 
 
 @router.get("/{provider}/login")
@@ -48,12 +66,7 @@ async def auth_callback(
         ) from exc
 
     issued = await service.login(identity.iss, identity.sub)
-    response.set_cookie(
-        SESSION_COOKIE,
-        issued.token,
-        max_age=int(SESSION_TTL.total_seconds()),
-        **_COOKIE_KWARGS,  # type: ignore[arg-type]
-    )
+    _set_session_cookie(response, issued.token)
     return SessionResponse(
         token=issued.token,
         expires_at=issued.expires_at,
@@ -73,7 +86,7 @@ async def logout(request: Request, response: Response, service: Service) -> None
     token = extract_session_token(request)
     if token is not None:
         await service.logout(token)
-    response.delete_cookie(SESSION_COOKIE, **_COOKIE_KWARGS)  # type: ignore[arg-type]
+    _clear_session_cookie(response)
 
 
 @router.delete("/account", status_code=status.HTTP_204_NO_CONTENT)
@@ -82,4 +95,4 @@ async def withdraw(
 ) -> None:
     """탈퇴 — 계정·세션 즉시 하드 삭제. 지울 대상은 세션에서 나오지 클라이언트가 대지 않는다."""
     await service.withdraw(account)
-    response.delete_cookie(SESSION_COOKIE, **_COOKIE_KWARGS)  # type: ignore[arg-type]
+    _clear_session_cookie(response)
