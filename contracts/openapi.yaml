@@ -1,0 +1,21 @@
+# 생성물 — 수기로 수정하지 말 것. 정본은 apps/api의 Pydantic 모델이다 (ADR-0009 계약 절).
+# 재생성: cd apps/api && uv run python scripts/export_openapi.py
+openapi: 3.1.0
+info:
+  title: cookmark-api
+  version: 0.1.0
+paths:
+  /api/v1/health:
+    get:
+      summary: Health
+      operationId: health_api_v1_health_get
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                additionalProperties:
+                  type: string
+                type: object
+                title: Response Health Api V1 Health Get
