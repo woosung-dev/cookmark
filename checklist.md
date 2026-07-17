@@ -34,4 +34,4 @@
 ## 마무리
 
 - [x] `/code-review` + 지적 반영 — Standards 하드 위반 0 · Spec 실결함 1건(드리프트 가드가 전체 스위트에서 항상 실패) 수정, `type: ignore` 3건 제거 (6793800)
-- [ ] push → PR → CI green → 티켓 코멘트
+- [x] push → PR [#107](https://github.com/woosung-dev/cookmark/issues/107) → CI green(run 29584277588, `29 passed in 8.18s` — 러너 testcontainers 실구동) → 티켓 코멘트
