@@ -57,6 +57,13 @@ class _RecognitionLoadingState extends State<RecognitionLoading>
     super.dispose();
   }
 
+  /// 진행바 채움 — 경과 시간 단계에 연동한 실제 신호다(가짜 재료 개수 아님, ADR-0007).
+  double get _progress => switch (_stage) {
+    LoadingStage.early => 0.35,
+    LoadingStage.mid => 0.7,
+    LoadingStage.slow => 0.92,
+  };
+
   @override
   Widget build(BuildContext context) {
     return Column(
@@ -70,6 +77,31 @@ class _RecognitionLoadingState extends State<RecognitionLoading>
           key: const Key('loading-message'),
           style: AppTypography.body.copyWith(color: AppColors.muted),
           textAlign: TextAlign.center,
+        ),
+        const SizedBox(height: Space.xs),
+        Text(
+          '사진에서 재료를 확인하고 있어요.',
+          style: AppTypography.footnote.copyWith(color: AppColors.muted),
+          textAlign: TextAlign.center,
+        ),
+        const SizedBox(height: Space.lg),
+        // 진행바는 경과 시간에 연동된 실제 신호 — 재료 개수는 인식 중엔 미상이라 표기하지 않는다(정직, ADR-0007).
+        ClipRRect(
+          borderRadius: BorderRadius.circular(Radii.pill),
+          child: LinearProgressIndicator(
+            value: _progress,
+            minHeight: 6,
+            backgroundColor: AppColors.sunken,
+            color: AppColors.action,
+          ),
+        ),
+        const SizedBox(height: Space.sm),
+        Align(
+          alignment: Alignment.centerRight,
+          child: Text(
+            '보통 5초 정도 걸려요',
+            style: AppTypography.caption.copyWith(color: AppColors.muted),
+          ),
         ),
         const SizedBox(height: Space.lg),
         _ChecklistSkeleton(shimmer: _shimmer),
