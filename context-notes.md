@@ -1,26 +1,21 @@
-# Context Notes — #97 api-1 스캐폴드 + 검증 하네스
+# Context Notes — #100 api-4 인증 (카카오·구글 OIDC 세션 + 탈퇴 하드 삭제)
 
-자율결정 감사 추적. 결정/근거 1줄씩 append. 계획: `~/.claude/plans/97-dazzling-manatee.md`.
+자율결정 감사 추적. 결정/근거 1줄씩 append. 계획: `~/.claude/plans/100-auth-oidc-session.md`.
 
 ## 스코프 경계 (착수 전 확정)
 
-- **#97 = 로컬 절반만.** Dockerfile·Cloud Run·WIF·Secret Manager는 #98, OpenAPI 스냅샷·드리프트 가드는 #99 — 이 PR에 넣지 않는다.
+- **#100 = 인증 수직 슬라이스만.** 레시피 북 CRUD·스코프드 Repository는 #103, LLM 승계는 #101, 배포·Secret Manager는 #98, OpenAPI 스냅샷·드리프트 가드는 #99 — 이 PR에 넣지 않는다.
 - 루트 `api/`(.mjs 프록시)·`vercel.json`·`apps/mobile` 무접촉 (파일럿 가드 ~8/5).
+- 병렬 worktree 있음(#98·#99) — 공유 파일(`conftest.py`·`main.py`·`config.py`) 편집은 최소 표면으로.
 
-## 결정 로그
+## 결정 로그 (착수 전)
 
-- **health = DB 미접촉 liveness** — DATABASE_URL이 죽은 값이어도 uvicorn이 뜨게(engine lazy). DB 관통 증명은 테스트가 담당(SELECT 1 + alembic_version 존재). readiness 분리는 #98에서 필요 시.
-- **`allow_credentials` 미설정(기본 False)** — 쿠키 세션은 #100의 몫. §10 함정(credentials+wildcard 불법)은 와일드카드 금지로 이미 차단되지만, 선지불 안 함.
-- **빈 베이스라인 리비전 1개** — 모델이 아직 없다(#100·#103). `upgrade head`가 alembic_version 테이블을 실 DB에 쓰는 것으로 파이프라인을 증명.
-- **Python 3.13 핀** — asyncpg·SQLModel 호환 확인된 현행 안정판. 시스템 3.14에 기대지 않고 `.python-version`으로 고정.
-- **테스트의 URL 주입 경로 = env var** — Settings가 env_file보다 실제 env var를 우선하므로, conftest가 `DATABASE_URL`을 컨테이너 URL로 설정하고 settings 캐시를 클리어한다. dependency override 없음(스펙 "코드 우회 없음"과 정합).
-- **CORS 콤마 파싱** — pydantic-settings `list[str]`는 JSON 선-디코드라 콤마 값이 크래시(§10 실측 선례) → `NoDecode` + validator.
+- **세션 토큰은 DB에 SHA-256 해시로만 보관** — 원문 보관 시 DB·백업 유출이 곧 세션 탈취다. ADR-0009가 PITR 백업 잔존을 명시적으로 인정하므로(§12.3), 그 잔존물이 살아있는 세션이면 안 된다. 표면 +3줄. 티켓은 "불투명 세션 ID"만 요구하고 해시를 요구하진 않았다 — 자율 판단.
+- **`expires_at` 포함, TTL 30일 모듈 상수** — 쿠키 `Max-Age`의 서버측 짝이 없으면 토큰이 영구 유효해진다(쿠키만 만료되고 Bearer로는 계속 통과). 설정 노브는 안 만든다(요구 없음). 만료 행 청소 잡은 범위 밖 — 트리거 = 행 증가가 실문제화.
+- **계정 중복 방지 = UNIQUE(iss, sub) DB 제약** — "조회 후 없으면 생성" 관례가 아니라 구조로 막는다(§12.2의 정신).
+- **`SessionMiddleware`는 우리 인증 세션이 아니다** — authlib의 OAuth state·nonce 운반 전용(itsdangerous 서명 쿠키, 수명 5분). ADR-0009 비밀 5개 중 "세션 서명/암호화 키"의 소비처가 정확히 여기다. 우리 세션은 DB 테이블이고 불투명 ID다(§9).
+- **콜백 응답 = 쿠키 + JSON(토큰 포함)** — 리다이렉트 대상은 소비할 FE가 1기에 없어(스펙 Out of Scope: `apps/mobile` 무변경) 설정 선지불이다. 토큰을 본문에 넣는 근거는 #77 "같은 불투명 토큰을 네이티브가 Bearer로" — 본문 말고는 비-브라우저 클라이언트가 토큰을 얻을 경로가 없다. **트리거 = FE 소비 시 리다이렉트 재결정.**
+- **`redirect_uri` = `request.url_for`** — 설정 0으로 로컬 데모가 성립한다. Cloud Run HTTPS 프록시 헤더(`--forwarded-allow-ips`) 배선은 #98의 몫이며, 그때 x-forwarded-proto가 없으면 http URL이 나가 IdP 등록값과 어긋난다는 것이 인수인계 사항.
+- **provider 자격증명은 필수 필드(placeholder 아님)** — 없으면 부팅 실패가 조용한 로그인 장애보다 낫다. `.env.local`(gitignored)에 로컬 값, 배포는 Secret Manager(#98).
 
 ## 구현 중 발견·결정 (append)
-
-- **greenlet 명시 의존(`sqlalchemy[asyncio]`)** — macOS arm64는 sqlalchemy의 greenlet 플랫폼 마커 밖이라 asyncio 사용 시 미설치 크래시. 실측 후 추가.
-- **E501 제외** — 한국어 주석은 문자 수 기준이 실폭과 안 맞는다. 코드 줄 길이는 `ruff format`이 보장.
-- **isort `known-third-party = ["alembic"]`** — 로컬 `alembic/` 디렉토리 때문에 설치 패키지가 first-party로 오분류되는 것 방지.
-- **pytest-asyncio 세션 단일 루프** — engine 풀 커넥션이 테스트 간 다른 루프로 재사용되는 asyncpg 폭발 방지(후속 티켓 DB 테스트 대비 하네스 차원 선결).
-- **수동 확인은 8090 포트** — 로컬 8000이 딴 프로세스에 점유돼 있었음. 코드 기본값과 무관(uvicorn 인자).
-- **브라우저 실검증 증거** — 허용 origin(5566) `FETCH_OK {"status":"ok"}` · 비허용 origin(7777) `FETCH_BLOCKED Failed to fetch` + preflight curl 200/400 교차 확인.
