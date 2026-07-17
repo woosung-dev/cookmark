@@ -4,21 +4,38 @@ from uuid import UUID, uuid4
 
 import httpx
 import pytest
-from sqlalchemy import func, select
+from sqlalchemy import Select, func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlmodel import col
 
+from src.auth.oidc import Provider
 from src.recipes.models import Recipe
 from src.recipes.repository import RecipeBookRepository
 from tests.idp import FakeIdp
 from tests.llm import FakeLLMService
-from tests.test_recipes_crud import RECIPES, count_rows, login_bearer
+
+RECIPES = "/api/v1/recipes"
 
 
 @pytest.fixture(autouse=True)
 def _llm_guard(llm: FakeLLMService) -> FakeLLMService:
     """전 테스트에 페이크 주입을 강제한다 — override 누락 시 실 Gemini로 새는 함정 차단."""
     return llm
+
+
+# 테스트 파일은 자급자족한다(리포 선례 — count_rows도 파일마다 재정의). 테스트 모듈 간 import 금지.
+async def login_bearer(
+    client: httpx.AsyncClient, idp: FakeIdp, sub: str
+) -> dict[str, str]:
+    """실 로그인 관통 후 Bearer 헤더 반환 — 쿠키 jar 잔존이 계정을 섞지 않게 비운다."""
+    token = (await idp.login(client, Provider.KAKAO, sub=sub)).json()["token"]
+    client.cookies.clear()
+    return {"Authorization": f"Bearer {token}"}
+
+
+async def count_rows(db_session: AsyncSession, statement: Select[tuple[int]]) -> int:
+    result = await db_session.execute(statement)
+    return result.scalar_one()
 
 
 async def test_cross_tenant_get_patch_delete_are_404(
@@ -88,8 +105,6 @@ async def test_withdraw_cascades_recipes_to_zero_rows(
     db_session: AsyncSession,
 ) -> None:
     """AC: 탈퇴 → 그 계정의 레시피 행 0 — FK ON DELETE CASCADE를 실 DB에서 증명한다(§12.3)."""
-    from src.auth.oidc import Provider
-
     login = (await idp.login(client, Provider.KAKAO, sub="withdrawing-cook")).json()
     headers = {"Authorization": f"Bearer {login['token']}"}
     client.cookies.clear()
