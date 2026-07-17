@@ -28,3 +28,11 @@
 - **F3(MEDIUM) press 일관성**: press-scale가 3개 primary에만 있어 나머지 filled 버튼은 무반응 → 전 화면/섹션 전폭 primary(recipe-form·failure retry·rematch·backup export)로 확장. `PressableScale`에 `enabled` 추가해 비활성 버튼은 피드백 안 줌(request-suggestions·recipe-form). 컴팩트 인라인 제출(추가·vague·import)은 다른 어포던스 클래스라 제외.
 - **F5/F6/F8a(POLISH)**: 빈 제안 상태를 아이콘+문구로 구성(다른 빈 상태와 동일)·에러 카드 버튼 세로 스택(긴 폴백 라벨 2줄 접힘 제거)·매칭 스켈레톤 텍스트 라인 라운드 pill 통일.
 - **기각(근거)**: F2(backup/추가 primary 강등) — 백업 CTA 강조는 파일럿 데이터 유실(카톡 인앱) 대비라 유지·추가는 입력 옆 제출 명료성. F4(디바이더 인셋 48) — 체크리스트/레시피/스켈레톤 리스트 디바이더를 앱 전체에서 16으로 일관 유지(부분 변경이 오히려 불일치). F8b(문장 속 숫자 mono) — `find.text`/`find.textContaining` 잠금이라 하드제약4 우선, §3 명명 mono 타깃(0/3·푸터)은 이미 충족.
+
+## 2단계 P2~P7 결정 (목업 풀 패리티, ADR-0001 역전)
+- **P2 히어로**: 파운더가 "그라디언트 스크림 + 흰 워드마크" 택함. 홍시→차콜 단일 그라디언트(overlay 없이)라 흰 텍스트가 하단 차콜(#241511) 위에 놓여 AA 통과 — 브랜드 필(#E8552D) 위 흰 텍스트 금지 규칙(대비 3.6) 우회. 워드마크 32px(§4 40px+ 상한 준수). 신뢰 라인은 카드가 아니라 히어로 아래 별도(흰-텍스트-온-필 회피). 히어로 200px가 800×600 테스트에서 스킵 링크를 밀어 `pumpPastOnboarding`에 ensureVisible+스크롤 리셋 함께 갱신(실기기 무영향).
+- **P6 로딩**: 파운더가 "정직 버전" 택함. 진행바는 `LoadingStage`(early/mid/slow)→0.35/0.7/0.92 determinate 매핑(경과시간 실신호, indeterminate 무한 애니 회피). 가짜 "재료 N개"는 인식 중 미상이라 생략. `loading_stage.dart` 무수정(문자열 E2E 잠금).
+- **P5 레시피 북**: 가짜 과금 크롬은 실 카운트×가짜 상한 30(저장 안 막음). 출처 라벨은 `url` host 파싱(youtu→유튜브 등) 렌더타임 파생 — 재료 join 앞에 붙여 `돼지고기` 등 E2E 재료 문자열 보존. remove X 유지(E2E 탭), chevron 생략(레시피 상세=2번째 push 금지).
+- **P4 상세**: pop-with-result가 핵심 — "이거 했어요"는 결과와 함께 pop만, 메인이 뒤에 `_markCooked` 이어받아 토스트가 메인 위(오펀 방지). "영상 보기"는 주입 콜백(pop 없음). 단일 push는 `main_page._openDetail`에만(navigation_test 0→1). `styleOf`·`matchPercentOf`를 카드→상세 공유 top-level로 추출(드리프트 방지). 라벨 배지는 상세용 무키 위젯(카드의 `label-badge-*` 키 중복 회피). 있는 재료=레시피 재료−부족 파생(저장소 무변경, saved만), 담기=비상호작용 장식 칩. E2E +1(카드탭→상세→뒤로→재진입→이거했어요→메인 토스트·cooked 로그).
+- **P7**: `docs/adr/0007` 신규(ADR-0001 역전·백엔드 이월 명시·코드가 인용하던 dangling 참조 닫음). DESIGN §4·§7 "탭 바 없음"→"하단 탭 바" 갱신. `main_visual_qa.dart`에 `detail` 상태 추가(home 직접, push 없음). 6화면 Playwright 스크린샷 전부 목업과 일치 확인(scratchpad/qa-shots).
+- **하드 제약 유지 증거**: `git diff main...HEAD --name-only`에 storage·app_event·debug_metrics·debug_footer·loading_stage 없음. 매 티켓 format·analyze·test290·E2E green. 각 티켓 시맨틱 커밋.

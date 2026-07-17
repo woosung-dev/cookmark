@@ -2,7 +2,8 @@
 //
 // FakeLlmGateway를 주입하고 `?state=` 쿼리로 각 화면을 선구동한다. 실행:
 //   flutter run -d chrome -t lib/main_visual_qa.dart
-//   → http://<host>/#/?state=suggestions  (onboarding|upload|loading|checklist|matching|suggestions|error|error-matching)
+//   → http://<host>/#/?state=suggestions
+//   states: onboarding|upload|loading|checklist|matching|suggestions|detail|error|error-matching|recipebook|recipebook-empty
 import 'dart:async';
 import 'dart:typed_data';
 
@@ -14,6 +15,7 @@ import 'app.dart';
 import 'data/storage.dart';
 import 'domain/recipe.dart';
 import 'domain/session_state.dart';
+import 'domain/suggestion.dart';
 import 'llm/fake_llm_gateway.dart';
 import 'llm/llm_gateway.dart';
 import 'theme/app_theme.dart';
@@ -21,6 +23,7 @@ import 'ui/backup_controller.dart';
 import 'ui/main_controller.dart';
 import 'ui/recipe_book_controller.dart';
 import 'ui/recipe_book_page.dart';
+import 'ui/suggestion_detail_page.dart';
 
 /// 리사이즈·스캔 시머가 그릴 수 있는 진짜 JPEG(무늬가 있어야 압축이 살아난다).
 Uint8List _fakePhoto() {
@@ -71,6 +74,32 @@ Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
   final storage = await Storage.open();
   final state = Uri.base.queryParameters['state'] ?? 'checklist';
+
+  // 제안 상세도 자체 Scaffold라 home으로 직접 띄운다(Navigator.push 없음 — 트립와이어 무영향).
+  if (state == 'detail') {
+    await storage.writeRecipes(_seedRecipes);
+    const suggestion = Suggestion(
+      menu: '김치찌개',
+      source: SuggestionSource.saved,
+      missing: [MissingIngredient(name: '돼지고기')],
+      reason: '김치·두부·대파가 있어요.',
+      recipeUrl: 'https://youtu.be/abc',
+    );
+    runApp(
+      MaterialApp(
+        title: '냉파',
+        debugShowCheckedModeBanner: false,
+        theme: buildAppTheme(),
+        home: SuggestionDetailPage(
+          suggestion: suggestion,
+          rank: 1,
+          onOpenRecipe: () {},
+          available: const ['김치', '두부', '대파'],
+        ),
+      ),
+    );
+    return;
+  }
 
   // 레시피 북은 자체 Scaffold라 home으로 직접 띄운다(Navigator.push 없음 — 트립와이어 무영향).
   if (state == 'recipebook' || state == 'recipebook-empty') {

@@ -3,7 +3,9 @@
 > 이 문서 하나로 이어받는다. 새 세션은 이걸 먼저 읽고 `checklist.md`·`context-notes.md`·`~/.claude/plans/buzzing-plotting-gadget.md`를 보조로 본다.
 
 ## 지금 어디까지 왔나 (2026-07-17)
-브랜치 **`feat/ui-design-alignment`**, HEAD **`3ac355b`**, 작업트리 clean. `main` 금지.
+브랜치 **`feat/ui-design-alignment`**, 작업트리 clean. `main` 금지.
+
+**★ 2단계(목업 풀 패리티) 전량 완료 — P1~P7.** 6화면 Playwright 스크린샷이 `applied-app.jpeg`와 일치 확인, 전 게이트 그린(format·analyze·test **290**·E2E **32**). 하드 제약 4개 유지(무수정 파일 증거·푸터 포맷·E2E 키·push≤1). 남은 건 **백엔드 이월 트랙**(아래)과 **파운더 재배포 결정**뿐. 커밋: P2 `e3fbe2c` · P5 `92d1862` · P6 `9a549dd` · P4 `8786b87` · P7(ADR·DESIGN·QA엔트리·문서).
 
 **1단계(완료·머지 대기) — DESIGN.md 토큰 정합 + 마감 감사**: 폰트 번들(Pretendard+IBM Plex Mono)·아이콘 outlined·라운드 토큰·press-scale·매칭 로딩 스켈레톤·레시피 북 인셋 리스트·design-review 6건 반영. 커밋 `44d42d3`~`b57cdc4`.
 
@@ -11,12 +13,12 @@
 - ✅ **P1** 하단 탭 바 셸 (`0e4d1a0`) — `lib/ui/root_shell.dart` 신규. 메인/레시피북 2탭, 선택 탭만 렌더(상태는 컨트롤러 보존). `app.dart` home=RootShell. `main_page`의 Navigator.push 제거→`onOpenRecipeBook` 콜백. NavigationBar 테마(app_theme). 테스트 갱신(아래).
 - ✅ **P3** 목업형 제안 카드 (`3ac355b`) — `lib/ui/widgets/suggestion_card.dart` 재작성 + `photo_placeholder.dart` 신규. 사진 슬롯(홍시-틴트 placeholder)+`1위·96% 일치` 배지+라벨+출처+`영상 보기`+`이거 했어요`. 스크린샷 육안 확인 완료(목업과 유사).
 
-## 남은 일 (순서대로)
-- ⬜ **P2 브랜드 히어로·로고·아이콘·온기**: 온보딩(`onboarding_card.dart`)에 홍시 히어로 헤더 + `냉파` 워드마크(목업 screen 1의 따뜻한 상단). 업로드/버튼 leading 아이콘(카메라 등). 정본 §2가 브랜드색을 "로고·히어로·큰 필·일러스트"에 허용 — 실 사진 없이 홍시 fill/일러스트로. 지금 앱이 휑한 주원인이 이 누락이다.
-- ⬜ **P4 제안 상세 화면 (push)**: 목업 screen 5. 카드 탭(SuggestionCard의 `onTap` 이미 준비됨)→상세 push(대형 사진 placeholder·`영상에서 이어보기`·있는/부족 재료·`이거 했어요`). **push는 반드시 `main_page.dart`에** 둘 것 — `navigation_test`가 명령형 push ≤1 & main_page 위치를 강제. openRecipe/markCooked 배선 재사용.
-- ⬜ **P5 레시피 북 목업 스타일**: 목업 screen 6. `recipe_book_page.dart`에 프리미엄 크롬(`23/30 저장됨`+프로그레스+`무료` 배지+`프리미엄으로 무제한`) + 리스트 셀에 썸네일 placeholder + chevron. **수익화는 UI 크롬만**(파일럿 가짜 과금 — 파운더가 원함). 키 recipe-tile/remove/retry·빈상태 텍스트 보존.
-- ⬜ **P6 인식 화면**: 목업 screen 2. `recognition_loading.dart`에 진행바 + `재료 N개 확인 중 · 보통 5초 정도 걸려요`. `loading-message` 키 보존.
-- ⬜ **P7 ADR-0007 + 최종**: `docs/adr/0007-*.md`로 ADR-0001 역전 기록(측정 순도 완화·매칭%/사진 백엔드 이월 명시). `DESIGN.md`에 탭바/사진 반영 여부 판단. 전 게이트+E2E green, 목업 대조 스크린샷, 보고.
+## 남은 일 (순서대로) — 전부 완료 ✅
+- ✅ **P2 브랜드 히어로·워드마크·온기** (`e3fbe2c`): `brand_hero.dart` 신규(홍시→차콜 그라디언트+흰 워드마크, AA OK) + 신뢰 라인 + 업로드 버튼 `냉장고 사진 올리기`. AppBar 유지(recipe-book-link).
+- ✅ **P4 제안 상세 화면** (`8786b87`): `suggestion_detail_page.dart` 신규. 카드 탭→`main_page._openDetail` **축복 단일 push**. "이거 했어요"=pop-with-result(토스트 메인 안착), "영상 보기"=주입 콜백. E2E +1(31→32).
+- ✅ **P5 레시피 북 목업** (`92d1862`): 가짜 과금 크롬(N/30·무료·프리미엄) + 썸네일 + 출처 라벨. 재료 문자열·remove X 보존, chevron 생략.
+- ✅ **P6 인식 화면** (`9a549dd`): 진행바(단계 연동)+부제+`보통 5초 정도 걸려요`. 가짜 개수 생략(정직). `loading-message`·`loading_stage.dart` 보존.
+- ✅ **P7 ADR-0007 + 최종**: `docs/adr/0007-tab-shell-and-blessed-detail-push.md` 신규(ADR-0001 역전·이월 명시·dangling 참조 닫음). `DESIGN.md` §4·§7 갱신. 6화면 스크린샷 대조·전 게이트 green.
 
 ## 백엔드 이월 (프론트만으론 못 함 — 별도 트랙)
 1. **매칭 %**: 지금은 placeholder(`suggestion_card._matchPercent`가 부족 수로 근사). 진짜는 LLM 프록시가 매치 점수를 반환해야 함 → `proxy_llm_gateway`/서버리스 함수 + `Suggestion` 모델 스키마 변경. **측정 편향 주의**(파일럿).
