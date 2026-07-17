@@ -18,10 +18,10 @@
 - [x] 비허용 origin 브라우저 차단 — 수동 확인 1회 (Playwright)
 - [x] ASGI + testcontainers 실 Postgres 통합 테스트 ≥1 green
 - [x] `alembic upgrade head` 실 DB 적용 (테스트 컨테이너에서 증명)
-- [ ] PR CI에서 pytest·ruff·mypy 전부 통과
+- [x] PR CI에서 pytest·ruff·mypy 전부 통과 — run 29581508224, pytest `7 passed in 9.23s`(러너 testcontainers 실구동)
 - [x] CORS 기본 빈 목록·origin 하드코딩 없음
 
 ## 마무리
 
-- [ ] `/code-review` + 지적 반영
-- [ ] 시맨틱 커밋 → push → PR → CI green → 티켓 코멘트
+- [x] `/code-review` + 지적 반영 — 2축(Standards·Spec) 하드 위반 0, 반영 3건(5863bd4)
+- [x] 시맨틱 커밋 4개 → push → PR #105 → CI green → 티켓 코멘트
