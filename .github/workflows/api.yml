@@ -40,3 +40,118 @@ jobs:
       # ubuntu-latest에 Docker 상주 — testcontainers 실 Postgres가 그대로 돈다.
       - name: pytest (ASGI + testcontainers 실 Postgres)
         run: uv run pytest -v
+
+  # 배포 — main push만, 게이트 통과 후에만 (#98).
+  #
+  # 별도 워크플로가 아니라 여기 job인 이유는 `needs: gate` 하나다 — "게이트를 통과한 코드만 배포된다"는
+  # 불변식이 한 파일에서 성립한다. 별도 파일이면 workflow_run 체이닝이 필요한데 그건 기본 브랜치 버전으로
+  # 도는 함정이 붙는다. #88의 "CI가 이미 GitHub Actions라 한 곳에 모인다"와도 정합.
+  #
+  # 대가 — main의 무관한 푸시(docs 등)도 리비전을 하나 만든다. scale-to-zero + 사용자 0이라 비용은 0에
+  # 수렴하고, 부수적으로 "배포된 것 = main"이 항상 참이 된다.
+  deploy:
+    name: Cloud Run 서울 배포
+    needs: gate
+    # 프로비저닝 전엔 통째로 skip한다 — 가드가 없으면 시크릿 없는 main push마다 CI가 영구히 빨개진다.
+    # 파운더가 리포 변수를 넣는 순간(infra/README 절차 마지막 단계) 파이프라인이 발화한다.
+    # skip은 실패가 아니라서 런은 green을 유지한다.
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main' && vars.GCP_PROJECT_ID != ''
+    runs-on: ubuntu-latest
+    # 이 job에만 준다. 워크플로 레벨로 올리면 매 PR의 gate까지 id-token을 들고 돌게 된다.
+    permissions:
+      contents: read
+      id-token: write # WIF — GitHub OIDC 토큰 발급용. 리포 리소스 쓰기 권한이 아니다.
+    # 배포는 직렬 대기다. 상위 concurrency는 cancel-in-progress: true라 연속 push 시 배포를 중도에 죽인다 —
+    # 취소는 러너 분을 아끼자는 것이지 배포를 죽이자는 게 아니다.
+    concurrency:
+      group: api-deploy-prod
+      cancel-in-progress: false
+    env:
+      REGION: asia-northeast3 # 서울 — ADR-0009(무료 US 등급 의식적 포기)
+      SERVICE: cookmark-api
+      AR_REPO: cookmark
+      DB_SECRET: cookmark-database-url # Secret Manager 시크릿 이름 — 상수라 변수로 뽑지 않는다(infra/README §3)
+    steps:
+      - uses: actions/checkout@v4
+
+      # 키 파일 없음 — WIF로 배포자 SA를 임퍼서네이트한다.
+      # Cloud Run은 Direct WIF를 지원하지 않아 service_account가 필수다(구글 문서 명시).
+      # 일반 IAM 문서는 direct를 권장하므로 그대로 따르면 push까지 통과한 뒤 deploy에서 죽는다.
+      - id: auth
+        uses: google-github-actions/auth@v3
+        with:
+          project_id: ${{ vars.GCP_PROJECT_ID }}
+          workload_identity_provider: ${{ vars.GCP_WIF_PROVIDER }}
+          service_account: ${{ vars.GCP_DEPLOYER_SA }}
+
+      - uses: google-github-actions/setup-gcloud@v3
+
+      - name: Artifact Registry 도커 인증
+        run: gcloud auth configure-docker "${REGION}-docker.pkg.dev" --quiet
+
+      # 빌드 컨텍스트는 apps/api다 (working-directory 기본값). 리포 루트를 주면
+      # Dockerfile의 --mount=type=bind,source=uv.lock이 컨텍스트 기준이라 pyproject.toml을 못 찾고 깨진다.
+      # 태그는 커밋 SHA — latest는 어느 리비전이 뭘 서빙하는지 못 말한다.
+      - name: 이미지 빌드·푸시
+        run: |
+          IMAGE="${REGION}-docker.pkg.dev/${{ vars.GCP_PROJECT_ID }}/${AR_REPO}/${SERVICE}:${GITHUB_SHA}"
+          docker build -f Dockerfile -t "$IMAGE" .
+          docker push "$IMAGE"
+          echo "IMAGE=$IMAGE" >> "$GITHUB_ENV"
+
+      # 마이그레이션 — 방금 빌드한 이미지를 러너에서 1회 실행한다. §8의 의도("배포 전 자동 실행")를 지키되,
+      # 메커니즘 괄호 "(Docker entrypoint)"는 따르지 않는다 — entrypoint는 Cloud Run에서 §8의 2단계 롤백을
+      # 무효화한다(옛 이미지가 새 alembic_version을 못 해석해 exit 255, 부팅 불가). 근거·실측은 context-notes.md.
+      #
+      # 왜 서빙 컨테이너가 아니라 러너의 docker run인가.
+      #   - 러너 1개 = docker run 1개라 동시 마이그레이션 레이스가 구조적으로 불가능하다(실측: 6개 동시 기동 시 1~2개 크래시).
+      #   - uvicorn이 alembic을 부르지 않으므로 마이그레이션 후 배포가 실패해도 옛 리비전이 계속 부팅된다(롤백 생존).
+      #   - 프로덕션과 바이트 동일한 이미지다(Dockerfile은 CMD라 인자 override로 alembic이 그대로 돈다 — 실측).
+      #   - 플랫폼 결합이 얕다(이미지·GitHub Actions·Docker는 AWS 이동 시 상수, 시크릿 조회 스텝만 교체).
+      # docker run --rm은 컨테이너 종료 코드를 전파하므로 마이그레이션 실패가 배포 스텝을 막는다(실측: rc=255 전파).
+      - name: DB URL 조회 (WIF — Secret Manager에서 직접, GitHub Secret 경유 안 함)
+        id: dbsecret
+        uses: google-github-actions/get-secretmanager-secrets@v3
+        with:
+          secrets: |-
+            database_url:${{ vars.GCP_PROJECT_ID }}/${{ env.DB_SECRET }}
+      # ${{ }}를 run 스크립트에 직접 박지 않고 env로 넘긴다 — 직접 박으면 bash 파싱 전에 텍스트로 치환돼
+      # 값에 든 따옴표·백틱·$(...)가 인용을 탈출한다(GitHub Actions 스크립트 인젝션 안티패턴). env 경유는 리터럴로 도착한다.
+      - name: DB 마이그레이션 (프로덕션 이미지 그대로)
+        env:
+          DATABASE_URL: ${{ steps.dbsecret.outputs.database_url }}
+        run: docker run --rm -e DATABASE_URL "$IMAGE" alembic upgrade head
+
+      # 서비스·allUsers invoker 바인딩은 파운더가 프로비저닝에서 1회 만든다(infra/README) —
+      # 그래서 여기엔 --allow-unauthenticated가 없고, 배포자 SA는 run.admin이 아니라 run.developer로 족하다
+      # (--allow-unauthenticated는 IAM 정책 쓰기라 run.services.setIamPolicy가 필요한데 developer엔 없다).
+      #
+      # --port=8000 은 생략 불가다. Cloud Run 기본은 8080이라 빠뜨리면 프로브가 8080을 두드리고
+      # 컨테이너는 8000을 듣고 있어서 "failed to start and listen on the port" 로 죽는다 — 앱을 의심하게 만드는 메시지다.
+      # 이 플래그가 $PORT=8000 도 함께 세팅하므로 컨테이너 고정값과 구조적으로 일치한다.
+      #
+      # --set-secrets 는 env 주입이라 앱 코드 변경 0이다(#88). 값은 인스턴스 기동 시점에 1회 해석된다 —
+      # 즉 :latest 로 회전해도 도는 인스턴스는 안 바뀐다. 1기엔 회전이 없어 감수하고, 회전이 실요구가 되면
+      # 숫자 버전 핀으로 바꿔 회전을 리뷰 가능한 PR로 만든다.
+      - name: Cloud Run 배포
+        run: |
+          gcloud run deploy "$SERVICE" \
+            --image "$IMAGE" \
+            --region "$REGION" \
+            --port 8000 \
+            --service-account "${{ vars.GCP_RUNTIME_SA }}" \
+            --set-secrets "DATABASE_URL=${DB_SECRET}:latest" \
+            --min 0 \
+            --max-instances 3 \
+            --quiet
+        # --max-instances 3 은 티켓이 명시하지 않았지만 임의값이 아니다. 기본 상한이 100이고 인스턴스마다
+        # asyncpg 풀이 커넥션을 쥐므로, 상한 없이는 Neon에 수백 커넥션이 열릴 수 있다. 사용자 0인 1기엔 3이면 충분하고
+        # 승격 트리거는 min-instances(#88·#76)와 공유한다.
+
+      # #57 흉터 — 빈 배포를 조용히 넘기지 않는다. 단 health는 정적 dict라(DB 미접촉)
+      # 이건 "리비전이 떠서 트래픽을 받는다"까지만 증명한다. 스키마 증명이 아니다 — 그건 라우트가 DB를 만지는 #100의 몫이다.
+      - name: 스모크 — 공개 URL에서 health 200
+        run: |
+          URL="$(gcloud run services describe "$SERVICE" --region "$REGION" --format='value(status.url)')"
+          echo "deployed: $URL"
+          curl --fail --silent --show-error --retry 5 --retry-delay 3 --retry-connrefused "$URL/api/v1/health"
