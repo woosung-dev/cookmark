@@ -107,6 +107,148 @@ paths:
           description: Successful Response
         '401':
           description: 세션이 없거나 유효하지 않다
+  /api/v1/recipes:
+    get:
+      tags:
+      - recipes
+      summary: List Recipes
+      description: 소유자 항목만, 삽입순(created_at·id) — 스코프는 Repository 생성 시점에 이미 끝났다.
+      operationId: list_recipes_api_v1_recipes_get
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                items:
+                  $ref: '#/components/schemas/RecipeResponse'
+                type: array
+                title: Response List Recipes Api V1 Recipes Get
+        '401':
+          description: 세션이 없거나 유효하지 않다
+    post:
+      tags:
+      - recipes
+      summary: Create Recipe
+      description: 저장하면 제목에서 재료 추출이 1회 일어나 항목에 남는다. 추출 실패는 명시적 502 — 조용한 저장 없음.
+      operationId: create_recipe_api_v1_recipes_post
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/RecipeCreate'
+        required: true
+      responses:
+        '201':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/RecipeResponse'
+        '401':
+          description: 세션이 없거나 유효하지 않다
+        '502':
+          description: 재료 추출에 실패했다 — 레시피는 저장되지 않았다
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+  /api/v1/recipes/{recipe_id}:
+    get:
+      tags:
+      - recipes
+      summary: Read Recipe
+      operationId: read_recipe_api_v1_recipes__recipe_id__get
+      parameters:
+      - name: recipe_id
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+          title: Recipe Id
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/RecipeResponse'
+        '401':
+          description: 세션이 없거나 유효하지 않다
+        '404':
+          description: 레시피를 찾을 수 없다
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+    patch:
+      tags:
+      - recipes
+      summary: Update Recipe
+      description: url은 불변이고 재추출은 없다 — 바꿀 수 있는 건 title·ingredients뿐이다.
+      operationId: update_recipe_api_v1_recipes__recipe_id__patch
+      parameters:
+      - name: recipe_id
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+          title: Recipe Id
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/RecipeUpdate'
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/RecipeResponse'
+        '401':
+          description: 세션이 없거나 유효하지 않다
+        '404':
+          description: 레시피를 찾을 수 없다
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+    delete:
+      tags:
+      - recipes
+      summary: Delete Recipe
+      operationId: delete_recipe_api_v1_recipes__recipe_id__delete
+      parameters:
+      - name: recipe_id
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+          title: Recipe Id
+      responses:
+        '204':
+          description: Successful Response
+        '401':
+          description: 세션이 없거나 유효하지 않다
+        '404':
+          description: 레시피를 찾을 수 없다
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
 components:
   schemas:
     AccountResponse:
@@ -148,6 +290,75 @@ components:
       - kakao
       - google
       title: Provider
+    RecipeCreate:
+      properties:
+        url:
+          type: string
+          minLength: 1
+          title: Url
+        title:
+          type: string
+          minLength: 1
+          title: Title
+      additionalProperties: false
+      type: object
+      required:
+      - url
+      - title
+      title: RecipeCreate
+      description: ingredients는 받지 않는다 — 추출은 서버가 저장 시 1회 수행한다. 몰래 넣으면 422로 시끄럽게 거절.
+    RecipeResponse:
+      properties:
+        id:
+          type: string
+          format: uuid
+          title: Id
+        url:
+          type: string
+          title: Url
+        title:
+          type: string
+          title: Title
+        ingredients:
+          items:
+            type: string
+          type: array
+          title: Ingredients
+        created_at:
+          type: string
+          format: date-time
+          title: Created At
+      type: object
+      required:
+      - id
+      - url
+      - title
+      - ingredients
+      - created_at
+      title: RecipeResponse
+    RecipeUpdate:
+      properties:
+        title:
+          anyOf:
+          - type: string
+            minLength: 1
+          - type: 'null'
+          title: Title
+        ingredients:
+          anyOf:
+          - items:
+              type: string
+            type: array
+          - type: 'null'
+          title: Ingredients
+      additionalProperties: false
+      type: object
+      title: RecipeUpdate
+      description: 'url은 불변 — 스키마에 없고 extra=forbid라 보내면 422다(조용한 무시가 아니라 계약). 재추출도
+        없다.
+
+
+        null과 부재를 같게 본다(둘 다 무변경) — ingredients=[]는 null이 아니라 "비우기"다.'
     SessionResponse:
       properties:
         token:
