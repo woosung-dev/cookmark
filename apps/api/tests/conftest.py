@@ -38,6 +38,8 @@ def database_url() -> Iterator[str]:
         os.environ["GOOGLE_CLIENT_ID"] = CLIENT_IDS[Provider.GOOGLE]
         os.environ["GOOGLE_CLIENT_SECRET"] = "test-google-secret"
         os.environ["SESSION_SECRET"] = "test-session-secret-0123456789abcdef"
+        # LLM 키는 페이크 seam(dependency_overrides) 뒤라 실제로 쓰이지 않는다 — 부팅 필수 필드일 뿐이다.
+        os.environ["GEMINI_API_KEY"] = "test-gemini-key"
 
         from src.auth.oidc import get_oauth
         from src.common.database import get_engine, get_sessionmaker
