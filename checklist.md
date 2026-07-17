@@ -18,7 +18,7 @@
 - [x] 스키마 변경 + 스냅샷 미갱신 → CI 빨간불 — **실증 run 29583581654 failure**(`계약 스냅샷` 스텝에서 멎고 이후 skip, 로그에 diff + 재생성 명령). 실증 커밋은 증거 확보 후 제거
 - [x] schemathesis가 CI에서 현 라우트 전체에 green — **run 29583465512** `schemathesis (발행 계약 vs 실 서버)` success (1/1 operation · 9 케이스 · Coverage+Fuzzing)
 - [x] contracts README가 "코드 우선·생성물·수기 수정 금지" 반영 (명령·경로 실체 일치)
-- [x] (추가) `contracts/**` 트리거 실증 — 계약만 수기 수정한 커밋에서 워크플로 트리거 + 빨간불 (run 29583667756)
+- [x] (추가) 수기 수정된 계약도 가드가 잡는다 — run 29583667756 failure. 단 **`contracts/**` 트리거 자체는 이 PR에서 실증 불가**(`pull_request`의 `paths`는 PR 전체 diff 기준이라 이 PR은 `apps/api/**`로 이미 트리거된다) — 컨텍스트 노트에 근거와 한계를 명시
 
 ## 마무리
 
