@@ -13,6 +13,7 @@ from testcontainers.postgres import PostgresContainer
 
 from src.auth.oidc import Provider
 from tests.idp import CLIENT_IDS, FakeIdp
+from tests.llm import FakeLLMService
 
 # 테스트 전용 허용 origin — 앱 코드가 아니라 env로 주입된다 (하드코딩 금지 AC의 검증 데이터)
 ALLOWED_ORIGIN = "http://localhost:5566"
@@ -85,6 +86,18 @@ def idp() -> Iterator[FakeIdp]:
     """카카오·구글 실 URL을 가로채는 가짜 IdP. respx는 ASGITransport를 통과시킨다(실측 확인)."""
     with respx.mock(assert_all_called=False) as router:
         yield FakeIdp(router)
+
+
+@pytest.fixture
+def fake_llm() -> Iterator[FakeLLMService]:
+    """get_llm_service 자리에 결정적 페이크를 꽂는다 — 페이크 주입 지점은 이 seam 하나뿐이다 (스펙 #96)."""
+    from src.llm.dependencies import get_llm_service
+    from src.main import app
+
+    fake = FakeLLMService()
+    app.dependency_overrides[get_llm_service] = lambda: fake
+    yield fake
+    app.dependency_overrides.pop(get_llm_service, None)
 
 
 @pytest.fixture

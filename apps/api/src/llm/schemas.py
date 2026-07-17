@@ -1,7 +1,14 @@
 # llm 입출력 스키마 — Pydantic 모델이 계약의 정본이고 스냅샷은 생성물이다 (ADR-0009 계약 절)
 from typing import Annotated, Literal
 
-from pydantic import Base64Bytes, BaseModel, ConfigDict, Field, StringConstraints
+from pydantic import (
+    Base64Bytes,
+    BaseModel,
+    ConfigDict,
+    Field,
+    StringConstraints,
+    field_validator,
+)
 
 # confidence 3단·라벨 의미는 ADR-0003과 한 몸이다 — 값을 바꾸면 클라이언트 초기 체크 상태가 깨진다.
 Confidence = Literal["high", "medium", "low"]
@@ -24,9 +31,17 @@ class LLMUsage(BaseModel):
 
 
 class RecognizeRequest(BaseModel):
-    """인식 요청 — 클라이언트가 768px로 리사이즈한 JPEG의 base64. 디코드 실패는 422다."""
+    """인식 요청 — 클라이언트가 768px로 리사이즈한 JPEG의 base64. 디코드 실패·빈 이미지는 422다."""
 
-    image_base64: Base64Bytes = Field(min_length=1)
+    image_base64: Base64Bytes
+
+    @field_validator("image_base64", mode="after")
+    @classmethod
+    def _reject_empty(cls, value: bytes) -> bytes:
+        # Base64Bytes는 관대한 디코더라 비알파벳 문자열("!!!")이 빈 bytes로 통과한다 — 빈 이미지는 막는다.
+        if not value:
+            raise ValueError("image_base64가 비어 있다")
+        return value
 
 
 class RecognizedIngredient(BaseModel):
