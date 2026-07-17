@@ -203,6 +203,42 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/HTTPValidationError'
+  /api/v1/og-image:
+    get:
+      tags:
+      - og-image
+      summary: Read Og Image
+      description: 출처 페이지의 og:image URL — 제안 카드 음식 사진용. 부재는 명시적 null이다.
+      operationId: read_og_image_api_v1_og_image_get
+      parameters:
+      - name: url
+        in: query
+        required: true
+        schema:
+          type: string
+          format: uri
+          minLength: 1
+          maxLength: 2083
+          description: 레시피 출처 페이지 URL
+          title: Url
+        description: 레시피 출처 페이지 URL
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/OgImageResponse'
+        '401':
+          description: 세션이 없거나 유효하지 않다
+        '400':
+          description: 허용되지 않는 대상 주소
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
 components:
   schemas:
     AccountResponse:
@@ -355,6 +391,17 @@ components:
       required:
       - name
       title: MissingIngredient
+    OgImageResponse:
+      properties:
+        image_url:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Image Url
+      type: object
+      required:
+      - image_url
+      title: OgImageResponse
     Provider:
       type: string
       enum:
