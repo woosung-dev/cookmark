@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 
 import '../../theme/app_colors.dart';
 import '../../theme/app_theme.dart';
+import 'pressable_scale.dart';
 
 class UploadZone extends StatelessWidget {
   const UploadZone({super.key, required this.onPick});
@@ -39,10 +40,12 @@ class UploadZone extends StatelessWidget {
           SizedBox(
             width: double.infinity,
             height: Space.touchMin + 4,
-            child: FilledButton(
-              key: const Key('upload-photo'),
-              onPressed: onPick,
-              child: const Text('사진 올리기'),
+            child: PressableScale(
+              child: FilledButton(
+                key: const Key('upload-photo'),
+                onPressed: onPick,
+                child: const Text('냉장고 사진 올리기'),
+              ),
             ),
           ),
         ],

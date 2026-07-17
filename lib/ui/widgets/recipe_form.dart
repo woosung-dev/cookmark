@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 
 import '../../theme/app_colors.dart';
 import '../../theme/app_theme.dart';
+import 'pressable_scale.dart';
 
 class RecipeForm extends StatefulWidget {
   const RecipeForm({super.key, required this.saving, required this.onSubmit});
@@ -60,10 +61,13 @@ class _RecipeFormState extends State<RecipeForm> {
         const SizedBox(height: Space.md),
         SizedBox(
           height: Space.touchMin + 4,
-          child: FilledButton(
-            key: const Key('recipe-submit'),
-            onPressed: widget.saving ? null : _submit,
-            child: Text(widget.saving ? '재료를 알아보는 중…' : '레시피 북에 담기'),
+          child: PressableScale(
+            enabled: !widget.saving,
+            child: FilledButton(
+              key: const Key('recipe-submit'),
+              onPressed: widget.saving ? null : _submit,
+              child: Text(widget.saving ? '재료를 알아보는 중…' : '레시피 북에 담기'),
+            ),
           ),
         ),
         const SizedBox(height: Space.sm),

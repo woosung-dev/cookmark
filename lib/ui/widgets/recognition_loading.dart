@@ -7,6 +7,7 @@ import 'package:flutter/scheduler.dart';
 import '../../domain/loading_stage.dart';
 import '../../theme/app_colors.dart';
 import '../../theme/app_theme.dart';
+import 'skeleton.dart';
 
 class RecognitionLoading extends StatefulWidget {
   const RecognitionLoading({
@@ -56,6 +57,13 @@ class _RecognitionLoadingState extends State<RecognitionLoading>
     super.dispose();
   }
 
+  /// 진행바 채움 — 경과 시간 단계에 연동한 실제 신호다(가짜 재료 개수 아님, ADR-0007).
+  double get _progress => switch (_stage) {
+    LoadingStage.early => 0.35,
+    LoadingStage.mid => 0.7,
+    LoadingStage.slow => 0.92,
+  };
+
   @override
   Widget build(BuildContext context) {
     return Column(
@@ -69,6 +77,31 @@ class _RecognitionLoadingState extends State<RecognitionLoading>
           key: const Key('loading-message'),
           style: AppTypography.body.copyWith(color: AppColors.muted),
           textAlign: TextAlign.center,
+        ),
+        const SizedBox(height: Space.xs),
+        Text(
+          '사진에서 재료를 확인하고 있어요.',
+          style: AppTypography.footnote.copyWith(color: AppColors.muted),
+          textAlign: TextAlign.center,
+        ),
+        const SizedBox(height: Space.lg),
+        // 진행바는 경과 시간에 연동된 실제 신호 — 재료 개수는 인식 중엔 미상이라 표기하지 않는다(정직, ADR-0007).
+        ClipRRect(
+          borderRadius: BorderRadius.circular(Radii.pill),
+          child: LinearProgressIndicator(
+            value: _progress,
+            minHeight: 6,
+            backgroundColor: AppColors.sunken,
+            color: AppColors.action,
+          ),
+        ),
+        const SizedBox(height: Space.sm),
+        Align(
+          alignment: Alignment.centerRight,
+          child: Text(
+            '보통 5초 정도 걸려요',
+            style: AppTypography.caption.copyWith(color: AppColors.muted),
+          ),
         ),
         const SizedBox(height: Space.lg),
         _ChecklistSkeleton(shimmer: _shimmer),
@@ -163,17 +196,21 @@ class _ChecklistSkeleton extends StatelessWidget {
                 padding: const EdgeInsets.symmetric(horizontal: Space.lg),
                 child: Row(
                   children: [
-                    _Shimmer(
-                      shimmer: shimmer,
-                      child: const _Block(width: 22, height: 22, radius: 6),
+                    Shimmer(
+                      animation: shimmer,
+                      child: const SkeletonBox(
+                        width: 22,
+                        height: 22,
+                        radius: Radii.chip,
+                      ),
                     ),
                     const SizedBox(width: Space.md),
-                    _Shimmer(
-                      shimmer: shimmer,
-                      child: _Block(
+                    Shimmer(
+                      animation: shimmer,
+                      child: SkeletonBox(
                         width: 96.0 + (i.isEven ? 40 : 0),
                         height: 14,
-                        radius: 7,
+                        radius: Radii.pill,
                       ),
                     ),
                   ],
@@ -183,47 +220,6 @@ class _ChecklistSkeleton extends StatelessWidget {
           ],
         ],
       ),
-    );
-  }
-}
-
-class _Block extends StatelessWidget {
-  const _Block({
-    required this.width,
-    required this.height,
-    required this.radius,
-  });
-
-  final double width;
-  final double height;
-  final double radius;
-
-  @override
-  Widget build(BuildContext context) => Container(
-    width: width,
-    height: height,
-    decoration: BoxDecoration(
-      color: AppColors.sunken,
-      borderRadius: BorderRadius.circular(radius),
-    ),
-  );
-}
-
-class _Shimmer extends StatelessWidget {
-  const _Shimmer({required this.shimmer, required this.child});
-
-  final Animation<double> shimmer;
-  final Widget child;
-
-  @override
-  Widget build(BuildContext context) {
-    return AnimatedBuilder(
-      animation: shimmer,
-      builder: (context, child) => Opacity(
-        opacity: 0.55 + 0.45 * (1 - (shimmer.value * 2 - 1).abs()),
-        child: child,
-      ),
-      child: child,
     );
   }
 }

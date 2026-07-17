@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 
 import '../../theme/app_colors.dart';
 import '../../theme/app_theme.dart';
+import 'pressable_scale.dart';
 
 class SectionSummary extends StatelessWidget {
   const SectionSummary({
@@ -79,10 +80,12 @@ class RematchBanner extends StatelessWidget {
           const SizedBox(width: Space.sm),
           SizedBox(
             height: Space.touchMin,
-            child: FilledButton(
-              key: const Key('rematch-button'),
-              onPressed: onRematch,
-              child: const Text('다시 제안'),
+            child: PressableScale(
+              child: FilledButton(
+                key: const Key('rematch-button'),
+                onPressed: onRematch,
+                child: const Text('다시 제안'),
+              ),
             ),
           ),
         ],

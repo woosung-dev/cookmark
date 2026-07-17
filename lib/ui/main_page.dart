@@ -12,14 +12,16 @@ import '../theme/app_theme.dart';
 import 'backup_controller.dart';
 import 'main_controller.dart';
 import 'recipe_book_controller.dart';
-import 'recipe_book_page.dart';
+import 'suggestion_detail_page.dart';
 import 'widgets/add_ingredient_bar.dart';
 import 'widgets/backup_section.dart';
+import 'widgets/brand_hero.dart';
 import 'widgets/checklist_section.dart';
 import 'widgets/debug_footer.dart';
 import 'widgets/failure_card.dart';
 import 'widgets/in_app_browser_banner.dart';
 import 'widgets/onboarding_card.dart';
+import 'widgets/pressable_scale.dart';
 import 'widgets/recipe_book_chips.dart';
 import 'widgets/recognition_loading.dart';
 import 'widgets/section_summary.dart';
@@ -34,6 +36,7 @@ class MainPage extends StatefulWidget {
     required this.recipeBookController,
     required this.backupController,
     this.imagePicker,
+    required this.onOpenRecipeBook,
   });
 
   final MainController controller;
@@ -42,6 +45,9 @@ class MainPage extends StatefulWidget {
 
   /// 테스트가 사진 선택 다이얼로그를 건너뛸 수 있게 — 브라우저 파일 선택창은 자동화가 안 된다.
   final Future<XFile?> Function()? imagePicker;
+
+  /// 레시피 북 탭으로 전환한다 — 셸이 주입한다(탭 기반 이동, ADR-0007).
+  final VoidCallback onOpenRecipeBook;
 
   @override
   State<MainPage> createState() => _MainPageState();
@@ -59,22 +65,6 @@ class _MainPageState extends State<MainPage> {
 
   Future<XFile?> _pickFromGallery() =>
       ImagePicker().pickImage(source: ImageSource.gallery);
-
-  /// mobile.md §5 예외(#50): 2화면 한정 축복받은 단일 화면 이동.
-  /// 2번째 이동을 추가하기 전에 go_router 도입을 재결정하라
-  /// — test/architecture/navigation_test.dart가 이 1건을 강제한다.
-  Future<void> _openRecipeBook() async {
-    await Navigator.of(context).push(
-      MaterialPageRoute<void>(
-        builder: (_) => RecipeBookPage(
-          controller: widget.recipeBookController,
-          backupController: widget.backupController,
-        ),
-      ),
-    );
-    // 레시피 북에서 뭔가 바뀌었을 수 있다 — 미인식 칩·넛지가 이걸 따라간다.
-    _controller.refresh();
-  }
 
   Future<void> _saveRecipe(String url, String title) async {
     await widget.recipeBookController.add(url: url, title: title);
@@ -123,16 +113,52 @@ class _MainPageState extends State<MainPage> {
         });
   }
 
+  /// 카드 탭 → 제안 상세로 push한다 — 앱의 유일한 명령형 push다(ADR-0007, navigation_test).
+  ///
+  /// 상세의 "이거 했어요"는 결과와 함께 pop하고, 상세가 사라진 뒤 여기서 _markCooked를 부른다 —
+  /// 토스트/undo가 상세가 아니라 메인 위에 뜨게 한다(오펀 방지).
+  Future<void> _openDetail(Suggestion suggestion, int rank) async {
+    final action = await Navigator.of(context).push<SuggestionDetailAction>(
+      MaterialPageRoute(
+        builder: (_) => SuggestionDetailPage(
+          suggestion: suggestion,
+          rank: rank,
+          onOpenRecipe: () => _openRecipe(suggestion),
+          available: _availableFor(suggestion),
+        ),
+      ),
+    );
+    if (!mounted) return;
+    if (action == SuggestionDetailAction.cooked) {
+      await _markCooked(suggestion);
+    }
+  }
+
+  /// 있는 재료 = 저장 레시피의 재료 − 부족. AI 제안(recipeUrl 없음)·재료 빈 레시피면 빈 목록(파생, 저장소 무변경).
+  List<String> _availableFor(Suggestion suggestion) {
+    final url = suggestion.recipeUrl;
+    if (url == null) return const [];
+    final matches = widget.recipeBookController.recipes.where(
+      (r) => r.url == url,
+    );
+    if (matches.isEmpty) return const [];
+    final missing = suggestion.missing.map((m) => m.name).toSet();
+    return [
+      for (final ingredient in matches.first.ingredients)
+        if (!missing.contains(ingredient)) ingredient,
+    ];
+  }
+
   @override
   Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(
         title: const Text('냉파'),
         actions: [
-          // 레시피 북 진입점은 이 링크 하나뿐이다 — 탭 바 없음(ADR-0001).
+          // 헤더 '둘러보기' 링크도 레시피 북 탭으로 전환한다(하단 탭 바와 병행, ADR-0007).
           TextButton(
             key: const Key('recipe-book-link'),
-            onPressed: _openRecipeBook,
+            onPressed: widget.onOpenRecipeBook,
             child: const Text('레시피 북'),
           ),
           const SizedBox(width: Space.sm),
@@ -197,7 +223,7 @@ class _MainPageState extends State<MainPage> {
       if (widget.backupController.needsBackup) ...[
         WeeklyReportBanner(
           copy: widget.backupController.weeklyReport.copy,
-          onTap: _openRecipeBook,
+          onTap: widget.onOpenRecipeBook,
         ),
         const SizedBox(height: Space.lg),
       ],
@@ -207,7 +233,7 @@ class _MainPageState extends State<MainPage> {
       if (controller.showsRecipeNudge && !controller.showsOnboarding) ...[
         RecipeNudgeChip(
           savedCount: controller.recipeCount,
-          onTap: _openRecipeBook,
+          onTap: widget.onOpenRecipeBook,
         ),
         const SizedBox(height: Space.lg),
       ],
@@ -256,6 +282,7 @@ class _MainPageState extends State<MainPage> {
           excludedCount: controller.excludedCount,
           onOpenRecipe: _openRecipe,
           onCooked: _markCooked,
+          onOpenDetail: _openDetail,
         ),
         MainPhase.failed
             when controller.failureStage == FailureStage.matching =>
@@ -275,18 +302,44 @@ class _MainPageState extends State<MainPage> {
   }
 
   /// 첫 방문이면 업로드 존 자리에 온보딩 카드가 온다 — 별도 화면이 아니다(G1 #8).
+  /// 위에 브랜드 히어로를 얹어 진입의 온기를 만든다(P2, 목업 화면 1).
   Widget _uploadSection() {
     final controller = _controller;
-    if (controller.showsOnboarding) {
-      return OnboardingCard(
-        savedCount: controller.recipeCount,
-        saving: widget.recipeBookController.saving,
-        onSubmit: _saveRecipe,
-        onSkip: controller.skipOnboarding,
-      );
-    }
+    final card = controller.showsOnboarding
+        ? OnboardingCard(
+            savedCount: controller.recipeCount,
+            saving: widget.recipeBookController.saving,
+            onSubmit: _saveRecipe,
+            onSkip: controller.skipOnboarding,
+          )
+        : UploadZone(onPick: _pickPhoto);
 
-    return UploadZone(onPick: _pickPhoto);
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        const BrandHero(),
+        const SizedBox(height: Space.lg),
+        Row(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            const Icon(
+              Icons.check_circle_outline,
+              size: 16,
+              color: AppColors.action,
+            ),
+            const SizedBox(width: Space.sm),
+            Flexible(
+              child: Text(
+                '출처 있는, 내가 저장한 레시피만 추천해요.',
+                style: AppTypography.footnote.copyWith(color: AppColors.muted),
+              ),
+            ),
+          ],
+        ),
+        const SizedBox(height: Space.lg),
+        card,
+      ],
+    );
   }
 
   Widget _checklistSection() {
@@ -335,12 +388,15 @@ class _MainPageState extends State<MainPage> {
         if (!hasSuggestions)
           SizedBox(
             height: Space.touchMin + 4,
-            child: FilledButton(
-              key: const Key('request-suggestions'),
-              onPressed: controller.matchableIngredients.isEmpty
-                  ? null
-                  : controller.requestSuggestions,
-              child: const Text('오늘 뭐 해먹지'),
+            child: PressableScale(
+              enabled: controller.matchableIngredients.isNotEmpty,
+              child: FilledButton(
+                key: const Key('request-suggestions'),
+                onPressed: controller.matchableIngredients.isEmpty
+                    ? null
+                    : controller.requestSuggestions,
+                child: const Text('오늘 뭐 해먹지'),
+              ),
             ),
           )
         else

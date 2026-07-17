@@ -1,15 +1,16 @@
-// 제안 카드 — "오늘 할 3개"의 한 장(G1 #8 확정 구성, DESIGN.md §7).
+// 제안 카드 — "오늘 할 3개"의 한 장(목업 풀 패리티, 사진·순위·매칭%·영상 보기).
+//
+// 사진과 매칭%는 백엔드 이월이라 placeholder다 — 자산/점수가 붙으면 실값으로 교체된다.
 import 'package:flutter/material.dart';
 
 import '../../domain/suggestion.dart';
 import '../../theme/app_colors.dart';
 import '../../theme/app_theme.dart';
+import 'photo_placeholder.dart';
+import 'pressable_scale.dart';
 
-/// 라벨의 색과 아이콘 — 색만으로 말하지 않는다(DESIGN.md §8 "색+아이콘 이중 신호").
-///
-/// 색 매핑의 정본은 DESIGN.md §2다. 스펙 #13 본문은 초록/호박/파랑이라 적었지만
-/// 2026-07-15 사용자 결정으로 DESIGN.md(그린/앰버/그레이)를 택했다 — 근거는 context-notes.
-({Color fg, Color bg, IconData icon}) _styleOf(SuggestionLabel label) =>
+/// 라벨의 색과 아이콘 — 색만으로 말하지 않는다(DESIGN.md §8 "색+아이콘 이중 신호"). 카드·상세 공유.
+({Color fg, Color bg, IconData icon}) styleOf(SuggestionLabel label) =>
     switch (label) {
       SuggestionLabel.ready => (
         fg: AppColors.goFg,
@@ -28,21 +29,42 @@ import '../../theme/app_theme.dart';
       ),
     };
 
+/// 매칭% placeholder — 실 점수는 백엔드 이월. 부족(대체 미해소) 수로 근사한다(카드·상세 공유, ADR-0007).
+int matchPercentOf(Suggestion suggestion) {
+  final missing = suggestion.missing
+      .where((m) => !m.resolvedBySubstitute)
+      .length;
+  return switch (missing) {
+    0 => 96,
+    1 => 88,
+    2 => 79,
+    _ => 72,
+  };
+}
+
 class SuggestionCard extends StatelessWidget {
   const SuggestionCard({
     super.key,
     required this.suggestion,
+    required this.rank,
     required this.onOpenRecipe,
     required this.onCooked,
+    this.onTap,
   });
 
   final Suggestion suggestion;
 
-  /// "레시피 보기" — 저장 카드만 가진다.
+  /// 1-based 순위 — 사진 위 배지에 쓴다.
+  final int rank;
+
+  /// "영상 보기" — 저장 카드만 가진다.
   final VoidCallback onOpenRecipe;
 
   /// "이거 했어요" — 성공 지표 2의 판정 장치.
   final VoidCallback onCooked;
+
+  /// 카드 탭 → 제안 상세(P4). null이면 탭 비활성.
+  final VoidCallback? onTap;
 
   @override
   Widget build(BuildContext context) {
@@ -50,56 +72,91 @@ class SuggestionCard extends StatelessWidget {
 
     return Container(
       key: Key('suggestion-card-${suggestion.menu}'),
-      padding: const EdgeInsets.all(Space.xl),
+      clipBehavior: Clip.antiAlias,
       decoration: BoxDecoration(
         color: AppColors.surface,
         borderRadius: BorderRadius.circular(Radii.card),
       ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.stretch,
-        children: [
-          Row(
-            children: [
-              _LabelBadge(label: suggestion.label),
-              const SizedBox(width: Space.sm),
-              _SourceBadge(source: suggestion.source),
-            ],
-          ),
-          const SizedBox(height: Space.md),
-          Text(suggestion.menu, style: AppTypography.largeTitle),
-          if (suggestion.missing.isNotEmpty) ...[
-            const SizedBox(height: Space.md),
-            _MissingChips(missing: suggestion.missing),
-          ],
-          if (suggestion.reason.isNotEmpty) ...[
-            const SizedBox(height: Space.md),
-            Text(
-              suggestion.reason,
-              style: AppTypography.subhead.copyWith(color: AppColors.muted),
-            ),
-          ],
-          const SizedBox(height: Space.xl),
-          if (saved) ...[
-            SizedBox(
-              height: Space.touchMin,
-              child: OutlinedButton(
-                key: Key('open-recipe-${suggestion.menu}'),
-                onPressed: onOpenRecipe,
-                child: const Text('레시피 보기'),
+      child: InkWell(
+        onTap: onTap,
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            PhotoPlaceholder(
+              aspectRatio: 16 / 9,
+              overlay: MatchBadge(
+                rank: rank,
+                percent: matchPercentOf(suggestion),
               ),
             ),
-            const SizedBox(height: Space.sm),
-          ],
-          // 56px — 성공 지표 2를 판정하는 버튼이라 놓치기 어려워야 한다(G1 #8).
-          SizedBox(
-            height: 56,
-            child: FilledButton(
-              key: Key('cooked-${suggestion.menu}'),
-              onPressed: onCooked,
-              child: const Text('이거 했어요'),
+            Padding(
+              padding: const EdgeInsets.all(Space.xl),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.stretch,
+                children: [
+                  Row(
+                    children: [
+                      Expanded(
+                        child: Text(
+                          suggestion.menu,
+                          style: AppTypography.title,
+                        ),
+                      ),
+                      const SizedBox(width: Space.sm),
+                      _LabelBadge(label: suggestion.label),
+                    ],
+                  ),
+                  const SizedBox(height: Space.sm),
+                  _SourceBadge(source: suggestion.source),
+                  if (suggestion.missing.isNotEmpty) ...[
+                    const SizedBox(height: Space.md),
+                    _MissingChips(missing: suggestion.missing),
+                  ],
+                  if (suggestion.reason.isNotEmpty) ...[
+                    const SizedBox(height: Space.sm),
+                    Text(
+                      suggestion.reason,
+                      style: AppTypography.subhead.copyWith(
+                        color: AppColors.muted,
+                      ),
+                    ),
+                  ],
+                  const SizedBox(height: Space.lg),
+                  Row(
+                    children: [
+                      if (saved) ...[
+                        Expanded(
+                          child: SizedBox(
+                            height: Space.touchMin + 4,
+                            child: OutlinedButton.icon(
+                              key: Key('open-recipe-${suggestion.menu}'),
+                              onPressed: onOpenRecipe,
+                              icon: const Icon(Icons.play_arrow, size: 18),
+                              label: const Text('영상 보기'),
+                            ),
+                          ),
+                        ),
+                        const SizedBox(width: Space.sm),
+                      ],
+                      Expanded(
+                        child: SizedBox(
+                          height: Space.touchMin + 4,
+                          child: PressableScale(
+                            child: FilledButton(
+                              key: Key('cooked-${suggestion.menu}'),
+                              onPressed: onCooked,
+                              child: const Text('이거 했어요'),
+                            ),
+                          ),
+                        ),
+                      ),
+                    ],
+                  ),
+                ],
+              ),
             ),
-          ),
-        ],
+          ],
+        ),
       ),
     );
   }
@@ -112,7 +169,7 @@ class _LabelBadge extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final style = _styleOf(label);
+    final style = styleOf(label);
     return Container(
       key: Key('label-badge-${label.name}'),
       padding: const EdgeInsets.symmetric(
@@ -150,7 +207,8 @@ class _SourceBadge extends StatelessWidget {
       mainAxisSize: MainAxisSize.min,
       children: [
         Icon(
-          saved ? Icons.bookmark : Icons.auto_awesome,
+          // 스트로크 통일 — 은유 아이콘은 outlined로(DESIGN.md §7).
+          saved ? Icons.bookmark_outline : Icons.auto_awesome_outlined,
           size: 14,
           color: AppColors.muted,
         ),
