@@ -19,6 +19,11 @@ ALLOWED_ORIGIN = "http://localhost:5566"
 
 API_ROOT = Path(__file__).resolve().parent.parent
 
+# main.py는 **import 시점에** 허용 목록을 CORS 미들웨어에 바인딩한다 — 그래서 이 값은 어떤 테스트가
+# 앱을 먼저 import하든 이미 박혀 있어야 한다(픽스처 안에서 넣으면 앱을 먼저 import한 테스트가 빈 목록으로
+# 굳혀버린다). conftest는 테스트 모듈보다 먼저 import되므로 여기가 그 유일한 지점이다.
+os.environ["CORS_ALLOWED_ORIGINS"] = ALLOWED_ORIGIN
+
 
 @pytest.fixture(scope="session")
 def database_url() -> Iterator[str]:
@@ -26,7 +31,7 @@ def database_url() -> Iterator[str]:
     with PostgresContainer("postgres:17-alpine", driver="asyncpg") as pg:
         url = pg.get_connection_url()
         os.environ["DATABASE_URL"] = url
-        os.environ["CORS_ALLOWED_ORIGINS"] = ALLOWED_ORIGIN
+        # CORS는 #99가 모듈 스코프로 옮겼다(위) — 여기서 다시 세팅하지 않는다.
         # IdP 자격증명은 가짜 IdP(tests/idp.py)와 짝이다 — id_token의 aud가 여기 client_id와 맞아야 검증을 통과한다.
         os.environ["KAKAO_CLIENT_ID"] = CLIENT_IDS[Provider.KAKAO]
         os.environ["KAKAO_CLIENT_SECRET"] = "test-kakao-secret"
