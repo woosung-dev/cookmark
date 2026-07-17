@@ -61,6 +61,8 @@ jobs:
           GOOGLE_CLIENT_ID: placeholder
           GOOGLE_CLIENT_SECRET: placeholder
           SESSION_SECRET: placeholder
+          # #103 recipes가 GEMINI_API_KEY를 필수로 추가 — fuzz는 무인증 401에서 끝나 LLM 호출은 0회다.
+          GEMINI_API_KEY: placeholder
         run: |
           # 출력을 파일로 뺀다 — 백그라운드 서버가 스텝의 stdout을 붙들면 러너가 스텝 종료를 기다린다.
           uv run uvicorn src.main:app --port 8000 > /tmp/uvicorn.log 2>&1 &

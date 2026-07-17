@@ -50,6 +50,8 @@ CI는 `.github/workflows/api.yml`이 매 PR(`apps/api/**` paths 필터)·main pu
 | `GOOGLE_CLIENT_ID` | GCP OAuth 클라이언트 ID (`….apps.googleusercontent.com`) |
 | `GOOGLE_CLIENT_SECRET` | GCP OAuth 클라이언트 시크릿 |
 | `SESSION_SECRET` | OAuth state·nonce 서명 키(SessionMiddleware 전용). 우리 인증 세션과 무관하다 — 그건 DB 세션 테이블이다 |
+| `GEMINI_API_KEY` | 재료 추출용 Gemini 키(#103) — SecretStr. 값은 루트 `.env.local`의 파일럿 키 재사용 |
+| `GEMINI_MODEL` | 선택 — 기본 `gemini-3.1-flash-lite`(승계 프록시와 동일). 파일럿 중 불변 |
 
 로컬 웹 개발과 연결할 땐 클라이언트 포트를 고정하고(`flutter run -d chrome --web-port <포트>`) 그 origin을 `CORS_ALLOWED_ORIGINS`에 넣는다 — 포트가 랜덤이면 허용 목록이 성립하지 않는다 (§10).
 
@@ -64,6 +66,18 @@ CI는 `.github/workflows/api.yml`이 매 PR(`apps/api/**` paths 필터)·main pu
 | `DELETE /api/v1/auth/account` | 탈퇴 — 계정 하드 삭제, 세션은 FK CASCADE → 204 |
 
 세션 토큰은 쿠키(`cookmark_session`, HttpOnly·Secure·SameSite=Lax)와 `Authorization: Bearer` 양쪽으로 받는다 — 저장은 하나, 운반만 플랫폼별이다(§9). 계정은 `(id, iss, sub, created_at)`이 전부다(§12.1).
+
+## 레시피 북 (#103)
+
+| 라우트 | 행동 |
+| --- | --- |
+| `POST /api/v1/recipes` | 저장 — 제목에서 재료 추출 1회(Gemini) 후 201. 추출 실패는 **502 + 미저장**(조용한 저장 없음) |
+| `GET /api/v1/recipes` | 소유자 목록, 삽입순 |
+| `GET /api/v1/recipes/{id}` | 단건 — 추출 재료 동봉 |
+| `PATCH /api/v1/recipes/{id}` | `{title?, ingredients?}` 부분 수정. url 불변·재추출 없음 — 보내면 422 |
+| `DELETE /api/v1/recipes/{id}` | 삭제 → 204 |
+
+전 라우트 세션 필수. 격리는 스코프드 Repository(§12.2) — 타인 리소스는 존재를 노출하지 않는 **404**다(403 아님). 탈퇴 시 레시피는 FK `ON DELETE CASCADE`로 즉시 파기된다(§12.3). 항목은 (출처 URL·사용자 제목·추출 재료)뿐 — 원본 저작물 무보관(글로서리).
 
 ### 실 IdP 로컬 로그인 데모 — 파운더 콘솔 작업 (CI 밖)
 
@@ -105,4 +119,4 @@ OpenAPI 스냅샷·드리프트 가드는 [#99](https://github.com/woosung-dev/c
 - **컨테이너** — `Dockerfile`(uv 멀티스테이지 · 내부 8000 고정 · non-root). 로컬 빌드는 반드시 이 디렉토리를 컨텍스트로: `docker build -f Dockerfile .`.
 - **마이그레이션** — entrypoint가 아니라 **배포 전 러너의 `docker run IMAGE alembic upgrade head`**다. §8의 의도("배포 전 자동 실행")는 지키되 괄호 "(Docker entrypoint)"는 따르지 않는다 — Cloud Run에서 entrypoint는 롤백을 무효화한다(옛 이미지가 새 `alembic_version`을 못 해석해 exit 255). 근거·실측·대안 비교는 `context-notes.md`.
 - **프로비저닝**(GCP 프로젝트·시크릿·WIF·리포 하드닝)은 **파운더가 1회** 한다 — 절차는 [`infra/README.md`](../../infra/README.md). 리포 변수 4개가 들어가기 전까지 deploy job은 skip이라 main은 green을 유지한다.
-- ⚠️ **#100 인증이 먼저 랜딩해 배포 시크릿이 늘었다** — 서빙 컨테이너가 부팅하려면 `SESSION_SECRET`·카카오/구글 client secret과 client id도 있어야 한다(`Settings` 필수 필드). deploy job은 아직 `DATABASE_URL` 하나만 주입하므로, **첫 실 배포 전** `--set-secrets`·마이그레이션 env·`infra/README` 시크릿 인벤토리를 이들로 확장해야 한다(파운더 프로비저닝과 한 묶음). 상세는 `infra/README.md` §3 주.
+- ⚠️ **#100 인증이 먼저 랜딩해 배포 시크릿이 늘었다** — 서빙 컨테이너가 부팅하려면 `SESSION_SECRET`·카카오/구글 client secret과 client id도 있어야 한다(`Settings` 필수 필드). #103이 `GEMINI_API_KEY`(비밀 5개째)를 더했다. deploy job은 아직 `DATABASE_URL` 하나만 주입하므로, **첫 실 배포 전** `--set-secrets`·마이그레이션 env·`infra/README` 시크릿 인벤토리를 이들로 확장해야 한다(파운더 프로비저닝과 한 묶음). 상세는 `infra/README.md` §3 주.

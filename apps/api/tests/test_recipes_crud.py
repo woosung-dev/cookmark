@@ -260,7 +260,10 @@ async def test_nonexistent_id_is_404_for_owner(
     kwargs: dict[str, object] = {"json": {}} if method == "PATCH" else {}
 
     res = await client.request(
-        method, f"{RECIPES}/{uuid4()}", headers=headers, **kwargs  # type: ignore[arg-type]
+        method,
+        f"{RECIPES}/{uuid4()}",
+        headers=headers,
+        **kwargs,  # type: ignore[arg-type]
     )
 
     assert res.status_code == 404
