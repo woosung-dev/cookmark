@@ -14,6 +14,7 @@ import 'main_controller.dart';
 import 'recipe_book_controller.dart';
 import 'widgets/add_ingredient_bar.dart';
 import 'widgets/backup_section.dart';
+import 'widgets/brand_hero.dart';
 import 'widgets/checklist_section.dart';
 import 'widgets/debug_footer.dart';
 import 'widgets/failure_card.dart';
@@ -263,18 +264,44 @@ class _MainPageState extends State<MainPage> {
   }
 
   /// 첫 방문이면 업로드 존 자리에 온보딩 카드가 온다 — 별도 화면이 아니다(G1 #8).
+  /// 위에 브랜드 히어로를 얹어 진입의 온기를 만든다(P2, 목업 화면 1).
   Widget _uploadSection() {
     final controller = _controller;
-    if (controller.showsOnboarding) {
-      return OnboardingCard(
-        savedCount: controller.recipeCount,
-        saving: widget.recipeBookController.saving,
-        onSubmit: _saveRecipe,
-        onSkip: controller.skipOnboarding,
-      );
-    }
+    final card = controller.showsOnboarding
+        ? OnboardingCard(
+            savedCount: controller.recipeCount,
+            saving: widget.recipeBookController.saving,
+            onSubmit: _saveRecipe,
+            onSkip: controller.skipOnboarding,
+          )
+        : UploadZone(onPick: _pickPhoto);
 
-    return UploadZone(onPick: _pickPhoto);
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        const BrandHero(),
+        const SizedBox(height: Space.lg),
+        Row(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            const Icon(
+              Icons.check_circle_outline,
+              size: 16,
+              color: AppColors.action,
+            ),
+            const SizedBox(width: Space.sm),
+            Flexible(
+              child: Text(
+                '출처 있는, 내가 저장한 레시피만 추천해요.',
+                style: AppTypography.footnote.copyWith(color: AppColors.muted),
+              ),
+            ),
+          ],
+        ),
+        const SizedBox(height: Space.lg),
+        card,
+      ],
+    );
   }
 
   Widget _checklistSection() {

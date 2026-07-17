@@ -44,7 +44,7 @@ class UploadZone extends StatelessWidget {
               child: FilledButton(
                 key: const Key('upload-photo'),
                 onPressed: onPick,
-                child: const Text('사진 올리기'),
+                child: const Text('냉장고 사진 올리기'),
               ),
             ),
           ),

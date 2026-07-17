@@ -44,7 +44,17 @@ void main() {
   /// 레시피 북이 비어 있으면 온보딩 카드가 업로드 존 자리를 차지한다 — 업로드 존을 보려면 건너뛴다.
   Future<void> pumpPastOnboarding(WidgetTester tester) async {
     await pumpApp(tester);
-    await tester.tap(find.byKey(const Key('onboarding-skip')));
+    // P2 브랜드 히어로가 추가돼 스킵 링크가 800×600 테스트 뷰포트 아래로 밀린다(실기기 390×844에선 스크롤 불필요).
+    final skip = find.byKey(const Key('onboarding-skip'));
+    await tester.ensureVisible(skip);
+    await tester.pumpAndSettle();
+    await tester.tap(skip);
+    await tester.pumpAndSettle();
+    // ensureVisible가 남긴 스크롤을 상단으로 되돌린다 — 이후 넛지 칩 등 상단 요소 탭이 화면 안에 들어오도록.
+    await tester.drag(
+      find.byType(SingleChildScrollView),
+      const Offset(0, 600),
+    );
     await tester.pumpAndSettle();
   }
 
