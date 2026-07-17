@@ -32,3 +32,18 @@
   - 대안이던 "pytest + httpx ASGITransport + `case.validate_response(resp)`"는 금지를 피하면서 인루프로 돌지만, 요청 직렬화를 수기로 하고 `suppress_health_check`·준공개 API에 기대야 해서 기각했다(#100+에서 인루프 fuzzing이 실요구가 되면 재검토).
 - **드리프트 판정이 pytest와 CI 스텝 양쪽에 있는 건 의도다.** `test_committed_snapshot_is_in_sync`는 **인루프**(`uv run pytest`로 push 전에 잡힘), `--check` 스텝은 ADR-0009가 요구한 **게이트**(실패 시 unified diff + 재생성 명령을 뱉는다). mobile.md의 인루프/게이트 구분과 동형이고, 중복 비용은 2줄이다.
 - **schemathesis 스텝은 드리프트 가드와 겹치지 않는다** — 가드는 `스냅샷 == 코드`를, schemathesis는 `구현 == 계약`(실 응답이 스키마를 지키는지)을 본다. 전자가 green이어도 후자는 깨질 수 있다.
+
+## CI 실측에서 나온 함정 2건 (둘 다 로컬·추론으로는 안 잡혔다)
+
+- **`uv run`으로 띄운 백그라운드 서버가 uv 캐시 락을 쥔 채 남아 job을 죽인다.** run 29583009480은 **본 스텝 10/10 전량 통과하고도 job이 failure**였다 — `Post Run setup-uv`의 `uv cache prune --ci`가 `Cache is currently in-use, waiting for other uv processes to finish` → `Timeout (300s) when waiting for lock` → exit 2. 살아 있던 uv 프로세스는 정리 안 한 `uv run uvicorn` 하나뿐이었다.
+  - **본 스텝이 전부 초록인데 job이 빨간불**이라 원인이 스텝 로그에 없다 — post-job 로그를 열어야만 보인다. 스텝 결과만 보면 "왜 실패했는지 모르겠다"로 끝난다.
+  - 고침 = 스텝 종료 시 `trap`으로 서버 kill + 출력을 `/tmp` 로그로 분리(백그라운드 프로세스가 스텝 stdout을 붙드는 별개 문제 예방). 수정 후 run 29583465512 13/13 green으로 실증.
+  - **`apps/api` CI에서 서버·워커를 백그라운드로 띄우는 후속 티켓(#98 Docker 스모크 등)은 같은 지뢰를 밟는다** — `uv run ... &`를 정리 없이 남기지 말 것.
+- **PR `paths` 필터에 `contracts/**`가 빠져 있었다** — `openapi.yaml`만 수기로 고친 PR은 워크플로가 **아예 트리거되지 않아** 가드가 돌지 않는다(= 머지 후 main 백스톱에서야 잡힘). README가 "직접 고치면 CI가 막는다"고 약속하는 바로 그 경로였다. 코드리뷰 Spec 축 지적으로 발견 — **가드를 만들면서 가드가 실행될 조건을 안 본** 전형적 사각이다.
+
+## AC 실증 (CI run)
+
+- **green 기준선** — run 29583465512, 13/13 success(`계약 스냅샷`·`schemathesis` 포함).
+- **AC "스키마 변경 + 스냅샷 미갱신 → 빨간불"** — run 29583581654 failure. `계약 스냅샷 (드리프트 = 실패)`에서 멎고 이후 스텝 skip. 로그에 unified diff(`-summary: Health` / `+summary: …`) + `계약 스냅샷이 코드와 어긋났다. 로컬에서 재생성해 커밋할 것.` + 재생성 명령이 그대로 나온다.
+- **`contracts/**` 트리거 실증** — `openapi.yaml`만 수기 수정한 커밋에서 워크플로가 **트리거됐고**(run 29583667756 존재 자체가 증거) 가드가 빨간불. 트리거 누락 상태였다면 이 커밋은 CI를 통과했을 것이다.
+- 실증 커밋 2개는 증거 확보 후 브랜치에서 제거했다(run 기록은 영구). 브랜치 히스토리는 실제 변경만 남긴다.

@@ -14,13 +14,15 @@
 
 ## AC 검증
 
-- [x] 스냅샷 커밋 + 재생성 결정적 — 연속 2회 실행 `diff` 0 실측 + 프로세스 2개(`PYTHONHASHSEED` 0/12345) 동일 테스트
-- [ ] 스키마 변경 + 스냅샷 미갱신 → CI 빨간불 (실증 1회) — 로컬 실측 완료(exit 1 + diff + 재생성 명령), **CI 실증은 PR에서**
-- [ ] schemathesis가 CI에서 현 라우트 전체에 green — 로컬 실측 완료(1/1 operation · 9 케이스 · Coverage+Fuzzing)
+- [x] 스냅샷 커밋 + 재생성 결정적 — 연속 2회 실행 `diff` 0 실측 + 프로세스 2개(`PYTHONHASHSEED` 0/12345) 동일 테스트로 못박음
+- [x] 스키마 변경 + 스냅샷 미갱신 → CI 빨간불 — **실증 run 29583581654 failure**(`계약 스냅샷` 스텝에서 멎고 이후 skip, 로그에 diff + 재생성 명령). 실증 커밋은 증거 확보 후 제거
+- [x] schemathesis가 CI에서 현 라우트 전체에 green — **run 29583465512** `schemathesis (발행 계약 vs 실 서버)` success (1/1 operation · 9 케이스 · Coverage+Fuzzing)
 - [x] contracts README가 "코드 우선·생성물·수기 수정 금지" 반영 (명령·경로 실체 일치)
+- [x] (추가) `contracts/**` 트리거 실증 — 계약만 수기 수정한 커밋에서 워크플로 트리거 + 빨간불 (run 29583667756)
 
 ## 마무리
 
 - [x] 인루프 게이트 — `ruff format` · `ruff check` · `mypy src/ scripts/` · `pytest` 전체 green (12 passed, `.env.local` 유무 양쪽)
-- [ ] `/code-review` + 지적 반영
-- [ ] 시맨틱 커밋 → push → PR → CI green → 티켓 코멘트
+- [x] `/code-review` 2축 + 지적 반영 — Spec 축이 `contracts/**` 트리거 누락(실결함) 검출·수정, Standards 축 2건(종결 콜론·docstring) 반영
+- [x] CI 기준선 green — **run 29583465512** 13/13 (post-job 포함)
+- [ ] PR #106 최종 green → 티켓 코멘트
