@@ -8,6 +8,7 @@ from src.core.config import get_settings
 from src.health.router import router as health_router
 from src.llm.router import router as llm_router
 from src.ogimage.router import router as ogimage_router
+from src.recipes.router import router as recipes_router
 
 # OAuth state·nonce의 수명 — 인가 화면에 머무는 시간이면 충분하다. 우리 인증 세션(30일)과 무관하다.
 OAUTH_STATE_TTL_SECONDS = 600
@@ -39,3 +40,4 @@ app.include_router(health_router, prefix="/api/v1")
 app.include_router(auth_router, prefix="/api/v1")
 app.include_router(llm_router, prefix="/api/v1")
 app.include_router(ogimage_router, prefix="/api/v1")
+app.include_router(recipes_router, prefix="/api/v1")

@@ -140,6 +140,8 @@ gcloud secrets add-iam-policy-binding cookmark-database-url \
 > 3. 인벤토리(위 표)의 시크릿 수를 1 → 5로 갱신.
 >
 > **미룰 수 있는 이유** — deploy job은 리포 변수가 없으면 skip이라 그전엔 발화하지 않는다. 하지만 파운더가 프로비저닝을 마치고 첫 배포를 돌리는 순간 발현하므로, IdP 등록(#100)과 **한 세션에서** 처리하는 게 자연스럽다.
+>
+> `GEMINI_API_KEY`는 [#103](https://github.com/woosung-dev/cookmark/issues/103) 레시피 북(저장 시 재료 추출)도 소비한다 — ADR-0009 "1기 비밀 5개"의 마지막 조각이 이로써 전부 실체화됐다. `GEMINI_MODEL`·단가 2종은 기본값 있는 비-비밀이라 시크릿도 env도 불요 — 바꿀 때만 `--set-env-vars`로 넣는다.
 
 ## 4. Workload Identity Federation — 키 파일 없는 인증
 

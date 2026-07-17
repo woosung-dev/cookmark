@@ -7,6 +7,7 @@ from sqlalchemy.engine import Connection
 from sqlmodel import SQLModel
 
 import src.auth.models  # noqa: F401 — import해야 테이블이 metadata에 등록된다 (누락은 조용하다)
+import src.recipes.models  # noqa: F401 — 위와 같다 (#103 recipes)
 from src.common.database import get_engine
 from src.core.config import get_settings
 
