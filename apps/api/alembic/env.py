@@ -4,7 +4,9 @@ from logging.config import fileConfig
 
 from alembic import context
 from sqlalchemy.engine import Connection
+from sqlmodel import SQLModel
 
+import src.auth.models  # noqa: F401 — import해야 테이블이 metadata에 등록된다 (누락은 조용하다)
 from src.common.database import get_engine
 from src.core.config import get_settings
 
@@ -13,9 +15,9 @@ config = context.config
 if config.config_file_name is not None:
     fileConfig(config.config_file_name)
 
-# 모델이 아직 없다 — 테이블 도입 티켓(#100·#103)에서 SQLModel.metadata로 교체해 autogenerate를 배선하고,
-# 그때 backend.md §2의 `uv run alembic check`를 검증 앵커(CI 포함)에 복원한다(metadata 없인 무의미).
-target_metadata = None
+# autogenerate·drift 비교의 기준. 새 테이블을 만든 모듈은 위에 import를 추가해야 한다 —
+# 빠뜨리면 "no changes detected"로 조용히 지나가고 `alembic check`도 통과한다.
+target_metadata = SQLModel.metadata
 
 
 def run_migrations_offline() -> None:
