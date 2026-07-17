@@ -32,8 +32,19 @@
 - [x] `design-review` 1회(독립 서브에이전트) → 지적 6건 반영·3건 기각(근거 기록)
 - [x] 하드 제약 4개 유지 증거
 
-## 하드 제약 유지 증거
+## 하드 제약 유지 증거 (1단계)
 - [x] 이벤트/산식/storage 무수정 — git diff에 app_event·storage·debug_metrics·debug_footer 없음
-- [x] 푸터 `수동 수정 <n>`/`이벤트 <n>` 포맷 보존 — debug_footer 무수정, E2E가 '수동 수정 0'/'이벤트 1' 통과
-- [x] `navigation_test.dart` 그린(flutter test 포함) · E2E가 NavigationBar/BottomNavigationBar findsNothing 통과
+- [x] 푸터 `수동 수정 <n>`/`이벤트 <n>` 포맷 보존
 - [x] E2E 키·텍스트·semantics 보존 — 31 케이스 그린
+
+---
+
+# 2단계 — 목업 풀 패리티 (파운더 결정, ADR-0001 역전). 상세는 HANDOFF.md.
+- [x] P1 하단 탭 바 셸 (RootShell·NavigationBar) — `0e4d1a0`, analyze·test290·E2E31 그린
+- [x] P3 목업형 제안 카드 (사진·순위·매칭% placeholder·영상 보기) — `3ac355b`, green·스크린샷 확인
+- [ ] P2 브랜드 히어로·로고·아이콘·온기 (온보딩/업로드)
+- [ ] P4 제안 상세 화면 (카드 탭→push, navigation_test 1 push)
+- [ ] P5 레시피 북 목업 (프리미엄 크롬·썸네일·chevron)
+- [ ] P6 인식 화면 (진행바·확인 중 N개)
+- [ ] P7 ADR-0007 기록 + 최종 게이트·E2E·스크린샷·보고
+- 백엔드 이월: 매칭% 실점수(프록시 스키마)·음식 사진(og:image 프록시)
