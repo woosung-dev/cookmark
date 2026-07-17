@@ -6,6 +6,9 @@ on:
     paths:
       - "apps/api/**"
       - ".github/workflows/api.yml"
+      # 발행된 계약도 트리거다 — 이게 없으면 openapi.yaml만 손댄 PR이 워크플로 자체를 건너뛰어
+      # 드리프트 가드가 돌지 않는다(수기 수정을 막겠다는 게 이 가드의 존재 이유인데).
+      - "contracts/**"
   push:
     branches: [main] # 무필터 유지 — PR paths 필터의 블라인드 스팟 백스톱 (mobile.yml 동형)
 
