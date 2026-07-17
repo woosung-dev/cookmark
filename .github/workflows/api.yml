@@ -56,6 +56,12 @@ jobs:
           # health는 DB를 만지지 않는다 — 앱 import가 Settings를 요구할 뿐이라 자리표시자로 족하다.
           DATABASE_URL: postgresql+asyncpg://contract-fuzz/placeholder
         run: |
-          uv run uvicorn src.main:app --port 8000 &
-          timeout 30 sh -c 'until curl -sf http://localhost:8000/api/v1/health >/dev/null; do sleep 0.5; done'
+          # 출력을 파일로 뺀다 — 백그라운드 서버가 스텝의 stdout을 붙들면 러너가 스텝 종료를 기다린다.
+          uv run uvicorn src.main:app --port 8000 > /tmp/uvicorn.log 2>&1 &
+          # 성공·실패 어느 경로로 나가든 서버를 정리한다 — 남은 uv 프로세스가 post-job 캐시 저장과 겹친다.
+          server=$!
+          trap 'kill "$server" 2>/dev/null || true' EXIT
+          # 기동 실패는 맨 timeout이 아니라 이유를 남기고 죽는다.
+          timeout 30 sh -c 'until curl -sf http://localhost:8000/api/v1/health >/dev/null; do sleep 0.5; done' \
+            || { echo "서버 기동 실패 — uvicorn 로그:"; cat /tmp/uvicorn.log; exit 1; }
           uv run st run ../../contracts/openapi.yaml --url http://localhost:8000
