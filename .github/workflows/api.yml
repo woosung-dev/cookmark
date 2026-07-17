@@ -21,7 +21,7 @@ defaults:
 
 jobs:
   gate:
-    name: format · lint · mypy · pytest
+    name: format · lint · mypy · pytest · 계약
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -36,7 +36,23 @@ jobs:
       - name: lint
         run: uv run ruff check .
       - name: mypy
-        run: uv run mypy src/
+        run: uv run mypy src/ scripts/
+      # 계약 드리프트 가드 — 자동 커밋 없음. 갱신은 사람이 로컬 재생성 명령으로 (ADR-0009 계약 절).
+      # mobile.yml의 "포맷 미적용 = 실패"와 동형이다.
+      - name: 계약 스냅샷 (드리프트 = 실패)
+        run: uv run python scripts/export_openapi.py --check
       # ubuntu-latest에 Docker 상주 — testcontainers 실 Postgres가 그대로 돈다.
       - name: pytest (ASGI + testcontainers 실 Postgres)
         run: uv run pytest -v
+      # 발행된 계약을 실 서버에 물려 fuzzing한다 — 스키마가 아니라 **구현이** 계약을 지키는지 본다
+      # (드리프트 가드는 스냅샷==코드만 보증하므로 둘은 겹치지 않는다).
+      # 실 서버인 이유 — schemathesis v4는 CLI의 인프로세스 ASGI(`--app`)를 제거했고, 남은 인프로세스
+      # 경로는 starlette sync TestClient(요청마다 새 이벤트 루프)라 backend.md §10 금지에 정면으로 걸린다.
+      - name: schemathesis (발행 계약 vs 실 서버)
+        env:
+          # health는 DB를 만지지 않는다 — 앱 import가 Settings를 요구할 뿐이라 자리표시자로 족하다.
+          DATABASE_URL: postgresql+asyncpg://contract-fuzz/placeholder
+        run: |
+          uv run uvicorn src.main:app --port 8000 &
+          timeout 30 sh -c 'until curl -sf http://localhost:8000/api/v1/health >/dev/null; do sleep 0.5; done'
+          uv run st run ../../contracts/openapi.yaml --url http://localhost:8000
