@@ -21,12 +21,18 @@ _HEADER = (
 
 def render() -> str:
     """앱의 OpenAPI 스키마를 스냅샷 텍스트로 렌더한다 — 출력은 코드에만 좌우된다(설정 무관)."""
-    # main.py가 import 시점에 Settings를 읽는다(CORS). 스냅샷은 설정과 무관하므로
-    # (허용 origin은 미들웨어이지 스키마가 아니다) 미설정 환경에서도 재생성이 1명령이도록
-    # 자리표시자만 채운다 — DB 연결은 일어나지 않는다. import는 그 뒤여야 해서 함수 안에 둔다.
-    os.environ.setdefault(
-        "DATABASE_URL", "postgresql+asyncpg://contract-export/placeholder"
-    )
+    # main.py가 import 시점에 Settings를 읽는다(CORS·세션 키·IdP 자격증명). 스냅샷은 설정과 무관하므로
+    # (허용 origin·세션 키는 미들웨어이지 스키마가 아니다) 미설정 환경에서도 재생성이 1명령이도록
+    # 필수 필드를 자리표시자로 채운다 — DB·IdP 연결은 일어나지 않는다. import는 그 뒤여야 해서 함수 안에 둔다.
+    for key, placeholder in {
+        "DATABASE_URL": "postgresql+asyncpg://contract-export/placeholder",
+        "KAKAO_CLIENT_ID": "placeholder",
+        "KAKAO_CLIENT_SECRET": "placeholder",
+        "GOOGLE_CLIENT_ID": "placeholder",
+        "GOOGLE_CLIENT_SECRET": "placeholder",
+        "SESSION_SECRET": "placeholder",
+    }.items():
+        os.environ.setdefault(key, placeholder)
     from src.main import app
 
     # sort_keys=False — FastAPI가 Pydantic OpenAPI 모델로 직렬화하며 이미 정규 순서를 낳는다.

@@ -10,6 +10,7 @@ Create Date: ${create_date}
 from collections.abc import Sequence
 
 import sqlalchemy as sa
+import sqlmodel  # SQLModel의 str 필드는 sqlmodel.sql.sqltypes.AutoString으로 렌더된다 — 없으면 NameError
 from alembic import op
 ${imports if imports else ""}
 
