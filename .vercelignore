@@ -1,5 +1,5 @@
-# Vercel에 올릴 것은 web 빌드 산출물(build/web)과 api/ 함수뿐이다.
-# 서빙되는 건 outputDirectory(vercel.json = build/web)의 내용물과 api/ 함수다.
+# Vercel에 올릴 것은 web 빌드 산출물(apps/mobile/build/web)과 api/ 함수뿐이다.
+# 서빙되는 건 outputDirectory(vercel.json = apps/mobile/build/web)의 내용물과 api/ 함수다.
 #
 # 규칙 두 개를 지켜야 한다. 둘 다 어기면 사이트 전체가 404가 되는데,
 # api/ 함수는 멀쩡히 살아 있어서 원인이 잘 안 보인다(실측 2026-07-16).
@@ -12,32 +12,44 @@
 # .gitignore에 기대지도 말 것 — Vercel은 .gitignore를 읽지 않는다
 # (실측: gitignore된 .claude/·.agents/가 업로드에 들어왔다).
 
-# 빌드 중간 산출물 — 배포에 쓰는 건 build/web 하나뿐이다.
-/build/test_cache/
-/build/flutter_assets/
-/build/native_assets/
-/build/unit_test_assets/
+# 빌드 중간 산출물 — 배포에 쓰는 건 apps/mobile/build/web 하나뿐이다.
+# 주의: /apps/mobile/build/ 통째 제외 금지 — outputDirectory가 그 안에 있다.
+/apps/mobile/build/test_cache/
+/apps/mobile/build/flutter_assets/
+/apps/mobile/build/native_assets/
+/apps/mobile/build/unit_test_assets/
 
 # 소스·테스트·문서 — 배포 대상이 아니다.
-/lib/
-/test/
-/integration_test/
-/test_driver/
+/apps/mobile/lib/
+/apps/mobile/test/
+/apps/mobile/integration_test/
+/apps/mobile/test_driver/
+/apps/mobile/web/
+/apps/mobile/assets/
+/apps/mobile/tool/
+/apps/mobile/scripts/
+/apps/mobile/.dart_tool/
+/apps/mobile/pubspec.yaml
+/apps/mobile/pubspec.lock
+/apps/mobile/analysis_options.yaml
+/apps/mobile/.metadata
+/apps/mobile/.flutter-plugins-dependencies
 /test_results/
 /docs/
-/web/
-/.dart_tool/
 /.idea/
-/pubspec.yaml
-/pubspec.lock
-/analysis_options.yaml
-/.metadata
 *.iml
 *.md
+
+# 모노레포 스켈레톤(README 계약뿐) — 통째 제외한다. 루트 /api/는 제외하지 않는다(함수 서빙).
+/apps/api/
+/apps/admin/
+/apps/web/
+/packages/
+/contracts/
+/infra/
 
 # 에이전트·개발 도구 — 공개 표면에 올릴 이유가 없다.
 /.claude/
 /.agents/
-/scripts/
+/.github/
 /skills-lock.json
-/.flutter-plugins-dependencies
