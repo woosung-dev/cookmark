@@ -15,9 +15,25 @@ curl http://localhost:8000/api/v1/health # → {"status":"ok"}
 ```bash
 uv run ruff format --check .   # 포맷 (미적용 = 실패)
 uv run ruff check .            # 린트
-uv run mypy src/               # 타입 (strict + pydantic 플러그인)
+uv run mypy src/ scripts/      # 타입 (strict + pydantic 플러그인)
 uv run pytest                  # 통합(ASGI + testcontainers 실 Postgres — Docker 필요) + 유닛
 uv run alembic upgrade head    # 마이그레이션 적용 (--sql로 dry-run)
+```
+
+## 계약 (OpenAPI)
+
+**Pydantic 모델이 정본**이고 `contracts/openapi.yaml`은 **생성물**이다 (ADR-0009 계약 절). 스키마를 바꿨으면 재생성해 **같은 커밋에 포함**한다 — 잊으면 CI가 막는다 (자동 커밋 없음).
+
+```bash
+uv run python scripts/export_openapi.py           # 재생성
+uv run python scripts/export_openapi.py --check   # 드리프트 검사 (CI 가드와 동일)
+```
+
+`schemathesis`는 발행된 계약을 **실 서버**에 물려 구현이 계약을 지키는지 fuzzing한다 — CI 게이트이고, 로컬 재현은 아래처럼 한다. 실 서버인 이유는 v4가 CLI의 인프로세스 ASGI를 제거했고 남은 인프로세스 경로가 sync `TestClient`(§10 금지)이기 때문이다.
+
+```bash
+uv run uvicorn src.main:app --port 8090 &        # health는 DB 미접촉 — DATABASE_URL은 자리표시자로 족하다
+uv run st run ../../contracts/openapi.yaml --url http://localhost:8090
 ```
 
 CI는 `.github/workflows/api.yml`이 매 PR(`apps/api/**` paths 필터)·main push(무필터 백스톱)에서 위 게이트를 강제한다.
@@ -31,4 +47,4 @@ CI는 `.github/workflows/api.yml`이 매 PR(`apps/api/**` paths 필터)·main pu
 
 로컬 웹 개발과 연결할 땐 클라이언트 포트를 고정하고(`flutter run -d chrome --web-port <포트>`) 그 origin을 `CORS_ALLOWED_ORIGINS`에 넣는다 — 포트가 랜덤이면 허용 목록이 성립하지 않는다 (§10).
 
-배포(Cloud Run 서울 + Secret Manager)는 [#98](https://github.com/woosung-dev/cookmark/issues/98), OpenAPI 스냅샷·드리프트 가드는 [#99](https://github.com/woosung-dev/cookmark/issues/99)의 몫이다.
+배포(Cloud Run 서울 + Secret Manager)는 [#98](https://github.com/woosung-dev/cookmark/issues/98)의 몫이다. OpenAPI 스냅샷·드리프트 가드는 [#99](https://github.com/woosung-dev/cookmark/issues/99)로 배선됐다(위 계약 절).

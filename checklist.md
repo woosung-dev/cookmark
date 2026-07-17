@@ -1,27 +1,26 @@
-# #97 api-1 스캐폴드 + 검증 하네스 — 체크리스트 (walking skeleton 로컬)
+# #99 api-3 계약 스냅샷 + CI 드리프트 가드 — 체크리스트
 
-계획: `~/.claude/plans/97-dazzling-manatee.md`. 티켓 정본은 [#97](https://github.com/woosung-dev/cookmark/issues/97), 결정 정본은 ADR-0009 + `.claude/rules/backend.md`. (직전 태스크 ADR-0008 체크리스트는 전량 완료 — 잔여 파운더 수동 항목은 #69에 남아 있다.)
+티켓 정본은 [#99](https://github.com/woosung-dev/cookmark/issues/99), 결정 정본은 [ADR-0009](docs/adr/0009-apps-api-materialization.md) 계약 절(#81) + `.claude/rules/backend.md` §9.2. 직전 티켓 #97(스캐폴드)은 PR #105로 머지됐다 — 이 티켓은 그 위에 얹는다.
 
 ## 구현
 
-- [x] 브랜치 `feat/97-api-scaffold` + 작업 문서 갱신
-- [x] uv 프로젝트 (pyproject·deps·ruff/mypy/pytest 설정·`.python-version` 3.13) — `uv sync` 통과
-- [x] RED — tests(conftest·test_health·test_cors) 먼저, 실패 확인
-- [x] GREEN — `core/config.py`(NoDecode CORS·SecretStr) · `common/database.py`(statement_cache_size=0·expire_on_commit=False) · `health/router.py` · `main.py` · alembic async 배선 + 빈 베이스라인
-- [x] 인루프 게이트 — `ruff format` · `ruff check` · `mypy src/` · `pytest` 전체 green
-- [x] `.github/workflows/api.yml` — mobile.yml 동형(PR paths 필터 + main 무필터 백스톱)
-- [x] `apps/api/README.md` 실체화 문서로 갱신 + 로컬 `.env.local` 생성(gitignored)
+- [x] 브랜치 `feat/99-contract-guard` + 작업 문서 갱신
+- [x] RED — `tests/test_contract.py` 먼저(동기·드리프트 검출·결정성), 실패 확인(`ModuleNotFoundError: scripts`)
+- [x] GREEN — `scripts/export_openapi.py`(render/write/drift + `--check`)
+- [x] 앱 import 순서 지뢰 제거 — conftest의 CORS env를 모듈 스코프로(컨텍스트 노트 참조)
+- [x] `contracts/openapi.yaml` 생성·커밋 (생성물 헤더 = 수기 수정 금지)
+- [x] `.github/workflows/api.yml` — 드리프트 가드 + schemathesis 스텝
+- [x] `contracts/README.md`·`apps/api/README.md` — 명령·경로를 실체와 일치
 
 ## AC 검증
 
-- [x] 로컬 uvicorn + 허용 origin에서 health 200 (CORS preflight 통과)
-- [x] 비허용 origin 브라우저 차단 — 수동 확인 1회 (Playwright)
-- [x] ASGI + testcontainers 실 Postgres 통합 테스트 ≥1 green
-- [x] `alembic upgrade head` 실 DB 적용 (테스트 컨테이너에서 증명)
-- [x] PR CI에서 pytest·ruff·mypy 전부 통과 — run 29581508224, pytest `7 passed in 9.23s`(러너 testcontainers 실구동)
-- [x] CORS 기본 빈 목록·origin 하드코딩 없음
+- [x] 스냅샷 커밋 + 재생성 결정적 — 연속 2회 실행 `diff` 0 실측 + 프로세스 2개(`PYTHONHASHSEED` 0/12345) 동일 테스트
+- [ ] 스키마 변경 + 스냅샷 미갱신 → CI 빨간불 (실증 1회) — 로컬 실측 완료(exit 1 + diff + 재생성 명령), **CI 실증은 PR에서**
+- [ ] schemathesis가 CI에서 현 라우트 전체에 green — 로컬 실측 완료(1/1 operation · 9 케이스 · Coverage+Fuzzing)
+- [x] contracts README가 "코드 우선·생성물·수기 수정 금지" 반영 (명령·경로 실체 일치)
 
 ## 마무리
 
-- [x] `/code-review` + 지적 반영 — 2축(Standards·Spec) 하드 위반 0, 반영 3건(5863bd4)
-- [x] 시맨틱 커밋 4개 → push → PR #105 → CI green → 티켓 코멘트
+- [x] 인루프 게이트 — `ruff format` · `ruff check` · `mypy src/ scripts/` · `pytest` 전체 green (12 passed, `.env.local` 유무 양쪽)
+- [ ] `/code-review` + 지적 반영
+- [ ] 시맨틱 커밋 → push → PR → CI green → 티켓 코멘트
