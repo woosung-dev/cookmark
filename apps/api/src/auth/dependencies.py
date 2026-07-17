@@ -12,6 +12,12 @@ from src.common.database import get_async_session
 SESSION_COOKIE = "cookmark_session"
 _BEARER_PREFIX = "bearer "
 
+# 401은 아래 get_current_account가 실제로 내는 응답이다 — 이를 쓰는 모든 도메인의 라우트가
+# responses=UNAUTHORIZED로 문서화해야 생성된 OpenAPI가 구현과 어긋나지 않는다(#99 계약 가드).
+UNAUTHORIZED: dict[int | str, dict[str, str]] = {
+    401: {"description": "세션이 없거나 유효하지 않다"}
+}
+
 
 def get_auth_service(
     session: Annotated[AsyncSession, Depends(get_async_session)],
