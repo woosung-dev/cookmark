@@ -23,9 +23,13 @@ def database_url() -> Iterator[str]:
         os.environ["DATABASE_URL"] = url
         os.environ["CORS_ALLOWED_ORIGINS"] = ALLOWED_ORIGIN
 
+        from src.common.database import get_engine, get_sessionmaker
         from src.core.config import get_settings
 
+        # 세 캐시 전부 클리어 — settings만 지우면 engine이 이전 URL(.env.local)에 묶인 채 남는다
         get_settings.cache_clear()
+        get_engine.cache_clear()
+        get_sessionmaker.cache_clear()
         yield url
 
 

@@ -13,7 +13,8 @@ config = context.config
 if config.config_file_name is not None:
     fileConfig(config.config_file_name)
 
-# 모델이 아직 없다 — 테이블 도입 티켓(#100·#103)에서 SQLModel.metadata로 교체해 autogenerate를 배선한다.
+# 모델이 아직 없다 — 테이블 도입 티켓(#100·#103)에서 SQLModel.metadata로 교체해 autogenerate를 배선하고,
+# 그때 backend.md §2의 `uv run alembic check`를 검증 앵커(CI 포함)에 복원한다(metadata 없인 무의미).
 target_metadata = None
 
 
@@ -44,6 +45,8 @@ async def run_async_migrations() -> None:
     async with engine.connect() as connection:
         await connection.run_sync(do_run_migrations)
 
+    # dispose 필수 — asyncio.run 루프에서 만든 커넥션이 풀에 남으면
+    # 이후 다른 루프(pytest-asyncio 세션 루프)가 재사용하다 asyncpg가 폭발한다.
     await engine.dispose()
 
 

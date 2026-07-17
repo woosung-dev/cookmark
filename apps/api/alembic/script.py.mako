@@ -1,3 +1,4 @@
+# Alembic 마이그레이션 — ${message}
 """${message}
 
 Revision ID: ${up_revision}
