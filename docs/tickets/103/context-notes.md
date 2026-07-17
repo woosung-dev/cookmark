@@ -2,6 +2,10 @@
 
 다음 세션(사람·에이전트)이 재도출 없이 이어받기 위한 기록. AC·설계 원문은 이슈 #103과 스펙 #96.
 
+## 머지 시 seam 단일화 (2026-07-18, 이 브랜치의 main 통합 커밋)
+
+선점했던 `src/services/ai_processing.py`(extract 전용)는 **삭제됐다** — #101(PR #110)이 병렬로 `src/llm/` 도메인 seam(3메서드+usage)을 독자 랜딩해, "늦게 머지되는 쪽이 조정" 결정대로 #110 기준으로 단일화했다. recipes의 소비 지점: `src/llm/service.BaseLLMService.extract(title) → ExtractResponse(.ingredients)` · 예외 `src/llm/exceptions.UpstreamLLMError` · DI `src/llm/dependencies.get_llm_service` · 테스트 페이크 `tests/llm.py fake_llm` 픽스처(EXTRACTIONS 사전, 빈 배열 항목 "ㅁㄴㅇㄹ"는 recipes가 추가). `UNAUTHORIZED`는 #102(PR #109)가 `auth/dependencies.py`로 승격한 정본을 쓴다. usage는 레시피 북에 저장하지 않는다(원가 계측은 LLM 라우트 응답 표면).
+
 ## 조율 결정
 
 - **#101 blocked-by를 사용자 승인으로 해제하고 #103이 seam을 선점했다** (2026-07-18 사용자 결정). `BaseLLMService`는 의도적으로 `extract_ingredients` 하나만 가진다 — #101이 recognize·match를 같은 인터페이스·같은 파일에 append한다. 늦게 머지되는 쪽이 조정한다(선례: exp2b-r2 자율조정). usage/원가 산식(`_gemini.mjs readUsage`)은 **이식하지 않았다** — 프록시 승계 응답 패리티가 필요한 #101의 몫이다.

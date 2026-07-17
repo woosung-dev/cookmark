@@ -6,9 +6,10 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from src.auth.dependencies import CurrentAccount
 from src.common.database import get_async_session
+from src.llm.dependencies import get_llm_service
+from src.llm.service import BaseLLMService
 from src.recipes.repository import RecipeBookRepository
 from src.recipes.service import RecipeBookService
-from src.services.ai_processing import BaseLLMService, get_llm_service
 
 
 def get_recipe_book_service(

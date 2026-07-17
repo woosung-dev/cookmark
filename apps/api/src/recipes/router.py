@@ -4,20 +4,19 @@ from uuid import UUID
 
 from fastapi import APIRouter, Depends, HTTPException, status
 
+from src.auth.dependencies import UNAUTHORIZED
+from src.llm.exceptions import UpstreamLLMError
 from src.recipes.dependencies import get_recipe_book_service
 from src.recipes.exceptions import RecipeNotFound
 from src.recipes.schemas import RecipeCreate, RecipeResponse, RecipeUpdate
 from src.recipes.service import RecipeBookService
-from src.services.ai_processing import ExtractionUnavailable
 
 router = APIRouter(prefix="/recipes", tags=["recipes"])
 
 Service = Annotated[RecipeBookService, Depends(get_recipe_book_service)]
 
-# 계약 가드(#99)가 실 서버로 검증한다 — 라우트가 실제로 내는 코드는 전부 문서화한다 (auth/router.py 동형).
-UNAUTHORIZED: dict[int | str, dict[str, str]] = {
-    401: {"description": "세션이 없거나 유효하지 않다"}
-}
+# 계약 가드(#99)가 실 서버로 검증한다 — 라우트가 실제로 내는 코드는 전부 문서화한다(401은 #102가
+# auth/dependencies로 승격한 정본을 쓴다).
 # 부재와 남의 것이 바이트 동일 응답이어야 한다 — 존재를 노출하지 않는다 (§12.2, 403 아님).
 NOT_FOUND: dict[int | str, dict[str, str]] = {
     404: {"description": "레시피를 찾을 수 없다"}
@@ -43,7 +42,7 @@ async def create_recipe(payload: RecipeCreate, service: Service) -> RecipeRespon
     """저장하면 제목에서 재료 추출이 1회 일어나 항목에 남는다. 추출 실패는 명시적 502 — 조용한 저장 없음."""
     try:
         recipe = await service.create(url=payload.url, title=payload.title)
-    except ExtractionUnavailable as exc:
+    except UpstreamLLMError as exc:
         raise HTTPException(
             status_code=status.HTTP_502_BAD_GATEWAY,
             detail="재료 추출에 실패해 저장하지 않았다",

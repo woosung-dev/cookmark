@@ -39,20 +39,20 @@ def database_url() -> Iterator[str]:
         os.environ["GOOGLE_CLIENT_ID"] = CLIENT_IDS[Provider.GOOGLE]
         os.environ["GOOGLE_CLIENT_SECRET"] = "test-google-secret"
         os.environ["SESSION_SECRET"] = "test-session-secret-0123456789abcdef"
-        # 필수 필드라 env가 없으면 부팅이 죽는다(#103). 실 호출은 seam 페이크(tests/llm.py)가 막는다.
+        # LLM 키는 페이크 seam(dependency_overrides) 뒤라 실제로 쓰이지 않는다 — 부팅 필수 필드일 뿐이다.
         os.environ["GEMINI_API_KEY"] = "test-gemini-key"
 
         from src.auth.oidc import get_oauth
         from src.common.database import get_engine, get_sessionmaker
         from src.core.config import get_settings
-        from src.services.ai_processing import get_llm_service
+        from src.llm.dependencies import get_gemini_service
 
         # 캐시 전부 클리어 — settings만 지우면 engine·oauth가 이전 값(.env.local)에 묶인 채 남는다
         get_settings.cache_clear()
         get_engine.cache_clear()
         get_sessionmaker.cache_clear()
         get_oauth.cache_clear()
-        get_llm_service.cache_clear()
+        get_gemini_service.cache_clear()
         yield url
 
 
@@ -89,26 +89,21 @@ def idp() -> Iterator[FakeIdp]:
 
 
 @pytest.fixture
+def fake_llm() -> Iterator[FakeLLMService]:
+    """get_llm_service 자리에 결정적 페이크를 꽂는다 — 페이크 주입 지점은 이 seam 하나뿐이다 (스펙 #96)."""
+    from src.llm.dependencies import get_llm_service
+    from src.main import app
+
+    fake = FakeLLMService()
+    app.dependency_overrides[get_llm_service] = lambda: fake
+    yield fake
+    app.dependency_overrides.pop(get_llm_service, None)
+
+
+@pytest.fixture
 async def db_session(migrated_db: str) -> AsyncIterator[AsyncSession]:
     """테스트가 DB 최종 상태를 직접 확인할 때 쓰는 세션 — 앱과 같은 sessionmaker."""
     from src.common.database import get_sessionmaker
 
     async with get_sessionmaker()() as session:
         yield session
-
-
-@pytest.fixture
-async def llm(migrated_db: str) -> AsyncIterator[FakeLLMService]:
-    """LLM seam 페이크 — dependency override는 스펙 #96이 승인한 seam ①에만 쓴다.
-
-    app이 모듈 싱글턴이라 override가 테스트 밖으로 새지 않게 finally로 반드시 걷는다.
-    """
-    from src.main import app
-    from src.services.ai_processing import get_llm_service
-
-    fake = FakeLLMService()
-    app.dependency_overrides[get_llm_service] = lambda: fake
-    try:
-        yield fake
-    finally:
-        app.dependency_overrides.pop(get_llm_service, None)

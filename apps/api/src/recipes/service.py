@@ -1,10 +1,10 @@
 # 레시피 북 비즈니스 로직 — 저장 시 재료 추출 1회, 트랜잭션 경계. AsyncSession을 모른다 (backend.md §3)
 from uuid import UUID
 
+from src.llm.service import BaseLLMService
 from src.recipes.exceptions import RecipeNotFound
 from src.recipes.models import Recipe
 from src.recipes.repository import RecipeBookRepository
-from src.services.ai_processing import BaseLLMService
 
 
 class RecipeBookService:
@@ -16,9 +16,12 @@ class RecipeBookService:
         """추출이 저장에 선행한다 — 실패하면 예외가 그대로 올라가 아무것도 저장되지 않는다.
 
         빈 목록은 실패가 아니다 — 프롬프트가 요리명 미인식 시 []를 정당하게 돌려준다. 그대로 저장한다.
+        usage는 저장하지 않는다 — 원가 계측은 LLM 라우트(#101)의 응답 표면이지 레시피 북의 것이 아니다.
         """
-        ingredients = await self._llm.extract_ingredients(title)
-        recipe = await self._recipes.add(url=url, title=title, ingredients=ingredients)
+        extraction = await self._llm.extract(title)
+        recipe = await self._recipes.add(
+            url=url, title=title, ingredients=extraction.ingredients
+        )
         await self._recipes.commit()
         return recipe
 

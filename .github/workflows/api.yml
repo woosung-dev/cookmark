@@ -61,7 +61,7 @@ jobs:
           GOOGLE_CLIENT_ID: placeholder
           GOOGLE_CLIENT_SECRET: placeholder
           SESSION_SECRET: placeholder
-          # #103 recipes가 GEMINI_API_KEY를 필수로 추가 — fuzz는 무인증 401에서 끝나 LLM 호출은 0회다.
+          # LLM·recipes 라우트는 전부 세션 필수(401 선차단)라 fuzzing이 Gemini에 도달하지 않는다 — 자리표시자로 족하다.
           GEMINI_API_KEY: placeholder
         run: |
           # 출력을 파일로 뺀다 — 백그라운드 서버가 스텝의 stdout을 붙들면 러너가 스텝 종료를 기다린다.

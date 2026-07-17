@@ -23,11 +23,12 @@ class Settings(BaseSettings):
     # SessionMiddleware 서명 키 — OAuth state·nonce 운반 전용이고 우리 인증 세션과 무관하다(§9).
     session_secret: SecretStr
 
-    # LLM (#103 · ADR-0009 편차 ① — 구현체는 google-genai). 필수 필드로 둔다 —
-    # 없으면 부팅이 실패하는 편이 조용한 추출 장애보다 낫다 (IdP 자격증명 동형).
+    # LLM 승계 (#101). 모델명은 환경설정 주입(스펙 #96) — 파일럿 중에는 바꾸지 않는다.
+    # 단가는 USD per 1M 토큰 — 모델을 바꾸면 단가도 함께 바꿔야 원가 로그가 맞는다(_gemini.mjs 이식).
     gemini_api_key: SecretStr
-    # 승계 프록시의 기본 모델 (api/_gemini.mjs) — env GEMINI_MODEL로 교체 가능, 파일럿 중 불변.
     gemini_model: str = "gemini-3.1-flash-lite"
+    gemini_price_input_per_m: float = 0.25
+    gemini_price_output_per_m: float = 1.5
 
     @field_validator("cors_allowed_origins", mode="before")
     @classmethod

@@ -8,17 +8,21 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from sqlmodel import col
 
 from src.auth.oidc import Provider
+from src.llm.exceptions import UpstreamLLMError
 from src.recipes.models import Recipe
 from tests.idp import FakeIdp
-from tests.llm import FakeLLMService
+from tests.llm import EXTRACTIONS, FakeLLMService
 
 RECIPES = "/api/v1/recipes"
 
 
 @pytest.fixture(autouse=True)
-def _llm_guard(llm: FakeLLMService) -> FakeLLMService:
-    """전 테스트에 페이크 주입을 강제한다 — override 누락 시 실 Gemini로 새는 함정 차단."""
-    return llm
+def _llm_guard(migrated_db: str, fake_llm: FakeLLMService) -> FakeLLMService:
+    """전 테스트에 페이크 주입을 강제한다 — override 누락 시 실 Gemini로 새는 함정 차단.
+
+    migrated_db 의존이 먼저다 — fake_llm이 src.main을 import하므로 env 주입이 선행돼야 한다.
+    """
+    return fake_llm
 
 
 async def login_bearer(
@@ -42,12 +46,11 @@ def count_by_url(url: str) -> Select[tuple[int]]:
 async def test_create_returns_extracted_ingredients(
     client: httpx.AsyncClient,
     idp: FakeIdp,
-    llm: FakeLLMService,
+    fake_llm: FakeLLMService,
     db_session: AsyncSession,
 ) -> None:
     """AC: 저장 응답에 추출 재료 동봉 — 추출은 저장 시 서버가 1회 수행한다."""
     headers = await login_bearer(client, idp, "crud-create")
-    llm.result = ["돼지고기", "김치", "두부"]
 
     res = await client.post(
         RECIPES,
@@ -59,19 +62,19 @@ async def test_create_returns_extracted_ingredients(
     body = res.json()
     assert body["url"] == "https://youtu.be/crud-create"
     assert body["title"] == "김치찌개"
-    assert body["ingredients"] == ["돼지고기", "김치", "두부"]
+    assert body["ingredients"] == EXTRACTIONS["김치찌개"]
     assert "id" in body and "created_at" in body
-    assert llm.calls == ["김치찌개"]  # 제목만 보고 추출한다 — URL은 건네지 않는다
+    # 제목만 보고 추출한다 — URL은 건네지 않는다.
+    assert fake_llm.extracted_titles == ["김치찌개"]
     stored = await count_rows(db_session, count_by_url("https://youtu.be/crud-create"))
     assert stored == 1
 
 
 async def test_get_by_id_returns_ingredients(
-    client: httpx.AsyncClient, idp: FakeIdp, llm: FakeLLMService
+    client: httpx.AsyncClient, idp: FakeIdp
 ) -> None:
     """AC: 조회에도 추출 재료 동봉 — 추출 결과는 항목에 남는 것이지 응답 1회용이 아니다."""
     headers = await login_bearer(client, idp, "crud-get")
-    llm.result = ["계란"]
     created = (
         await client.post(
             RECIPES,
@@ -83,7 +86,7 @@ async def test_get_by_id_returns_ingredients(
     res = await client.get(f"{RECIPES}/{created['id']}", headers=headers)
 
     assert res.status_code == 200
-    assert res.json()["ingredients"] == ["계란"]
+    assert res.json()["ingredients"] == EXTRACTIONS["계란찜"]
 
 
 async def test_list_keeps_insertion_order(
@@ -108,11 +111,10 @@ async def test_list_keeps_insertion_order(
 
 
 async def test_patch_updates_title_without_reextraction(
-    client: httpx.AsyncClient, idp: FakeIdp, llm: FakeLLMService
+    client: httpx.AsyncClient, idp: FakeIdp, fake_llm: FakeLLMService
 ) -> None:
     """수정은 재추출하지 않는다 — 추출은 저장 시 1회뿐이다(글로서리)."""
     headers = await login_bearer(client, idp, "crud-patch-title")
-    llm.result = ["김치"]
     created = (
         await client.post(
             RECIPES,
@@ -129,12 +131,12 @@ async def test_patch_updates_title_without_reextraction(
     body = res.json()
     assert body["title"] == "부대찌개"
     assert body["url"] == "https://youtu.be/patch-title"  # url 불변
-    assert body["ingredients"] == ["김치"]  # 재료 불변
-    assert llm.calls == ["김치찌개"]  # 생성 1회뿐 — 재추출 없음
+    assert body["ingredients"] == EXTRACTIONS["김치찌개"]  # 재료 불변
+    assert fake_llm.extracted_titles == ["김치찌개"]  # 생성 1회뿐 — 재추출 없음
 
 
 async def test_patch_replaces_ingredients(
-    client: httpx.AsyncClient, idp: FakeIdp, llm: FakeLLMService
+    client: httpx.AsyncClient, idp: FakeIdp
 ) -> None:
     """재료는 사용자가 직접 고친다 — 통째 교체."""
     headers = await login_bearer(client, idp, "crud-patch-ingredients")
@@ -287,12 +289,12 @@ async def test_nonexistent_id_is_404_for_owner(
 async def test_extraction_failure_is_502_and_no_row(
     client: httpx.AsyncClient,
     idp: FakeIdp,
-    llm: FakeLLMService,
+    fake_llm: FakeLLMService,
     db_session: AsyncSession,
 ) -> None:
     """AC: 추출 실패는 명시적 502 — 재료 0개로 조용히 저장하지 않는다(#34 선례 서버 반복 금지)."""
     headers = await login_bearer(client, idp, "crud-extract-fail")
-    llm.fail()
+    fake_llm.failure = UpstreamLLMError("추출 업스트림 불능")
 
     res = await client.post(
         RECIPES,
@@ -306,11 +308,10 @@ async def test_extraction_failure_is_502_and_no_row(
 
 
 async def test_extraction_empty_list_still_saves(
-    client: httpx.AsyncClient, idp: FakeIdp, llm: FakeLLMService
+    client: httpx.AsyncClient, idp: FakeIdp
 ) -> None:
     """빈 배열은 실패가 아니다 — 요리명 미인식 시 []는 프롬프트가 정의한 정상 출력이다."""
     headers = await login_bearer(client, idp, "crud-extract-empty")
-    llm.result = []
 
     res = await client.post(
         RECIPES,

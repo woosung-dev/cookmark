@@ -18,9 +18,12 @@ RECIPES = "/api/v1/recipes"
 
 
 @pytest.fixture(autouse=True)
-def _llm_guard(llm: FakeLLMService) -> FakeLLMService:
-    """전 테스트에 페이크 주입을 강제한다 — override 누락 시 실 Gemini로 새는 함정 차단."""
-    return llm
+def _llm_guard(migrated_db: str, fake_llm: FakeLLMService) -> FakeLLMService:
+    """전 테스트에 페이크 주입을 강제한다 — override 누락 시 실 Gemini로 새는 함정 차단.
+
+    migrated_db 의존이 먼저다 — fake_llm이 src.main을 import하므로 env 주입이 선행돼야 한다.
+    """
+    return fake_llm
 
 
 # 테스트 파일은 자급자족한다(리포 선례 — count_rows도 파일마다 재정의). 테스트 모듈 간 import 금지.
