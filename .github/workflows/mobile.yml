@@ -1,22 +1,30 @@
-# 냉파 CI — 리팩터(#38)가 흔들 154+E2E 안전망을 수동 게이트에서 자동으로 옮긴다.
-name: CI
+# 냉파 CI — apps/mobile(Flutter) 게이트. 리팩터(#38)가 흔들 154+E2E 안전망을 수동 게이트에서 자동으로 옮긴다.
+name: mobile
 
 on:
   pull_request:
+    paths:
+      - "apps/mobile/**"
+      - ".github/workflows/mobile.yml"
   push:
-    branches: [main]
+    branches: [main] # 무필터 유지 — PR paths 필터의 블라인드 스팟 백스톱 (#69 리스크 ④)
 
 # 같은 브랜치의 이전 런은 취소 — 러너 분 절약.
 concurrency:
-  group: ci-${{ github.ref }}
+  group: mobile-${{ github.ref }}
   cancel-in-progress: true
 
 env:
   # 로컬 개발 = Flutter 3.44.4 stable (Dart 3.12.x). CI도 동일 핀 — 버전 드리프트 차단.
   FLUTTER_VERSION: "3.44.4"
 
+# Flutter 패키지는 apps/mobile에 산다 (ADR-0008) — 모든 run 스텝의 기준 디렉토리.
+defaults:
+  run:
+    working-directory: apps/mobile
+
 jobs:
-  # 인루프 게이트 (mobile.md §0.1) — 빠르고 결정적. 현재 codegen 없음이라 build_runner 단계 불필요.
+  # 인루프 게이트 (mobile.md §0.1) — 빠르고 결정적. 현재 codegen 없음이라 build_runner 단계 불필요(#38 랜딩 시 재평가).
   gate:
     name: format · analyze · test
     runs-on: ubuntu-latest
