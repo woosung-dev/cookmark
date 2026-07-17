@@ -53,8 +53,14 @@ jobs:
       # 경로는 starlette sync TestClient(요청마다 새 이벤트 루프)라 backend.md §10 금지에 정면으로 걸린다.
       - name: schemathesis (발행 계약 vs 실 서버)
         env:
-          # health는 DB를 만지지 않는다 — 앱 import가 Settings를 요구할 뿐이라 자리표시자로 족하다.
+          # 앱 import 시점에 Settings가 요구하는 필수 필드 — DB·IdP 연결은 일어나지 않으므로 자리표시자로 족하다.
+          # (#100 인증이 세션 키·IdP 자격증명을 필수로 추가해 DATABASE_URL만으론 부팅이 안 된다.)
           DATABASE_URL: postgresql+asyncpg://contract-fuzz/placeholder
+          KAKAO_CLIENT_ID: placeholder
+          KAKAO_CLIENT_SECRET: placeholder
+          GOOGLE_CLIENT_ID: placeholder
+          GOOGLE_CLIENT_SECRET: placeholder
+          SESSION_SECRET: placeholder
         run: |
           # 출력을 파일로 뺀다 — 백그라운드 서버가 스텝의 stdout을 붙들면 러너가 스텝 종료를 기다린다.
           uv run uvicorn src.main:app --port 8000 > /tmp/uvicorn.log 2>&1 &
@@ -64,4 +70,7 @@ jobs:
           # 기동 실패는 맨 timeout이 아니라 이유를 남기고 죽는다.
           timeout 30 sh -c 'until curl -sf http://localhost:8000/api/v1/health >/dev/null; do sleep 0.5; done' \
             || { echo "서버 기동 실패 — uvicorn 로그:"; cat /tmp/uvicorn.log; exit 1; }
-          uv run st run ../../contracts/openapi.yaml --url http://localhost:8000
+          # login은 제외한다 — 유일한 일은 외부 IdP로의 302 리다이렉트라 실 서버로 fuzzing하면
+          # schemathesis가 리다이렉트를 좇아 IdP로 나가버린다(우리 API 밖). 이 라우트는 test_auth_login.py가
+          # FakeIdp로 관통 검증하므로 계약 커버리지 손실이 없다(#99 가드 × #100 인증 통합 시 발현).
+          uv run st run ../../contracts/openapi.yaml --url http://localhost:8000 --exclude-path-regex 'login$'

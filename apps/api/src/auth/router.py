@@ -20,6 +20,12 @@ router = APIRouter(prefix="/auth", tags=["auth"])
 
 Service = Annotated[AuthService, Depends(get_auth_service)]
 
+# 401은 CurrentAccount 의존성·콜백 실패가 실제로 내는 응답이다 — 계약이 이를 문서화해야
+# 생성된 OpenAPI가 구현과 어긋나지 않는다(#99 계약 가드가 실 서버로 이를 검증한다).
+UNAUTHORIZED: dict[int | str, dict[str, str]] = {
+    401: {"description": "세션이 없거나 유효하지 않다"}
+}
+
 # 쿠키 속성은 §9 고정 — HttpOnly(스크립트 차단)·Secure(평문 전송 차단)·Lax(cross-site 전송 차단).
 # 브라우저는 localhost를 보안 컨텍스트로 취급하므로 Secure가 로컬 http 데모를 막지 않는다.
 # 세팅과 삭제가 같은 속성을 써야 브라우저가 같은 쿠키로 알아본다 — 그래서 둘을 나란히 둔다.
@@ -43,14 +49,19 @@ def _clear_session_cookie(response: Response) -> None:
     )
 
 
-@router.get("/{provider}/login")
+@router.get(
+    "/{provider}/login",
+    status_code=status.HTTP_302_FOUND,
+    response_class=RedirectResponse,
+    responses={302: {"description": "IdP 인가 화면으로 리다이렉트"}},
+)
 async def start_login(provider: Provider, request: Request) -> RedirectResponse:
     """IdP 인가 화면으로 보낸다. redirect_uri는 라우트에서 도출해 설정 없이 성립시킨다."""
     redirect_uri = str(request.url_for("auth_callback", provider=provider.value))
     return await oidc.start_login(provider, request, redirect_uri)
 
 
-@router.get("/{provider}/callback", name="auth_callback")
+@router.get("/{provider}/callback", name="auth_callback", responses=UNAUTHORIZED)
 async def auth_callback(
     provider: Provider,
     request: Request,
@@ -74,7 +85,7 @@ async def auth_callback(
     )
 
 
-@router.get("/me")
+@router.get("/me", responses=UNAUTHORIZED)
 async def read_current_account(account: CurrentAccount) -> AccountResponse:
     """세션 검증 표면이자 로그인 데모 지점."""
     return AccountResponse.model_validate(account)
@@ -89,7 +100,9 @@ async def logout(request: Request, response: Response, service: Service) -> None
     _clear_session_cookie(response)
 
 
-@router.delete("/account", status_code=status.HTTP_204_NO_CONTENT)
+@router.delete(
+    "/account", status_code=status.HTTP_204_NO_CONTENT, responses=UNAUTHORIZED
+)
 async def withdraw(
     account: CurrentAccount, response: Response, service: Service
 ) -> None:
