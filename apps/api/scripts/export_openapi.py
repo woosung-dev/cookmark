@@ -20,7 +20,7 @@ _HEADER = (
 
 
 def render() -> str:
-    """앱의 OpenAPI 스키마를 스냅샷 텍스트로 렌더한다 — 코드의 순수 함수."""
+    """앱의 OpenAPI 스키마를 스냅샷 텍스트로 렌더한다 — 출력은 코드에만 좌우된다(설정 무관)."""
     # main.py가 import 시점에 Settings를 읽는다(CORS). 스냅샷은 설정과 무관하므로
     # (허용 origin은 미들웨어이지 스키마가 아니다) 미설정 환경에서도 재생성이 1명령이도록
     # 자리표시자만 채운다 — DB 연결은 일어나지 않는다. import는 그 뒤여야 해서 함수 안에 둔다.
@@ -77,7 +77,7 @@ def main(argv: list[str] | None = None) -> int:
         return 0
     sys.stderr.write(report)
     sys.stderr.write(
-        f"\n계약 스냅샷이 코드와 어긋났다. 로컬에서 재생성해 커밋할 것:\n  {REGEN_COMMAND}\n"
+        f"\n계약 스냅샷이 코드와 어긋났다. 로컬에서 재생성해 커밋할 것.\n  {REGEN_COMMAND}\n"
     )
     return 1
 
