@@ -12,4 +12,4 @@
 - [x] 문서 — apps/api README(env 표·레시피 북 절·배포 트립와이어), infra/README §3 주(#103 갱신, 시크릿 1→5)
 - [x] 풀 게이트 — ruff format --check · ruff check · mypy · export --check · pytest -v 전량 green
 - [x] /code-review → 지적 반영
-- [ ] PR 발행(worktree-feat-w-103 → feat/103-recipe-book, #101 선점 관계 본문 명시)
+- [x] PR 발행 — [#111](https://github.com/woosung-dev/cookmark/pull/111) (feat/103-recipe-book, #101 선점 관계 본문 명시)
