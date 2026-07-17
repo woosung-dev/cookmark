@@ -56,11 +56,12 @@ class SuggestionsSection extends StatelessWidget {
             ),
           )
         else
-          for (final suggestion in suggestions)
+          for (final (index, suggestion) in suggestions.indexed)
             Padding(
               padding: const EdgeInsets.only(bottom: Space.md),
               child: SuggestionCard(
                 suggestion: suggestion,
+                rank: index + 1,
                 onOpenRecipe: () => onOpenRecipe(suggestion),
                 onCooked: () => onCooked(suggestion),
               ),
