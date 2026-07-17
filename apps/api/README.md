@@ -50,6 +50,9 @@ CI는 `.github/workflows/api.yml`이 매 PR(`apps/api/**` paths 필터)·main pu
 | `GOOGLE_CLIENT_ID` | GCP OAuth 클라이언트 ID (`….apps.googleusercontent.com`) |
 | `GOOGLE_CLIENT_SECRET` | GCP OAuth 클라이언트 시크릿 |
 | `SESSION_SECRET` | OAuth state·nonce 서명 키(SessionMiddleware 전용). 우리 인증 세션과 무관하다 — 그건 DB 세션 테이블이다 |
+| `GEMINI_API_KEY` | Gemini API 키 — SecretStr, 필수(#101). 서버에만 산다 — 클라이언트는 절대 Gemini를 직접 부르지 않는다 |
+| `GEMINI_MODEL` | 기본 `gemini-3.1-flash-lite`. 파일럿 중에는 바꾸지 않는다 — 바꾸면 단가도 함께 |
+| `GEMINI_PRICE_INPUT_PER_M` / `GEMINI_PRICE_OUTPUT_PER_M` | USD per 1M 토큰, 기본 0.25 / 1.5. 원가 로그(T1 #6)의 입력이다 |
 
 로컬 웹 개발과 연결할 땐 클라이언트 포트를 고정하고(`flutter run -d chrome --web-port <포트>`) 그 origin을 `CORS_ALLOWED_ORIGINS`에 넣는다 — 포트가 랜덤이면 허용 목록이 성립하지 않는다 (§10).
 
@@ -98,6 +101,29 @@ CI는 `.github/workflows/api.yml`이 매 PR(`apps/api/**` paths 필터)·main pu
 
 OpenAPI 스냅샷·드리프트 가드는 [#99](https://github.com/woosung-dev/cookmark/issues/99)로 배선됐다(위 계약 절).
 
+## LLM — 재료 인식·추출·매칭 ([#101](https://github.com/woosung-dev/cookmark/issues/101))
+
+루트 서버리스 프록시 3종의 승계다. seam은 `BaseLLMService` 하나 — 테스트 페이크 주입 지점도 이 한 곳뿐이다(스펙 #96). 프롬프트는 `src/common/prompts.py`에만 있다(backend.md §4).
+
+| 라우트 | 행동 |
+| --- | --- |
+| `POST /api/v1/llm/recognize` | 냉장고 사진(base64 JPEG) → 재료 후보(confidence 3단). 이미지는 메모리로만 지나간다 — 무저장 패스스루 |
+| `POST /api/v1/llm/extract` | 레시피 제목 → 재료 목록 (제목만 — 본문·자막 금지) |
+| `POST /api/v1/llm/match` | 확정 재료 + 저장 레시피 → 후보 최대 6개 + **`match_score` 실산출**(ADR-0007 이월 해소). 3개 상한·라벨은 클라이언트 소관 |
+
+세 라우트 모두 **세션 필수**(무세션 401) — 공개 URL의 LLM 비용 표면을 닫는다. 업스트림 실패는 일괄 502.
+
+`match_score` 산식 — LLM이 제안별 필요 재료 전체(`required`, wire 비노출)를 내고, 서버가 `floor(100×(필요−미해소 부족)/필요)`를 계산한다. substitute로 해소된 부족은 감점 없음. 순수 함수라 유닛으로 검증된다(`src/llm/scoring.py`).
+
+### 실 Gemini 스모크 (수동 · CI 밖)
+
+```bash
+uv run python scripts/smoke_llm.py                 # 추출+매칭 텍스트 2건 — ≈ $0.001 미만
+uv run python scripts/smoke_llm.py --image 사진.jpg  # + 인식 1건 — 총 ≈ $0.002 미만
+```
+
+2026-07-18 실측 — 총 $0.00146, `image_tokens=1064` 고정 불변식 재현. 단 `required` 필드가 매칭 출력 토큰을 늘려(225→643) 매칭 1건 원가가 ≈$0.0004→$0.0011로 올랐다 — 루프 원가는 ≈$0.0018 수준(승계 기준 $0.0011 대비 증가, 여전히 파일럿 원가 판정에 무해한 자릿수).
+
 ## 배포 — Cloud Run 서울 + WIF ([#98](https://github.com/woosung-dev/cookmark/issues/98))
 
 `main` push → `api.yml`의 gate 통과 → deploy job이 이미지 빌드 → Artifact Registry 푸시 → **마이그레이션** → Cloud Run 배포 → health 스모크. 키 파일 없이 Workload Identity Federation으로 배포자 SA를 임퍼서네이트한다.
@@ -105,4 +131,4 @@ OpenAPI 스냅샷·드리프트 가드는 [#99](https://github.com/woosung-dev/c
 - **컨테이너** — `Dockerfile`(uv 멀티스테이지 · 내부 8000 고정 · non-root). 로컬 빌드는 반드시 이 디렉토리를 컨텍스트로: `docker build -f Dockerfile .`.
 - **마이그레이션** — entrypoint가 아니라 **배포 전 러너의 `docker run IMAGE alembic upgrade head`**다. §8의 의도("배포 전 자동 실행")는 지키되 괄호 "(Docker entrypoint)"는 따르지 않는다 — Cloud Run에서 entrypoint는 롤백을 무효화한다(옛 이미지가 새 `alembic_version`을 못 해석해 exit 255). 근거·실측·대안 비교는 `context-notes.md`.
 - **프로비저닝**(GCP 프로젝트·시크릿·WIF·리포 하드닝)은 **파운더가 1회** 한다 — 절차는 [`infra/README.md`](../../infra/README.md). 리포 변수 4개가 들어가기 전까지 deploy job은 skip이라 main은 green을 유지한다.
-- ⚠️ **#100 인증이 먼저 랜딩해 배포 시크릿이 늘었다** — 서빙 컨테이너가 부팅하려면 `SESSION_SECRET`·카카오/구글 client secret과 client id도 있어야 한다(`Settings` 필수 필드). deploy job은 아직 `DATABASE_URL` 하나만 주입하므로, **첫 실 배포 전** `--set-secrets`·마이그레이션 env·`infra/README` 시크릿 인벤토리를 이들로 확장해야 한다(파운더 프로비저닝과 한 묶음). 상세는 `infra/README.md` §3 주.
+- ⚠️ **#100 인증·#101 LLM이 먼저 랜딩해 배포 시크릿이 늘었다** — 서빙 컨테이너가 부팅하려면 `SESSION_SECRET`·카카오/구글 client secret과 client id, 그리고 `GEMINI_API_KEY`(#101)도 있어야 한다(`Settings` 필수 필드). deploy job은 아직 `DATABASE_URL` 하나만 주입하므로, **첫 실 배포 전** `--set-secrets`·마이그레이션 env·`infra/README` 시크릿 인벤토리를 이들로 확장해야 한다(파운더 프로비저닝과 한 묶음). 상세는 `infra/README.md` §3 주.
