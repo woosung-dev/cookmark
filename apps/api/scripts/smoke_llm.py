@@ -7,7 +7,7 @@ import argparse
 import asyncio
 from pathlib import Path
 
-from src.llm.dependencies import _gemini_service
+from src.llm.dependencies import get_gemini_service
 from src.llm.schemas import LLMUsage, MatchRecipe
 from src.llm.scoring import build_match_response
 
@@ -26,7 +26,7 @@ def _print_usage(label: str, usage: LLMUsage) -> None:
 
 
 async def main(image_path: Path | None) -> None:
-    service = _gemini_service()
+    service = get_gemini_service()
     total = 0.0
 
     extraction = await service.extract("김치찌개")

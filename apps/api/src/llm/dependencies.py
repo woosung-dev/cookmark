@@ -9,7 +9,7 @@ from src.llm.service import BaseLLMService
 
 
 @lru_cache
-def _gemini_service() -> GeminiLLMService:
+def get_gemini_service() -> GeminiLLMService:
     """지연 1회 생성 — 설정이 갖춰진 뒤에 키를 읽고, 클라이언트는 프로세스 수명 동안 재사용한다 (oidc.get_oauth 동형)."""
     settings = get_settings()
     return GeminiLLMService(
@@ -22,4 +22,4 @@ def _gemini_service() -> GeminiLLMService:
 
 def get_llm_service() -> BaseLLMService:
     """LLM seam 획득 — 테스트는 app.dependency_overrides로 이 함수를 페이크로 바꾼다."""
-    return _gemini_service()
+    return get_gemini_service()

@@ -12,7 +12,7 @@
 ## 플래닝 중 확인된 사실 (구현 전제)
 
 - google-genai 최신 2.12.x, py.typed 동봉 → mypy strict override 불필요. 타임아웃은 `HttpOptions(timeout=ms)` **밀리초**. usage_metadata 필드 전부 Optional → `or 0` 필수. 타임아웃·연결 오류는 httpx 예외로 그대로 통과 → `(errors.APIError, httpx.HTTPError)`를 잡는다.
-- 구조화 출력은 Pydantic 클래스를 `response_schema`로 직접 전달 → `response.parsed`가 검증된 인스턴스. `parsed is None`은 예외가 아니라 정상 반환값이므로 직접 검사해 502로 만든다.
+- 구조화 출력은 Pydantic 클래스를 `response_schema`로 직접 전달한다. 구현은 `response.parsed` 대신 `response.text` + `model_validate_json` 단일 경로를 택했다 — SDK는 검증 실패를 예외 없이 `parsed=None`으로 삼키므로, 직접 검증이 실패 모양을 하나로 만들고 `.mjs`(text→parse) 이식에도 정확히 대응한다.
 - schemathesis는 세션이 없어 3라우트 전부 401(문서화됨)로 끝난다 → CI에서 Gemini에 절대 도달하지 않는다. 세션 인증이 곧 CI의 비용 방어막.
 - `.mjs` 프롬프트는 verbatim 이식하되 델타 2개만 허용(`# #101 이식 조정` 주석) — match에 required 규칙 1줄, recognize의 "lowQuality" 단어를 `low_quality`로.
 - backend.md §4의 "Claude/anthropic" 명시는 ADR-0009 편차 ①에 따라 "프로바이더 교체 가능한 일반형"으로 읽는다 — 구조(집중·BaseLLMService·프롬프트 상수화)만 채택, 구현체는 google-genai.

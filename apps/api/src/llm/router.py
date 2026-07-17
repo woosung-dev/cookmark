@@ -42,7 +42,7 @@ async def recognize(
 ) -> RecognizeResponse:
     """냉장고 사진에서 재료 후보를 얻는다. 이미지는 메모리로만 지나간다 — 저장·로깅 없음(스펙 #96)."""
     try:
-        return await service.recognize(bytes(body.image_base64))
+        return await service.recognize(body.image_base64)
     except UpstreamLLMError as exc:
         raise _bad_gateway(exc) from exc
 
