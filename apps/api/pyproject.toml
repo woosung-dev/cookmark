@@ -14,13 +14,14 @@ dependencies = [
     "uvicorn[standard]",
     "authlib>=1.7.2",
     "itsdangerous>=2.2.0",
+    # og:image 프록시(#102)의 아웃바운드 fetch — dev 전용이면 Docker 런타임(UV_NO_DEV=1)에 빠진다
+    "httpx",
 ]
 
 [dependency-groups]
 dev = [
     "pytest",
     "pytest-asyncio",
-    "httpx",
     "testcontainers[postgres]",
     "ruff",
     "mypy",

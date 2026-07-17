@@ -7,6 +7,7 @@ from starlette.responses import RedirectResponse
 from src.auth import oidc
 from src.auth.dependencies import (
     SESSION_COOKIE,
+    UNAUTHORIZED,
     CurrentAccount,
     extract_session_token,
     get_auth_service,
@@ -19,12 +20,6 @@ from src.auth.service import SESSION_TTL, AuthService
 router = APIRouter(prefix="/auth", tags=["auth"])
 
 Service = Annotated[AuthService, Depends(get_auth_service)]
-
-# 401은 CurrentAccount 의존성·콜백 실패가 실제로 내는 응답이다 — 계약이 이를 문서화해야
-# 생성된 OpenAPI가 구현과 어긋나지 않는다(#99 계약 가드가 실 서버로 이를 검증한다).
-UNAUTHORIZED: dict[int | str, dict[str, str]] = {
-    401: {"description": "세션이 없거나 유효하지 않다"}
-}
 
 # 쿠키 속성은 §9 고정 — HttpOnly(스크립트 차단)·Secure(평문 전송 차단)·Lax(cross-site 전송 차단).
 # 브라우저는 localhost를 보안 컨텍스트로 취급하므로 Secure가 로컬 http 데모를 막지 않는다.
