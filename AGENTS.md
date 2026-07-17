@@ -12,7 +12,7 @@ This file provides guidance to AGENTS Code (AGENTS.ai/code) when working with co
 
 **이 리포는 "문서가 계약"인 스펙 주도 리포다.** 2026-07-16부터 `main`에 Flutter 코드가 있다 — A/B 실험의 두 arm 중 **PR #26(`feat/13-mvp-context7`)이 랜딩됐다**(스펙 #13의 9티켓 전량).
 
-리포는 폴리글랏 모노레포다(`docs/adr/0008`, 실행 [#69](https://github.com/woosung-dev/cookmark/issues/69) 2026-07-17) — **Flutter 앱은 `apps/mobile/`에 산다.** 루트 `api/`는 서버리스 프록시(잠정), 나머지 `apps/*`·`packages/*`·`contracts/`·`infra/`는 README 계약(좌표 선언)이다. BE/FE 로드맵·툴체인은 별도 wayfinder 지도가 결정한다.
+리포는 폴리글랏 모노레포다(`docs/adr/0008`, 실행 [#69](https://github.com/woosung-dev/cookmark/issues/69) 2026-07-17) — **Flutter 앱은 `apps/mobile/`에 산다.** 루트 `api/`는 서버리스 프록시(잠정), 나머지 `apps/*`·`packages/*`·`contracts/`·`infra/`는 README 계약(좌표 선언)이다. BE/FE 로드맵·툴체인은 wayfinder 지도 [#74](https://github.com/woosung-dev/cookmark/issues/74)가 결정 중이다 — 세션 시작 시 지도에서 현재 위치를 잡는다.
 
 - 닫힌 arm — `feat/14-core-tracer`(PR #25, #14 범위만·유닛 48) · `feat/flutter-scaffold-theme`(PR #24). **되살리지 말 것.** #25에는 프록시 오형식 200 응답 시 로딩이 영구 고착되는 결함이 있다.
 - 파일럿 배포 URL(정본) — `https://cookmark-woosungdevs-projects.vercel.app`. `cookmark.vercel.app`은 **남의 프로젝트다**(Vercel 전역 네임스페이스).
@@ -59,6 +59,15 @@ flutter build web               # 파일럿 배포 산출물
 **E2E가 검증의 정본이고 유닛은 보완이다**(coding-standards). E2E는 `integration_test/`에서 Web 타깃으로 돌리며, LLM 경계에 결정적 페이크를 주입한다. 테스트는 외부 행동만 검증한다 — 화면에 보이는 것과 export JSON에 남는 것. 내부 구현 세부에 비의존.
 
 ## Agent skills
+
+### Workflow — 세션 종료 시 다음 단계 제안 (필수)
+
+이 리포의 작업은 matt 스킬 플로우를 따른다. **아이디어 → `/grill-with-docs`(구체화) → 크고 안개 낀 효력이면 `/wayfinder`(결정 지도, 세션당 티켓 1개) → 지도 닫힘 → `/to-spec`(지도를 스펙으로 붕괴) → `/to-tickets`(수직 슬라이스 분해) → 티켓당 `/implement`(새 세션, 내부 `/tdd`·`/code-review`)**. 버그는 `/diagnosing-bugs`, 외부 유입 이슈는 `/triage`, 유지보수는 `/improve-codebase-architecture`.
+
+- **모든 작업 세션은 마지막 응답에서 플로우 상의 현재 위치와 다음 슬래시 명령을 제안하고 끝낸다.** 예 — "다음은 새 세션에서 `/wayfinder 74 #77`" · "지도가 닫혔다 — 새 세션에서 `/to-spec`(지도 #74 참조) 후 **같은 세션에서 이어서** `/to-tickets`" · "티켓 #N이 ready-for-agent다 — 새 세션에서 `/implement #N`".
+- `/wayfinder`·`/to-spec`·`/to-tickets`·`/implement`는 **사용자 명시 호출 전용**이다 — 에이전트가 대신 호출하지 말고, 입력할 명령을 정확한 인자와 함께 제시한다.
+- 현재 위치 판별 — 열린 `wayfinder:map` 이슈(프런티어 = open·unblocked·미할당 자식)와 `ready-for-agent` 이슈를 조회해 판단한다. 지도가 닫혔고 스펙이 없으면 `/to-spec` 차례, 스펙만 있으면 `/to-tickets` 차례, 티켓이 있으면 `/implement` 차례다.
+- 컨텍스트 위생 — `/to-spec`→`/to-tickets`는 한 컨텍스트에서 연달아(컴팩트 금지), `/implement`는 티켓마다 새 세션.
 
 ### Issue tracker
 
