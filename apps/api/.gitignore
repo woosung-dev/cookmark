@@ -1,0 +1,6 @@
+# Python 로컬 산출물 — apps/api 전용 (루트 .gitignore는 리포급 하이진만, ADR-0008 분할 관례)
+__pycache__/
+.venv/
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/

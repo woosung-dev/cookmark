@@ -1,33 +1,27 @@
-# ADR-0008 모노레포 전환 — 체크리스트 (결정 박제 + 물리 이동 실행)
+# #97 api-1 스캐폴드 + 검증 하네스 — 체크리스트 (walking skeleton 로컬)
 
-계획: `~/.claude/plans/1-crystalline-mitten.md`. 실행 정본은 [#69](https://github.com/woosung-dev/cookmark/issues/69).
+계획: `~/.claude/plans/97-dazzling-manatee.md`. 티켓 정본은 [#97](https://github.com/woosung-dev/cookmark/issues/97), 결정 정본은 ADR-0009 + `.claude/rules/backend.md`. (직전 태스크 ADR-0008 체크리스트는 전량 완료 — 잔여 파운더 수동 항목은 #69에 남아 있다.)
 
-## 1부 — 결정 박제 (PR #70, 머지 완료)
+## 구현
 
-- [x] 실행 이슈 #69 생성 + #38 blocked_by 배선
-- [x] `docs/adr/0008-polyglot-monorepo-topology.md` 신규
-- [x] AGENTS.md 포인터·idea.md 역사 표기
+- [x] 브랜치 `feat/97-api-scaffold` + 작업 문서 갱신
+- [x] uv 프로젝트 (pyproject·deps·ruff/mypy/pytest 설정·`.python-version` 3.13) — `uv sync` 통과
+- [x] RED — tests(conftest·test_health·test_cors) 먼저, 실패 확인
+- [x] GREEN — `core/config.py`(NoDecode CORS·SecretStr) · `common/database.py`(statement_cache_size=0·expire_on_commit=False) · `health/router.py` · `main.py` · alembic async 배선 + 빈 베이스라인
+- [x] 인루프 게이트 — `ruff format` · `ruff check` · `mypy src/` · `pytest` 전체 green
+- [x] `.github/workflows/api.yml` — mobile.yml 동형(PR paths 필터 + main 무필터 백스톱)
+- [x] `apps/api/README.md` 실체화 문서로 갱신 + 로컬 `.env.local` 생성(gitignored)
 
-## 2부 — 재개봉 + 물리 이동 (2026-07-17 사용자 재결정)
+## AC 검증
 
-- [x] 게이트 재개봉 기록 — #69 blocked_by 해제, #69·#51·#38 코멘트, ADR-0008 재결정 주석
-- [x] step 0 — worktree 10개 제거, merged 브랜치 정리, `worktree-fix-ach` origin 백업, 사석 arm `archive/*` 태그 후 삭제, #38 설계 문서 이슈 박제
-- [x] PR-1 (#71) — 계약 README 12개 + ADR 재결정 주석
-- [x] PR-2 커밋 1 — 순수 rename 92파일 → `apps/mobile/` (전부 100%)
-- [x] PR-2 커밋 2 — `mobile.yml`(working-directory·paths 필터·main 무필터)·`vercel.json`·`.vercelignore`·`.gitignore` 분할
-- [x] PR-2 커밋 3 — AGENTS.md·coding-standards:10·README 토폴로지·HANDOFF·apps/mobile/README
+- [x] 로컬 uvicorn + 허용 origin에서 health 200 (CORS preflight 통과)
+- [x] 비허용 origin 브라우저 차단 — 수동 확인 1회 (Playwright)
+- [x] ASGI + testcontainers 실 Postgres 통합 테스트 ≥1 green
+- [x] `alembic upgrade head` 실 DB 적용 (테스트 컨테이너에서 증명)
+- [x] PR CI에서 pytest·ruff·mypy 전부 통과 — run 29581508224, pytest `7 passed in 9.23s`(러너 testcontainers 실구동)
+- [x] CORS 기본 빈 목록·origin 하드코딩 없음
 
-## EXIT 게이트 (#69 검증 프로토콜, prod 무접촉 수정안) — 전량 통과, 증거는 #69 해소 코멘트
+## 마무리
 
-- [x] `cd apps/mobile` 인루프 4게이트 green — format 0변경 · analyze 무이슈 · test 290
-- [x] E2E 로컬 green (`bash apps/mobile/scripts/e2e.sh` 전부 통과)
-- [x] PR CI — `mobile` 워크플로 실제 실행 green (PR #72, gate 1m15s · e2e 3m31s, 스킵 아님)
-- [x] `flutter build web` + `vercel build` parity — `static/index.html` 존재 · diff 0 · 함수 3개 존재
-- [x] preview 배포 스모크 4종 통과 (cookmark-nr94vvtxv — `/` 200 · SPA rewrite · 프록시 400 검증 · GET 405)
-- [x] ~~prod 재배포~~ — 재결정으로 제외, 파일럿 아티팩트 동결 유지(정본 URL 200 확인)
-- [x] 머지 후 main push 무필터 CI green (`mobile`@4312ec4 success) → #69 해소 코멘트·클로즈 완료
-
-## 파운더 수동 항목 (gitignored — PR 불가)
-
-- [ ] `.claude/rules/mobile.md` frontmatter 복원 (`mobile/**/*`·`apps/*/lib/**/*`)
-- [ ] `.claude/rules/backend.md` §11 경로 주석 → `apps/api/src/`
+- [x] `/code-review` + 지적 반영 — 2축(Standards·Spec) 하드 위반 0, 반영 3건(5863bd4)
+- [x] 시맨틱 커밋 4개 → push → PR #105 → CI green → 티켓 코멘트

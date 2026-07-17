@@ -1,0 +1,59 @@
+[project]
+name = "cookmark-api"
+version = "0.1.0"
+description = "냉파 백엔드 — FastAPI + SQLModel (ADR-0009, backend.md 표준 첫 적용)"
+requires-python = ">=3.13"
+dependencies = [
+    "fastapi",
+    "sqlmodel",
+    # greenlet 명시 — macOS arm64는 sqlalchemy의 greenlet 플랫폼 마커 밖이라 asyncio 사용 시 누락된다
+    "sqlalchemy[asyncio]",
+    "asyncpg",
+    "pydantic-settings",
+    "alembic",
+    "uvicorn[standard]",
+]
+
+[dependency-groups]
+dev = [
+    "pytest",
+    "pytest-asyncio",
+    "httpx",
+    "testcontainers[postgres]",
+    "ruff",
+    "mypy",
+]
+
+# backend.md §2·§11 — 앱은 `src.main:app`으로 구동된다. `src`를 그대로 패키지로 설치해
+# uvicorn·alembic·pytest 어디서든 `from src...` import가 성립하게 한다.
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[tool.hatch.build.targets.wheel]
+packages = ["src"]
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "B", "UP"]
+# E501 제외 — 코드 줄 길이는 ruff format이 보장하고, 한국어 주석은 문자 수 기준이 맞지 않는다
+ignore = ["E501"]
+
+[tool.ruff.lint.isort]
+# 로컬 alembic/ 마이그레이션 디렉토리 때문에 설치 패키지 alembic이 first-party로 오분류되는 것 방지
+known-third-party = ["alembic"]
+
+[tool.ruff.lint.per-file-ignores]
+# 생성 마이그레이션은 템플릿이 op·sa를 항상 import한다 — 미사용이어도 허용
+"alembic/versions/*" = ["F401"]
+
+[tool.mypy]
+python_version = "3.13"
+plugins = ["pydantic.mypy"]
+strict = true
+
+[tool.pytest.ini_options]
+asyncio_mode = "auto"
+# 세션 단일 루프 — engine 풀 커넥션이 테스트 간 다른 루프로 재사용되는 asyncpg 폭발 방지
+asyncio_default_fixture_loop_scope = "session"
+asyncio_default_test_loop_scope = "session"
+testpaths = ["tests"]

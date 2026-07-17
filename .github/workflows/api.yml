@@ -1,0 +1,42 @@
+# 냉파 CI — apps/api(FastAPI) 게이트. backend.md 검증 앵커(pytest·ruff·mypy)를 매 PR에 강제한다 (#97).
+name: api
+
+on:
+  pull_request:
+    paths:
+      - "apps/api/**"
+      - ".github/workflows/api.yml"
+  push:
+    branches: [main] # 무필터 유지 — PR paths 필터의 블라인드 스팟 백스톱 (mobile.yml 동형)
+
+# 같은 브랜치의 이전 런은 취소 — 러너 분 절약.
+concurrency:
+  group: api-${{ github.ref }}
+  cancel-in-progress: true
+
+# FastAPI 패키지는 apps/api에 산다 (ADR-0008·0009) — 모든 run 스텝의 기준 디렉토리.
+defaults:
+  run:
+    working-directory: apps/api
+
+jobs:
+  gate:
+    name: format · lint · mypy · pytest
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: astral-sh/setup-uv@v6
+        with:
+          enable-cache: true
+          cache-dependency-glob: "apps/api/uv.lock"
+      # Python은 apps/api/.python-version 핀을 uv가 해석 — 러너 프리셋에 비의존.
+      - run: uv sync --locked
+      - name: format (미적용 = 실패)
+        run: uv run ruff format --check .
+      - name: lint
+        run: uv run ruff check .
+      - name: mypy
+        run: uv run mypy src/
+      # ubuntu-latest에 Docker 상주 — testcontainers 실 Postgres가 그대로 돈다.
+      - name: pytest (ASGI + testcontainers 실 Postgres)
+        run: uv run pytest -v
