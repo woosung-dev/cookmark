@@ -19,8 +19,6 @@ MAX_BYTES = 1_048_576
 MAX_REDIRECTS = 5
 CHUNK_SIZE = 65_536
 
-_ALLOWED_SCHEMES = ("http", "https")
-
 
 async def fetch_og_image(url: str) -> str | None:
     """출처 페이지의 og:image URL. 모든 fetch 실패는 부재(None)로 흡수한다 — 500이 아니다.
@@ -83,6 +81,6 @@ def _absolutize(content: str | None, final_url: str) -> str | None:
     if content is None:
         return None
     absolute = urljoin(final_url, content)
-    if urlsplit(absolute).scheme not in _ALLOWED_SCHEMES:
+    if urlsplit(absolute).scheme not in guard.ALLOWED_SCHEMES:
         return None
     return absolute

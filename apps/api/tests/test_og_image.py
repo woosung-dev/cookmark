@@ -1,5 +1,6 @@
 # og:image 프록시 관통 테스트 — 세션·SSRF·타임아웃·상한·부재 응답 (#102 AC 전량)
-from collections.abc import Iterator
+import asyncio
+from collections.abc import AsyncIterator, Iterator
 
 import httpx
 import pytest
@@ -118,6 +119,38 @@ async def test_timeout_returns_null(
     res = await client.get(OG_IMAGE, params={"url": PAGE})
 
     assert res.status_code == 200
+    assert res.json() == {"image_url": None}
+
+
+class _DripStream(httpx.AsyncByteStream):
+    """찔끔찔끔 주는 서버 — 첫 청크 뒤 오래 멈춘다. og:image는 멈춤 뒤에야 온다."""
+
+    async def __aiter__(self) -> AsyncIterator[bytes]:
+        yield b"<html><head>"
+        await asyncio.sleep(0.5)
+        yield html_with_og_image("https://img.recipe.example/slow.jpg").encode()
+
+
+async def test_total_deadline_cuts_slow_stream(
+    client: httpx.AsyncClient,
+    idp: FakeIdp,
+    pages: respx.Router,
+    public_dns: None,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """AC: 타임아웃 동작 — per-op 타임아웃이 못 끊는 slowloris를 전체 데드라인이 실제로 끊는다."""
+    await login(client, idp)
+    monkeypatch.setattr(service, "TOTAL_DEADLINE_SECONDS", 0.05)
+    pages.get(PAGE).mock(
+        return_value=httpx.Response(
+            200, headers={"content-type": "text/html"}, stream=_DripStream()
+        )
+    )
+
+    res = await client.get(OG_IMAGE, params={"url": PAGE})
+
+    assert res.status_code == 200
+    # og:image는 멈춤 뒤 청크에만 있다 — null은 데드라인이 스트림을 중도에 끊었다는 증거다
     assert res.json() == {"image_url": None}
 
 

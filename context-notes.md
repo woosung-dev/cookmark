@@ -27,3 +27,10 @@
 - **테스트 DNS는 monkeypatch, dependency_overrides 아님** — 전역 `app`에 overrides는 세션 누수 위험 + 내부 구현을 라우트 시그니처로 승격. service가 `guard.resolve_host`를 **모듈 속성 경유**로 불러 patch 타깃을 1곳으로 고정.
 - **respx 전용 `pages` fixture** — 모듈 레벨 `respx.get`은 default router라 `idp` fixture 인스턴스와 별개. respx 0.23.1은 다중 활성 router가 fall-through로 공존(소스 확인).
 - **무세션+쓰레기URL은 401(422 아님)** — FastAPI는 서브의존성을 쿼리 검증보다 먼저 푼다(소스 확인). 부수 효과: CI schemathesis 퍼징(무세션)이 전부 401로 끊겨 러너에서 실제 아웃바운드 fetch 0건.
+
+## /code-review 반영 (2축 — Standards·Spec, 하드 위반 0)
+
+- **`_ALLOWED_SCHEMES` 중복 제거(Standards·Duplicated Code)** — guard·service 양쪽 정의를 guard의 `ALLOWED_SCHEMES` 단일 정의로 통합. 정책이 두 파일에서 따로 드리프트하는 위험 제거.
+- **데드라인 발화 테스트 추가(Spec)** — 기존 타임아웃 테스트는 예외→null 매핑만 증명했다. `_DripStream`(첫 청크 뒤 0.5s 멈춤, og:image는 멈춤 뒤 청크) + 데드라인 0.05s monkeypatch로 `asyncio.timeout`이 스트림을 실제로 끊는 것을 증명 — null이면 끊긴 것(og가 뒤 청크에만 있으므로 타이밍 단언 불필요·결정적).
+- **`extract_og_image()` 편의 함수 유지(지적 기각)** — "테스트 전용" 지적이 있었으나 파서 모듈의 정당한 단발 파싱 API고, 제거 시 유닛 12개가 보일러플레이트를 반복한다. 5줄 비용 감수.
+- **FE Playwright smoke 짝 미작성** — backend.md 검증 앵커의 짝 정책은 이 리포에 FE Playwright 하네스가 없어 N/A(Flutter·클라이언트 반영은 #83 이후). PR 본문에 명시.

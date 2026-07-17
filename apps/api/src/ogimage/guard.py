@@ -16,7 +16,8 @@ from urllib.parse import urlsplit
 
 from src.ogimage.exceptions import OgImageBlocked, OgImageUnresolvable
 
-_ALLOWED_SCHEMES = ("http", "https")
+# 허용 스킴의 단일 정의 — service의 og:image 절대화 검사도 이걸 쓴다(정책 드리프트 방지)
+ALLOWED_SCHEMES = ("http", "https")
 
 
 def is_public_address(ip: ipaddress.IPv4Address | ipaddress.IPv6Address) -> bool:
@@ -43,7 +44,7 @@ async def ensure_public_url(url: str) -> None:
     스킴·호스트 검사를 여기서 전부 다시 해야 한다.
     """
     parts = urlsplit(url)
-    if parts.scheme not in _ALLOWED_SCHEMES:
+    if parts.scheme not in ALLOWED_SCHEMES:
         raise OgImageBlocked(url)
     # 레시피 URL에 자격증명이 실릴 일이 없다 — http://무시됨@127.0.0.1/ 류 착시를 통째 거부
     if parts.username or parts.password:
