@@ -107,6 +107,102 @@ paths:
           description: Successful Response
         '401':
           description: 세션이 없거나 유효하지 않다
+  /api/v1/llm/recognize:
+    post:
+      tags:
+      - llm
+      summary: Recognize
+      description: '냉장고 사진에서 재료 후보를 얻는다. 이미지는 메모리로만 지나간다 — 저장·로깅 없음(스펙 #96).'
+      operationId: recognize_api_v1_llm_recognize_post
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/RecognizeRequest'
+        required: true
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/RecognizeResponse'
+        '400':
+          description: 본문 파싱 실패
+        '401':
+          description: 세션이 없거나 유효하지 않다
+        '502':
+          description: LLM 업스트림 호출 실패
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+  /api/v1/llm/extract:
+    post:
+      tags:
+      - llm
+      summary: Extract
+      description: 레시피 제목에서 재료를 추론한다 — 제목만 본다(본문·자막 금지).
+      operationId: extract_api_v1_llm_extract_post
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ExtractRequest'
+        required: true
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ExtractResponse'
+        '400':
+          description: 본문 파싱 실패
+        '401':
+          description: 세션이 없거나 유효하지 않다
+        '502':
+          description: LLM 업스트림 호출 실패
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+  /api/v1/llm/match:
+    post:
+      tags:
+      - llm
+      summary: Match
+      description: 확정 재료 + 저장 레시피로 후보를 받고 매치 점수를 실산출해 낸다(#101 이월 해소).
+      operationId: match_api_v1_llm_match_post
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/MatchRequest'
+        required: true
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/MatchResponse'
+        '400':
+          description: 본문 파싱 실패
+        '401':
+          description: 세션이 없거나 유효하지 않다
+        '502':
+          description: LLM 업스트림 호출 실패
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
   /api/v1/og-image:
     get:
       tags:
@@ -169,6 +265,31 @@ components:
       - created_at
       title: AccountResponse
       description: 서버가 계정에 대해 아는 전부. 더 있는 것처럼 보이지 않게 이게 그대로 계약이다.
+    ExtractRequest:
+      properties:
+        title:
+          type: string
+          minLength: 1
+          title: Title
+      type: object
+      required:
+      - title
+      title: ExtractRequest
+      description: '추출 요청 — 제목만 받는다(본문·자막은 수익화·법무 리서치 #5로 범위 제한).'
+    ExtractResponse:
+      properties:
+        ingredients:
+          items:
+            type: string
+          type: array
+          title: Ingredients
+        usage:
+          $ref: '#/components/schemas/LLMUsage'
+      type: object
+      required:
+      - ingredients
+      - usage
+      title: ExtractResponse
     HTTPValidationError:
       properties:
         detail:
@@ -178,6 +299,98 @@ components:
           title: Detail
       type: object
       title: HTTPValidationError
+    LLMUsage:
+      properties:
+        prompt_tokens:
+          type: integer
+          title: Prompt Tokens
+        output_tokens:
+          type: integer
+          title: Output Tokens
+        thought_tokens:
+          type: integer
+          title: Thought Tokens
+        image_tokens:
+          type: integer
+          title: Image Tokens
+        cost_usd:
+          type: number
+          title: Cost Usd
+        model:
+          type: string
+          title: Model
+      type: object
+      required:
+      - prompt_tokens
+      - output_tokens
+      - thought_tokens
+      - image_tokens
+      - cost_usd
+      - model
+      title: LLMUsage
+      description: '호출 1건의 사용량 — 필드 구성은 T1 #6 실측 resolution. 토큰을 하나로 뭉치지 않는다.'
+    MatchRecipe:
+      properties:
+        title:
+          type: string
+          title: Title
+        ingredients:
+          items:
+            type: string
+          type: array
+          title: Ingredients
+      type: object
+      required:
+      - title
+      title: MatchRecipe
+      description: 매칭 입력의 저장 레시피 — 제목 + (있으면) 재료 목록. URL은 클라이언트에 남는다.
+    MatchRequest:
+      properties:
+        ingredients:
+          items:
+            type: string
+          type: array
+          minItems: 1
+          title: Ingredients
+        recipes:
+          items:
+            $ref: '#/components/schemas/MatchRecipe'
+          type: array
+          title: Recipes
+      type: object
+      required:
+      - ingredients
+      title: MatchRequest
+      description: 매칭 요청 — ingredients는 체크·비뭉뚱그림만 온다(ADR-0002 필터는 클라이언트 소관).
+    MatchResponse:
+      properties:
+        suggestions:
+          items:
+            $ref: '#/components/schemas/Suggestion'
+          type: array
+          title: Suggestions
+        usage:
+          $ref: '#/components/schemas/LLMUsage'
+      type: object
+      required:
+      - suggestions
+      - usage
+      title: MatchResponse
+      description: 매칭 결과 — 후보 최대 6개를 그대로 낸다. 3개 상한·라벨 결정은 클라이언트 소관(무변경).
+    MissingIngredient:
+      properties:
+        name:
+          type: string
+          title: Name
+        substitute:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Substitute
+      type: object
+      required:
+      - name
+      title: MissingIngredient
     OgImageResponse:
       properties:
         image_url:
@@ -195,6 +408,54 @@ components:
       - kakao
       - google
       title: Provider
+    RecognizeRequest:
+      properties:
+        image_base64:
+          type: string
+          format: base64
+          contentMediaType: application/octet-stream
+          title: Image Base64
+      type: object
+      required:
+      - image_base64
+      title: RecognizeRequest
+      description: 인식 요청 — 클라이언트가 768px로 리사이즈한 JPEG의 base64. 디코드 실패·빈 이미지는 422다.
+    RecognizeResponse:
+      properties:
+        ingredients:
+          items:
+            $ref: '#/components/schemas/RecognizedIngredient'
+          type: array
+          title: Ingredients
+        low_quality:
+          type: boolean
+          title: Low Quality
+          default: false
+        usage:
+          $ref: '#/components/schemas/LLMUsage'
+      type: object
+      required:
+      - ingredients
+      - usage
+      title: RecognizeResponse
+      description: 인식 결과 — seam 반환 타입을 겸한다(후처리가 없어 wire 모델이 곧 경계 타입이다).
+    RecognizedIngredient:
+      properties:
+        name:
+          type: string
+          title: Name
+        confidence:
+          type: string
+          enum:
+          - high
+          - medium
+          - low
+          title: Confidence
+      type: object
+      required:
+      - name
+      - confidence
+      title: RecognizedIngredient
     SessionResponse:
       properties:
         token:
@@ -213,6 +474,39 @@ components:
       - account
       title: SessionResponse
       description: 발급된 세션. 웹은 쿠키로 받으므로 token을 무시하고, 네이티브는 이 값을 보안 저장소에 넣는다 (§9).
+    Suggestion:
+      properties:
+        menu:
+          type: string
+          title: Menu
+        source:
+          type: string
+          enum:
+          - saved
+          - generated
+          title: Source
+        missing:
+          items:
+            $ref: '#/components/schemas/MissingIngredient'
+          type: array
+          title: Missing
+        reason:
+          type: string
+          title: Reason
+        match_score:
+          type: integer
+          maximum: 100.0
+          minimum: 0.0
+          title: Match Score
+      type: object
+      required:
+      - menu
+      - source
+      - missing
+      - reason
+      - match_score
+      title: Suggestion
+      description: 제안 1건 — match_score는 서버 산식 실산출이다(#101 신규, ADR-0007 이월 해소).
     ValidationError:
       properties:
         loc:

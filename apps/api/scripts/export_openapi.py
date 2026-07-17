@@ -31,6 +31,7 @@ def render() -> str:
         "GOOGLE_CLIENT_ID": "placeholder",
         "GOOGLE_CLIENT_SECRET": "placeholder",
         "SESSION_SECRET": "placeholder",
+        "GEMINI_API_KEY": "placeholder",
     }.items():
         os.environ.setdefault(key, placeholder)
     from src.main import app
