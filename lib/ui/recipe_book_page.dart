@@ -7,6 +7,7 @@ import '../theme/app_theme.dart';
 import 'backup_controller.dart';
 import 'recipe_book_controller.dart';
 import 'widgets/backup_section.dart';
+import 'widgets/photo_placeholder.dart';
 import 'widgets/recipe_form.dart';
 
 class RecipeBookPage extends StatelessWidget {
@@ -31,10 +32,8 @@ class RecipeBookPage extends StatelessWidget {
             return ListView(
               padding: const EdgeInsets.all(Space.screenPad),
               children: [
-                Text(
-                  '믿고 보는 레시피만 모아두세요. 여기 있는 게 제안의 근거가 됩니다.',
-                  style: AppTypography.subhead.copyWith(color: AppColors.muted),
-                ),
+                // 저장 현황 + 가짜 과금 크롬 — 파일럿용 UI만이고 어떤 저장도 막지 않는다(ADR-0007).
+                _SavedQuota(count: recipes.length),
                 const SizedBox(height: Space.xl),
                 RecipeForm(
                   saving: controller.saving,
@@ -44,7 +43,19 @@ class RecipeBookPage extends StatelessWidget {
                 const SizedBox(height: Space.xxl),
                 if (recipes.isEmpty)
                   const _EmptyRecipes()
-                else
+                else ...[
+                  Padding(
+                    padding: const EdgeInsets.only(
+                      left: Space.xs,
+                      bottom: Space.sm,
+                    ),
+                    child: Text(
+                      '저장한 레시피 · ${recipes.length}',
+                      style: AppTypography.footnote.copyWith(
+                        color: AppColors.muted,
+                      ),
+                    ),
+                  ),
                   // iOS 인셋 그룹 리스트 — 카드 하나에 셀을 쌓고 hairline으로 나눈다(DESIGN.md §4·§7).
                   Container(
                     decoration: BoxDecoration(
@@ -67,6 +78,7 @@ class RecipeBookPage extends StatelessWidget {
                       ],
                     ),
                   ),
+                ],
                 // 백업은 이 화면 최하단이다(G1 #8).
                 const SizedBox(height: Space.xxxl),
                 BackupSection(controller: backupController),
@@ -109,14 +121,13 @@ class _RecipeRow extends StatelessWidget {
       child: Row(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          // 좌 아이콘 — 제목 줄에 맞춰 살짝 내린다.
-          const Padding(
-            padding: EdgeInsets.only(top: 2),
-            child: Icon(
-              Icons.bookmark_outline,
-              size: 20,
-              color: AppColors.muted,
-            ),
+          // 좌 썸네일 — 음식 사진 자리(홍시-틴트 placeholder, 백엔드 오면 og:image로 교체, ADR-0007).
+          const PhotoPlaceholder(
+            width: 44,
+            height: 44,
+            borderRadius: Radii.photo,
+            icon: Icons.restaurant_menu,
+            iconSize: 22,
           ),
           const SizedBox(width: Space.md),
           Expanded(
@@ -154,8 +165,9 @@ class _RecipeRow extends StatelessWidget {
                       child: const Text('다시 시도'),
                     ),
                 ] else
+                  // 출처(url host 파생) + 재료를 한 메타 줄로 — 재료 문자열은 매칭 근거라 보존한다.
                   Text(
-                    recipe.ingredients.join(' · '),
+                    '${_sourceLabel(recipe.url)} · ${recipe.ingredients.join(' · ')}',
                     style: AppTypography.footnote.copyWith(
                       color: AppColors.muted,
                     ),
@@ -170,6 +182,109 @@ class _RecipeRow extends StatelessWidget {
             icon: const Icon(Icons.close, size: 20),
             color: AppColors.muted,
             tooltip: '삭제',
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+/// url host로 출처 라벨을 파생한다 — 모델엔 source 필드가 없다(렌더타임 파생, 저장소 무변경).
+String _sourceLabel(String url) {
+  final host = Uri.tryParse(url)?.host.toLowerCase() ?? '';
+  if (host.isEmpty) return '링크';
+  if (host.contains('youtu')) return '유튜브';
+  if (host.contains('instagram')) return '인스타그램';
+  if (host.contains('tiktok')) return '틱톡';
+  return '블로그';
+}
+
+/// 저장 현황 + 가짜 과금 크롬(파일럿용 UI만, ADR-0007) — 실 카운트 × 가짜 상한 30, 저장을 막지 않는다.
+class _SavedQuota extends StatelessWidget {
+  const _SavedQuota({required this.count});
+
+  final int count;
+  static const _cap = 30;
+
+  @override
+  Widget build(BuildContext context) {
+    final remaining = (_cap - count).clamp(0, _cap);
+    final progress = (count / _cap).clamp(0.0, 1.0);
+    return Container(
+      padding: const EdgeInsets.all(Space.lg),
+      decoration: BoxDecoration(
+        color: AppColors.surface,
+        borderRadius: BorderRadius.circular(Radii.card),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          Row(
+            children: [
+              Expanded(
+                child: Text.rich(
+                  TextSpan(
+                    children: [
+                      TextSpan(
+                        text: '$count / $_cap',
+                        style: AppTypography.numeric.copyWith(
+                          fontSize: 17,
+                          fontWeight: FontWeight.w600,
+                          color: AppColors.text,
+                        ),
+                      ),
+                      const TextSpan(
+                        text: ' 저장됨',
+                        style: AppTypography.headline,
+                      ),
+                    ],
+                  ),
+                ),
+              ),
+              // "무료" 배지 — 가짜 플랜 표시.
+              Container(
+                padding: const EdgeInsets.symmetric(
+                  horizontal: Space.sm,
+                  vertical: Space.xs,
+                ),
+                decoration: BoxDecoration(
+                  color: AppColors.actionTint,
+                  borderRadius: BorderRadius.circular(Radii.chip),
+                ),
+                child: Text(
+                  '무료',
+                  style: AppTypography.caption.copyWith(
+                    color: AppColors.action,
+                  ),
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: Space.md),
+          ClipRRect(
+            borderRadius: BorderRadius.circular(Radii.pill),
+            child: LinearProgressIndicator(
+              value: progress,
+              minHeight: 6,
+              backgroundColor: AppColors.sunken,
+              color: AppColors.action,
+            ),
+          ),
+          const SizedBox(height: Space.sm),
+          Text.rich(
+            TextSpan(
+              style: AppTypography.footnote.copyWith(color: AppColors.muted),
+              children: [
+                TextSpan(text: '$remaining개 더 저장할 수 있어요  '),
+                TextSpan(
+                  text: '프리미엄으로 무제한',
+                  style: AppTypography.footnote.copyWith(
+                    color: AppColors.action,
+                    fontWeight: FontWeight.w600,
+                  ),
+                ),
+              ],
+            ),
           ),
         ],
       ),
