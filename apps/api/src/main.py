@@ -7,6 +7,9 @@ from src.auth.router import router as auth_router
 from src.core.config import get_settings
 from src.health.router import router as health_router
 from src.llm.router import router as llm_router
+
+# ⚠️ migration_router는 시한부다 — 파일럿 2계정 이전 완료 시 이 import·include를 삭제한다(src/migration/ 참조).
+from src.migration.router import router as migration_router
 from src.ogimage.router import router as ogimage_router
 from src.recipes.router import router as recipes_router
 
@@ -41,3 +44,5 @@ app.include_router(auth_router, prefix="/api/v1")
 app.include_router(llm_router, prefix="/api/v1")
 app.include_router(ogimage_router, prefix="/api/v1")
 app.include_router(recipes_router, prefix="/api/v1")
+# ⚠️ 시한부 — 파일럿 2계정 이전 완료 시 이 줄을 삭제한다 (src/migration/ __init__.py).
+app.include_router(migration_router, prefix="/api/v1")
