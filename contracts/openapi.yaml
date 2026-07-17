@@ -145,6 +145,8 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/RecipeResponse'
+        '400':
+          description: 본문을 파싱할 수 없다(JSON 디코드 실패)
         '401':
           description: 세션이 없거나 유효하지 않다
         '502':
@@ -213,6 +215,8 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/RecipeResponse'
+        '400':
+          description: 본문을 파싱할 수 없다(JSON 디코드 실패)
         '401':
           description: 세션이 없거나 유효하지 않다
         '404':

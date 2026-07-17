@@ -245,10 +245,25 @@ async def test_delete_removes_row(
 async def test_all_recipe_routes_require_session(
     client: httpx.AsyncClient, method: str, path: str
 ) -> None:
-    """AC 전제: 무세션은 전 라우트 401 — CurrentAccount가 본문 처리보다 먼저 선다."""
+    """AC 전제: 무세션은 전 라우트 401 — CurrentAccount가 본문 검증(422)보다 먼저 선다."""
     res = await client.request(method, path)
 
     assert res.status_code == 401
+
+
+async def test_malformed_body_is_400_even_before_auth(
+    client: httpx.AsyncClient,
+) -> None:
+    """FastAPI는 본문 JSON 디코드를 의존성 해석보다 먼저 한다 — 깨진 본문은 401이 아니라 400이다.
+
+    이 순서는 우리가 정한 게 아니라 프레임워크의 것이다 — 계약(문서화된 400)이 실서버와 어긋나지
+    않는지 핀한다(schemathesis가 실측으로 잡았던 미문서화 코드).
+    """
+    res = await client.post(
+        RECIPES, content=b"\x80", headers={"Content-Type": "application/json"}
+    )
+
+    assert res.status_code == 400
 
 
 @pytest.mark.parametrize("method", ["GET", "PATCH", "DELETE"])

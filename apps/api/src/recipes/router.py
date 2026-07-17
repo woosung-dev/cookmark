@@ -25,6 +25,11 @@ NOT_FOUND: dict[int | str, dict[str, str]] = {
 EXTRACTION_FAILED: dict[int | str, dict[str, str]] = {
     502: {"description": "재료 추출에 실패했다 — 레시피는 저장되지 않았다"}
 }
+# FastAPI는 본문 파싱(JSON 디코드)을 의존성 해석보다 먼저 한다 — 깨진 본문은 401보다 먼저 400이
+# 난다(실측: schemathesis가 잡았다). 본문을 받는 라우트(POST·PATCH)만 이 코드를 실제로 낸다.
+BAD_REQUEST: dict[int | str, dict[str, str]] = {
+    400: {"description": "본문을 파싱할 수 없다(JSON 디코드 실패)"}
+}
 
 _NOT_FOUND_DETAIL = "레시피를 찾을 수 없다"
 
@@ -32,7 +37,7 @@ _NOT_FOUND_DETAIL = "레시피를 찾을 수 없다"
 @router.post(
     "",
     status_code=status.HTTP_201_CREATED,
-    responses={**UNAUTHORIZED, **EXTRACTION_FAILED},
+    responses={**BAD_REQUEST, **UNAUTHORIZED, **EXTRACTION_FAILED},
 )
 async def create_recipe(payload: RecipeCreate, service: Service) -> RecipeResponse:
     """저장하면 제목에서 재료 추출이 1회 일어나 항목에 남는다. 추출 실패는 명시적 502 — 조용한 저장 없음."""
@@ -62,7 +67,7 @@ async def read_recipe(recipe_id: UUID, service: Service) -> RecipeResponse:
         ) from exc
 
 
-@router.patch("/{recipe_id}", responses={**UNAUTHORIZED, **NOT_FOUND})
+@router.patch("/{recipe_id}", responses={**BAD_REQUEST, **UNAUTHORIZED, **NOT_FOUND})
 async def update_recipe(
     recipe_id: UUID, payload: RecipeUpdate, service: Service
 ) -> RecipeResponse:

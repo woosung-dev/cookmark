@@ -23,7 +23,8 @@
 - google-genai 2.12.1: `HttpOptions(timeout=…)`은 **밀리초**, `response.parsed`는 `BaseModel|dict|Enum|None`(isinstance 내로잉 필수 — SDK는 파싱 실패를 조용히 None으로 눕힘), 타임아웃·전송 예외는 SDK가 안 감싸고 httpx로 샌다, py.typed 동봉(mypy override 불요).
 - 테스트의 실 네트워크 유출 방지 — recipes 테스트 파일마다 module autouse `_llm_guard(llm)`. override 누락 시 가짜 키로 실 Gemini 호출(15s 후 502)이라 느리게 빨갛다.
 - 두 계정 분리는 Bearer 헤더 — `idp.login` 후 `client.cookies.clear()`, 헤더가 쿠키를 이긴다(기존 `test_me_with_bearer` 검증 사실).
-- schemathesis는 무인증 fuzz — 신규 라우트는 401 문서화만 하면 통과, LLM 호출 0회(CurrentAccount가 본문 처리 전 401). 신규 exclude 불요.
+- schemathesis는 무인증 fuzz — 신규 라우트는 401 문서화만 하면 통과, LLM 호출 0회(CurrentAccount가 본문 **검증**(422) 전 401). 신규 exclude 불요.
+- **본문 라우트의 숨은 400** — FastAPI는 본문 JSON **디코드**를 의존성 해석보다 먼저 한다. 깨진 본문(`-d '\x80'`)은 401이 아니라 400 "There was an error parsing the body"다 — 본문 받는 라우트(POST·PATCH)는 400 문서화 필수. #99·#100에서 안 발현된 이유 = 본문 받는 라우트가 이번이 처음. schemathesis가 CI에서 실측으로 잡았고(`test_malformed_body_is_400_even_before_auth`로 핀), #101 프록시 라우트도 전부 본문을 받으므로 **같은 400 문서화가 필요하다**.
 
 ## 파운더 이월 (이 티켓 밖)
 
