@@ -1,0 +1,194 @@
+# 생성물 — 수기로 수정하지 말 것. 정본은 apps/api의 Pydantic 모델이다 (ADR-0009 계약 절).
+# 재생성: cd apps/api && uv run python scripts/export_openapi.py
+openapi: 3.1.0
+info:
+  title: cookmark-api
+  version: 0.1.0
+paths:
+  /api/v1/health:
+    get:
+      summary: Health
+      operationId: health_api_v1_health_get
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                additionalProperties:
+                  type: string
+                type: object
+                title: Response Health Api V1 Health Get
+  /api/v1/auth/{provider}/login:
+    get:
+      tags:
+      - auth
+      summary: Start Login
+      description: IdP 인가 화면으로 보낸다. redirect_uri는 라우트에서 도출해 설정 없이 성립시킨다.
+      operationId: start_login_api_v1_auth__provider__login_get
+      parameters:
+      - name: provider
+        in: path
+        required: true
+        schema:
+          $ref: '#/components/schemas/Provider'
+      responses:
+        '302':
+          description: IdP 인가 화면으로 리다이렉트
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+  /api/v1/auth/{provider}/callback:
+    get:
+      tags:
+      - auth
+      summary: Auth Callback
+      description: IdP가 돌려보낸 코드를 검증된 신원으로 바꾸고 세션을 발급한다.
+      operationId: auth_callback_api_v1_auth__provider__callback_get
+      parameters:
+      - name: provider
+        in: path
+        required: true
+        schema:
+          $ref: '#/components/schemas/Provider'
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SessionResponse'
+        '401':
+          description: 세션이 없거나 유효하지 않다
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+  /api/v1/auth/me:
+    get:
+      tags:
+      - auth
+      summary: Read Current Account
+      description: 세션 검증 표면이자 로그인 데모 지점.
+      operationId: read_current_account_api_v1_auth_me_get
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AccountResponse'
+        '401':
+          description: 세션이 없거나 유효하지 않다
+  /api/v1/auth/logout:
+    post:
+      tags:
+      - auth
+      summary: Logout
+      description: 제시된 증표를 파기한다. 이미 죽은 증표로 불러도 결과는 같으므로 멱등이다.
+      operationId: logout_api_v1_auth_logout_post
+      responses:
+        '204':
+          description: Successful Response
+  /api/v1/auth/account:
+    delete:
+      tags:
+      - auth
+      summary: Withdraw
+      description: 탈퇴 — 계정·세션 즉시 하드 삭제. 지울 대상은 세션에서 나오지 클라이언트가 대지 않는다.
+      operationId: withdraw_api_v1_auth_account_delete
+      responses:
+        '204':
+          description: Successful Response
+        '401':
+          description: 세션이 없거나 유효하지 않다
+components:
+  schemas:
+    AccountResponse:
+      properties:
+        id:
+          type: string
+          format: uuid
+          title: Id
+        iss:
+          type: string
+          title: Iss
+        sub:
+          type: string
+          title: Sub
+        created_at:
+          type: string
+          format: date-time
+          title: Created At
+      type: object
+      required:
+      - id
+      - iss
+      - sub
+      - created_at
+      title: AccountResponse
+      description: 서버가 계정에 대해 아는 전부. 더 있는 것처럼 보이지 않게 이게 그대로 계약이다.
+    HTTPValidationError:
+      properties:
+        detail:
+          items:
+            $ref: '#/components/schemas/ValidationError'
+          type: array
+          title: Detail
+      type: object
+      title: HTTPValidationError
+    Provider:
+      type: string
+      enum:
+      - kakao
+      - google
+      title: Provider
+    SessionResponse:
+      properties:
+        token:
+          type: string
+          title: Token
+        expires_at:
+          type: string
+          format: date-time
+          title: Expires At
+        account:
+          $ref: '#/components/schemas/AccountResponse'
+      type: object
+      required:
+      - token
+      - expires_at
+      - account
+      title: SessionResponse
+      description: 발급된 세션. 웹은 쿠키로 받으므로 token을 무시하고, 네이티브는 이 값을 보안 저장소에 넣는다 (§9).
+    ValidationError:
+      properties:
+        loc:
+          items:
+            anyOf:
+            - type: string
+            - type: integer
+          type: array
+          title: Location
+        msg:
+          type: string
+          title: Message
+        type:
+          type: string
+          title: Error Type
+        input:
+          title: Input
+        ctx:
+          type: object
+          title: Context
+      type: object
+      required:
+      - loc
+      - msg
+      - type
+      title: ValidationError

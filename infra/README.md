@@ -133,6 +133,14 @@ gcloud secrets add-iam-policy-binding cookmark-database-url \
 
 **비-비밀은 Secret Manager에 넣지 않는다**(§9.1). `CORS_ALLOWED_ORIGINS`는 평문 env고 **1기 배포 값은 빈 목록**이다 — 허용 origin이 로컬 개발 origin뿐이라 배포된 API를 소비하는 웹이 없다(ADR-0009 접속 절). 그래서 워크플로가 아예 설정하지 않고 앱 기본값(빈 목록)에 맡긴다.
 
+> ⚠️ **트립와이어 — #100 인증이 #98보다 먼저 랜딩해 배포 시크릿이 늘었다.** 이 티켓(#98)이 쓰일 땐 앱이 읽는 비밀이 `DATABASE_URL` 하나였는데, 그 사이 [#100](https://github.com/woosung-dev/cookmark/issues/100)이 머지돼 서빙 컨테이너가 부팅하려면 **`SESSION_SECRET`·`KAKAO_CLIENT_SECRET`·`GOOGLE_CLIENT_SECRET`(비밀 3)** 과 **`KAKAO_CLIENT_ID`·`GOOGLE_CLIENT_ID`(비-비밀 env 2)** 도 필요하다(`src/core/config.py`의 `Settings` 필수 필드 — 없으면 import 시점에 `ValidationError`). **첫 실 배포 전에** 세 가지를 함께 해야 한다.
+>
+> 1. 위 §3 절차를 비밀 3개(`cookmark-session-secret`·`cookmark-kakao-client-secret`·`cookmark-google-client-secret`)에 대해 반복하고 두 SA에 `secretAccessor` 부여. 값은 #100 README의 IdP 콘솔 등록에서 나온다.
+> 2. `api.yml` deploy job의 `--set-secrets`에 세 비밀을, 마이그레이션 `docker run` env에 여섯 필드 전부를 추가한다(마이그레이션도 `get_settings()`를 거쳐 전 필드를 검증한다). client id 2개는 비-비밀이므로 `--set-env-vars` 또는 리포 변수로 넣는다.
+> 3. 인벤토리(위 표)의 시크릿 수를 1 → 4로 갱신.
+>
+> **미룰 수 있는 이유** — deploy job은 리포 변수가 없으면 skip이라 그전엔 발화하지 않는다. 하지만 파운더가 프로비저닝을 마치고 첫 배포를 돌리는 순간 발현하므로, IdP 등록(#100)과 **한 세션에서** 처리하는 게 자연스럽다.
+
 ## 4. Workload Identity Federation — 키 파일 없는 인증
 
 ```bash

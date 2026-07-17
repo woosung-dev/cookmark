@@ -12,6 +12,8 @@ dependencies = [
     "pydantic-settings",
     "alembic",
     "uvicorn[standard]",
+    "authlib>=1.7.2",
+    "itsdangerous>=2.2.0",
 ]
 
 [dependency-groups]
@@ -22,6 +24,11 @@ dev = [
     "testcontainers[postgres]",
     "ruff",
     "mypy",
+    "respx>=0.23.1",
+    # 계약 게이트 — schemathesis(발행 계약 fuzzing) · pyyaml(스냅샷 렌더, 배포물 밖 도구라 dev)
+    "schemathesis",
+    "pyyaml",
+    "types-pyyaml",
 ]
 
 # backend.md §2·§11 — 앱은 `src.main:app`으로 구동된다. `src`를 그대로 패키지로 설치해
@@ -50,6 +57,11 @@ known-third-party = ["alembic"]
 python_version = "3.13"
 plugins = ["pydantic.mypy"]
 strict = true
+
+[[tool.mypy.overrides]]
+# authlib은 타입 스텁을 배포하지 않는다 — 경계는 src/auth/oidc.py 하나뿐이고 거기서 타입을 되찾는다
+module = ["authlib.*"]
+ignore_missing_imports = true
 
 [tool.pytest.ini_options]
 asyncio_mode = "auto"

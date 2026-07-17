@@ -6,6 +6,9 @@ on:
     paths:
       - "apps/api/**"
       - ".github/workflows/api.yml"
+      # 발행된 계약도 트리거다 — 이게 없으면 openapi.yaml만 손댄 PR이 워크플로 자체를 건너뛰어
+      # 드리프트 가드가 돌지 않는다(수기 수정을 막겠다는 게 이 가드의 존재 이유인데).
+      - "contracts/**"
   push:
     branches: [main] # 무필터 유지 — PR paths 필터의 블라인드 스팟 백스톱 (mobile.yml 동형)
 
@@ -21,7 +24,7 @@ defaults:
 
 jobs:
   gate:
-    name: format · lint · mypy · pytest
+    name: format · lint · mypy · pytest · 계약
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -36,10 +39,41 @@ jobs:
       - name: lint
         run: uv run ruff check .
       - name: mypy
-        run: uv run mypy src/
+        run: uv run mypy src/ scripts/
+      # 계약 드리프트 가드 — 자동 커밋 없음. 갱신은 사람이 로컬 재생성 명령으로 (ADR-0009 계약 절).
+      # mobile.yml의 "포맷 미적용 = 실패"와 동형이다.
+      - name: 계약 스냅샷 (드리프트 = 실패)
+        run: uv run python scripts/export_openapi.py --check
       # ubuntu-latest에 Docker 상주 — testcontainers 실 Postgres가 그대로 돈다.
       - name: pytest (ASGI + testcontainers 실 Postgres)
         run: uv run pytest -v
+      # 발행된 계약을 실 서버에 물려 fuzzing한다 — 스키마가 아니라 **구현이** 계약을 지키는지 본다
+      # (드리프트 가드는 스냅샷==코드만 보증하므로 둘은 겹치지 않는다).
+      # 실 서버인 이유 — schemathesis v4는 CLI의 인프로세스 ASGI(`--app`)를 제거했고, 남은 인프로세스
+      # 경로는 starlette sync TestClient(요청마다 새 이벤트 루프)라 backend.md §10 금지에 정면으로 걸린다.
+      - name: schemathesis (발행 계약 vs 실 서버)
+        env:
+          # 앱 import 시점에 Settings가 요구하는 필수 필드 — DB·IdP 연결은 일어나지 않으므로 자리표시자로 족하다.
+          # (#100 인증이 세션 키·IdP 자격증명을 필수로 추가해 DATABASE_URL만으론 부팅이 안 된다.)
+          DATABASE_URL: postgresql+asyncpg://contract-fuzz/placeholder
+          KAKAO_CLIENT_ID: placeholder
+          KAKAO_CLIENT_SECRET: placeholder
+          GOOGLE_CLIENT_ID: placeholder
+          GOOGLE_CLIENT_SECRET: placeholder
+          SESSION_SECRET: placeholder
+        run: |
+          # 출력을 파일로 뺀다 — 백그라운드 서버가 스텝의 stdout을 붙들면 러너가 스텝 종료를 기다린다.
+          uv run uvicorn src.main:app --port 8000 > /tmp/uvicorn.log 2>&1 &
+          # 성공·실패 어느 경로로 나가든 서버를 정리한다 — 남은 uv 프로세스가 post-job 캐시 저장과 겹친다.
+          server=$!
+          trap 'kill "$server" 2>/dev/null || true' EXIT
+          # 기동 실패는 맨 timeout이 아니라 이유를 남기고 죽는다.
+          timeout 30 sh -c 'until curl -sf http://localhost:8000/api/v1/health >/dev/null; do sleep 0.5; done' \
+            || { echo "서버 기동 실패 — uvicorn 로그:"; cat /tmp/uvicorn.log; exit 1; }
+          # login은 제외한다 — 유일한 일은 외부 IdP로의 302 리다이렉트라 실 서버로 fuzzing하면
+          # schemathesis가 리다이렉트를 좇아 IdP로 나가버린다(우리 API 밖). 이 라우트는 test_auth_login.py가
+          # FakeIdp로 관통 검증하므로 계약 커버리지 손실이 없다(#99 가드 × #100 인증 통합 시 발현).
+          uv run st run ../../contracts/openapi.yaml --url http://localhost:8000 --exclude-path-regex 'login$'
 
   # 배포 — main push만, 게이트 통과 후에만 (#98).
   #
