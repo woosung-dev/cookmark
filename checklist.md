@@ -25,4 +25,4 @@
 - [x] 인루프 게이트 — `ruff format` · `ruff check` · `mypy src/ scripts/` · `pytest` 전체 green (12 passed, `.env.local` 유무 양쪽)
 - [x] `/code-review` 2축 + 지적 반영 — Spec 축이 `contracts/**` 트리거 누락(실결함) 검출·수정, Standards 축 2건(종결 콜론·docstring) 반영
 - [x] CI 기준선 green — **run 29583465512** 13/13 (post-job 포함)
-- [ ] PR #106 최종 green → 티켓 코멘트
+- [x] PR #106 최종 green (run 29583910265) → 티켓 코멘트 완료
