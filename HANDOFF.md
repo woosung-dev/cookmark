@@ -1,61 +1,29 @@
-# HANDOFF — 냉파 UI 목업 풀 패리티 (다음 세션용)
+# HANDOFF — 모노레포 이동 완료 (ADR-0008 · #69)
 
-> 이 문서 하나로 이어받는다. 새 세션은 이걸 먼저 읽고 `checklist.md`·`context-notes.md`·`~/.claude/plans/buzzing-plotting-gadget.md`를 보조로 본다.
+> 새 세션은 이걸 먼저 읽고 `AGENTS.md`·`checklist.md`·`context-notes.md`를 보조로 본다. 직전 효력(목업 풀 패리티)은 PR #68로 머지 완료 — 그 HANDOFF는 git 이력에 있다.
 
 ## 지금 어디까지 왔나 (2026-07-17)
-브랜치 **`feat/ui-design-alignment`**, 작업트리 clean. `main` 금지.
 
-**★ 2단계(목업 풀 패리티) 전량 완료 — P1~P7.** 6화면 Playwright 스크린샷이 `applied-app.jpeg`와 일치 확인, 전 게이트 그린(format·analyze·test **290**·E2E **32**). 하드 제약 4개 유지(무수정 파일 증거·푸터 포맷·E2E 키·push≤1). 남은 건 **백엔드 이월 트랙**(아래)과 **파운더 재배포 결정**뿐. 커밋: P2 `e3fbe2c` · P5 `92d1862` · P6 `9a549dd` · P4 `8786b87` · P7(ADR·DESIGN·QA엔트리·문서).
+**리포는 폴리글랏 모노레포다.** Flutter 앱 = `apps/mobile/`(순수 rename 이동, 92파일 100% similarity), 서버리스 프록시 = 루트 `api/`(잠정), 나머지 `apps/*`·`packages/*`·`contracts/`·`infra/` = README 계약. 결정은 ADR-0008, 실행 절차·재개봉 기록은 #69(+#51·#38 코멘트).
 
-**1단계(완료·머지 대기) — DESIGN.md 토큰 정합 + 마감 감사**: 폰트 번들(Pretendard+IBM Plex Mono)·아이콘 outlined·라운드 토큰·press-scale·매칭 로딩 스켈레톤·레시피 북 인셋 리스트·design-review 6건 반영. 커밋 `44d42d3`~`b57cdc4`.
+- 시점 게이트는 2026-07-17 사용자 재결정으로 재개봉됐다 — 파일럿 판정을 기다리지 않고 실행. #38(3버킷 리팩터)은 이동 **후행**이 됐고 판정 게이트는 유지된다.
+- `worktree-fix-ach`(#38 WIP 7커밋)는 origin에 백업됨. 정정 전 착수 세션의 실행 설계 문서 2건은 #38 코멘트에 박제.
+- worktree 10개 제거·merged 브랜치 정리·사석 arm 2개는 `archive/*` 태그로 박제 후 삭제.
 
-**2단계(진행 중) — 목업 풀 패리티**: 파운더가 `docs/design/applied-app.jpeg`처럼 보이길 원해 **풀 패리티**를 택함. ADR-0001(측정 순도·화면2·단일페이지)을 되돌리는 재작업이다. 실행 방식 = **UI 먼저, 백엔드 나중**(파운더 결정).
-- ✅ **P1** 하단 탭 바 셸 (`0e4d1a0`) — `lib/ui/root_shell.dart` 신규. 메인/레시피북 2탭, 선택 탭만 렌더(상태는 컨트롤러 보존). `app.dart` home=RootShell. `main_page`의 Navigator.push 제거→`onOpenRecipeBook` 콜백. NavigationBar 테마(app_theme). 테스트 갱신(아래).
-- ✅ **P3** 목업형 제안 카드 (`3ac355b`) — `lib/ui/widgets/suggestion_card.dart` 재작성 + `photo_placeholder.dart` 신규. 사진 슬롯(홍시-틴트 placeholder)+`1위·96% 일치` 배지+라벨+출처+`영상 보기`+`이거 했어요`. 스크린샷 육안 확인 완료(목업과 유사).
+## 배포 상태 (중요)
 
-## 남은 일 (순서대로) — 전부 완료 ✅
-- ✅ **P2 브랜드 히어로·워드마크·온기** (`e3fbe2c`): `brand_hero.dart` 신규(홍시→차콜 그라디언트+흰 워드마크, AA OK) + 신뢰 라인 + 업로드 버튼 `냉장고 사진 올리기`. AppBar 유지(recipe-book-link).
-- ✅ **P4 제안 상세 화면** (`8786b87`): `suggestion_detail_page.dart` 신규. 카드 탭→`main_page._openDetail` **축복 단일 push**. "이거 했어요"=pop-with-result(토스트 메인 안착), "영상 보기"=주입 콜백. E2E +1(31→32).
-- ✅ **P5 레시피 북 목업** (`92d1862`): 가짜 과금 크롬(N/30·무료·프리미엄) + 썸네일 + 출처 라벨. 재료 문자열·remove X 보존, chevron 생략.
-- ✅ **P6 인식 화면** (`9a549dd`): 진행바(단계 연동)+부제+`보통 5초 정도 걸려요`. 가짜 개수 생략(정직). `loading-message`·`loading_stage.dart` 보존.
-- ✅ **P7 ADR-0007 + 최종**: `docs/adr/0007-tab-shell-and-blessed-detail-push.md` 신규(ADR-0001 역전·이월 명시·dangling 참조 닫음). `DESIGN.md` §4·§7 갱신. 6화면 스크린샷 대조·전 게이트 green.
+- **prod는 무접촉** — 정본 URL(`https://cookmark-woosungdevs-projects.vercel.app`)은 이동 전 파일럿 빌드를 계속 서빙한다. 파일럿(D0 7/22~8/5)은 예정대로.
+- 새 배포 경로는 preview 배포로 증명됨(#69 코멘트에 URL 증거) — break-fix가 필요하면 `(cd apps/mobile && flutter build web)` → 루트에서 `vercel build` → `vercel deploy --prebuilt`(prod는 `--prod` 추가). main 자동배포 차단(#57)은 불변.
 
-## 백엔드 이월 (프론트만으론 못 함 — 별도 트랙)
-1. **매칭 %**: 지금은 placeholder(`suggestion_card._matchPercent`가 부족 수로 근사). 진짜는 LLM 프록시가 매치 점수를 반환해야 함 → `proxy_llm_gateway`/서버리스 함수 + `Suggestion` 모델 스키마 변경. **측정 편향 주의**(파일럿).
-2. **음식 사진**: 지금은 `PhotoPlaceholder`(홍시-틴트+아이콘). 진짜는 URL og:image → 웹 CORS 때문에 프록시 엔드포인트 필요. 온보딩 히어로는 정적 자산으로 대체 가능.
+## 다음 일
 
-## 하드 제약 (여전히 불변 — 깨면 파일럿 데이터 죽음)
-1. 이벤트 로깅·카탈로그 12종(`app_event.dart`)·수동수정 산식(`debug_metrics.dart`, ADR-0003)·`storage.dart`·`debug_footer.dart` **무수정**. `git diff main...HEAD --name-only`에 이 파일들이 없어야 함(현재 없음).
-2. `?debug` 푸터 `수동 수정 <n>`/`이벤트 <n>` 포맷 보존.
-3. E2E 키·텍스트·semantics(`isChecked`) 보존. 불가피하면 테스트를 **의도적으로 함께 갱신**해 green 유지.
-4. 명령형 Navigator.push ≤1(제안 상세만), main_page.dart에. 탭 전환은 setState(트립와이어 무관).
+1. **파운더 수동 항목(#69 체크리스트)** — `.claude/rules/mobile.md` frontmatter 복원(`apps/*/lib/**` 스코프), `backend.md` §11 경로 주석(`apps/api/src/`), D0 운영(#65·#41).
+2. **BE/FE 로드맵 wayfinder 지도** — 각 앱의 존재 이유·툴체인(Next·pnpm/turbo·FastAPI)·`contracts/` 실체화를 결정. 코드를 안 옮기므로 언제든 차팅 가능.
+3. **#38** — 판정 후(판정이 연다, #51 유지). 경로는 `apps/mobile/` 접두로 읽고 WIP 리베이스 필요(#38 코멘트 참조).
 
-## 테스트 갱신 규칙 (P1에서 한 것 — 패턴 유지)
-- 탭바 도입으로 `NavigationBar findsNothing`→`findsOneWidget`로 반전함: `test/ui/main_page_test.dart`(구 ADR-0001 테스트), `integration_test/core_loop_test.dart`(맨 끝 no-tab-bar 테스트). `BottomNavigationBar findsNothing`은 유지(우린 M3 NavigationBar 씀).
-- `test/architecture/navigation_test.dart`: `hasLength(1)`→`lessThanOrEqualTo(1)` + 위치체크 조건부. P4에서 상세 push 추가되면 count=1이 됨.
-- `recipe-book-link` 키는 유지(헤더 링크가 탭 전환). E2E/widget 테스트의 recipe-book-link 탭은 그대로 동작(탭 전환→레시피북 렌더).
+## 함정 (깨면 아픈 것)
 
-## 어떻게 돌리나
-```bash
-# 인루프 게이트 (순서 고정)
-dart format lib/ test/ integration_test/ test_driver/
-dart format --output=none --set-exit-if-changed lib/ test/ integration_test/ test_driver/
-flutter analyze --fatal-infos
-flutter test                       # 현재 290 그린
-bash scripts/e2e.sh                # integration_test 31, chromedriver 필요(설치돼 있음), ~2분
-```
-**시각 QA (Playwright)**: dev 전용 엔트리 `lib/main_visual_qa.dart`(파일럿 빌드 미포함). 서버:
-```bash
-nohup flutter run -d web-server --web-port=8099 --web-hostname=127.0.0.1 -t lib/main_visual_qa.dart > /tmp/qa.log 2>&1 &
-# "is being served at" 뜰 때까지 대기(첫 빌드 ~30-60s)
-```
-`http://127.0.0.1:8099/?state=<state>` — state: onboarding·upload·loading·checklist·matching·suggestions·error·error-matching·recipebook·recipebook-empty. Playwright MCP로 navigate→wait 3s→screenshot(device scale, 390x844 뷰포트). **스크린샷은 repo 루트에 저장되니** 검증 후 scratchpad로 옮기고 커밋 전 지울 것.
-- **Playwright MCP 함정**: 이전 세션의 automation Chrome이 프로필 락을 쥐면 "Browser is already in use" → `pkill -9 -f mcp-chrome-<id>`(sandbox 밖 `dangerouslyDisableSandbox`) + `rm -rf .../Singleton*` 후 재시도.
-- CanvasKit라 wheel 스크롤이 안 먹음 → 세로로 긴 뷰포트(예 390x1700)로 전체를 한 컷에.
-
-## 정본 위계·참조
-- 시각 목표 = `docs/design/applied-app.jpeg`(6화면 목업, 이제 **비정본이 아니라 파운더가 맞추라 한 타깃**). 디자인 언어 = `DESIGN.md`. 구조는 이제 ADR-0007(작성 예정)이 ADR-0001을 대체.
-- 스크린샷·근거: `<scratchpad>/qa-shots/`(세션별). 이 세션 것: p1-tabbar·p3-cards·u1~u6·err 등.
-
-## 재배포
-**절대 자동 금지.** DoD 충족 후 파운더 결정. Vercel은 `lib/main.dart` 빌드(수동 프리빌드만, main 자동배포 차단됨).
+- `.vercelignore`는 404 지뢰다 — 부정 패턴 금지·디렉터리 패턴 루트 앵커 필수(파일 헤더 주석이 정본). bare `web/`·`build/` 패턴 절대 금지.
+- `apps/mobile`에서만 `flutter test` — `test/architecture/navigation_test.dart`가 cwd 의존.
+- 루트에 `lib/`를 "복원"하지 말 것 — 구 레이아웃 기억(문서·이력)은 이동 전 시점 기록이다.
+- 파일럿 하드 제약 유지 — `storage.dart`·`app_event.dart`·`debug_metrics.dart`·`debug_footer.dart`·`loading_stage.dart`(이제 `apps/mobile/lib/` 아래) 무수정, 명령형 push ≤1.
