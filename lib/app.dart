@@ -5,8 +5,8 @@ import 'package:image_picker/image_picker.dart';
 import 'theme/app_theme.dart';
 import 'ui/backup_controller.dart';
 import 'ui/main_controller.dart';
-import 'ui/main_page.dart';
 import 'ui/recipe_book_controller.dart';
+import 'ui/root_shell.dart';
 
 class CookmarkApp extends StatelessWidget {
   const CookmarkApp({
@@ -30,7 +30,7 @@ class CookmarkApp extends StatelessWidget {
       title: '냉파',
       debugShowCheckedModeBanner: false,
       theme: buildAppTheme(),
-      home: MainPage(
+      home: RootShell(
         controller: controller,
         recipeBookController: recipeBookController,
         backupController: backupController,

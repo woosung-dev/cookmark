@@ -213,5 +213,29 @@ ThemeData buildAppTheme() {
         borderSide: BorderSide.none,
       ),
     ),
+    // 하단 탭 바 — Apple식 절제(flat·surface·단일 액센트). 선택 = 곶감브릭(ADR-0007).
+    navigationBarTheme: NavigationBarThemeData(
+      backgroundColor: AppColors.surface,
+      surfaceTintColor: Colors.transparent,
+      elevation: 0,
+      height: 64,
+      indicatorColor: AppColors.actionTint,
+      labelBehavior: NavigationDestinationLabelBehavior.alwaysShow,
+      iconTheme: WidgetStateProperty.resolveWith(
+        (states) => IconThemeData(
+          size: 24,
+          color: states.contains(WidgetState.selected)
+              ? AppColors.action
+              : AppColors.muted,
+        ),
+      ),
+      labelTextStyle: WidgetStateProperty.resolveWith(
+        (states) => AppTypography.caption.copyWith(
+          color: states.contains(WidgetState.selected)
+              ? AppColors.action
+              : AppColors.muted,
+        ),
+      ),
+    ),
   );
 }

@@ -1080,11 +1080,12 @@ void main() {
     expect(find.text('수동 수정 0'), findsOneWidget);
   });
 
-  testWidgets('레시피 북은 헤더 링크 하나로만 들어간다 — 탭 바가 없다', (tester) async {
+  testWidgets('하단 탭 바로 레시피 북에 오가고 헤더 링크도 병행한다 (ADR-0007)', (tester) async {
     await pumpApp(tester);
 
+    // Material 3 NavigationBar 하나(구식 BottomNavigationBar는 안 씀).
     expect(find.byType(BottomNavigationBar), findsNothing);
-    expect(find.byType(NavigationBar), findsNothing);
+    expect(find.byType(NavigationBar), findsOneWidget);
 
     await tester.tap(find.byKey(const Key('recipe-book-link')));
     await tester.pumpAndSettle();

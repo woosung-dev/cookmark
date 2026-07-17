@@ -73,10 +73,11 @@ void main() {
     expect(find.byKey(const Key('recipe-nudge-chip')), findsOneWidget);
   });
 
-  testWidgets('탭 바가 없고 레시피 북은 헤더 링크로만 간다 (ADR-0001)', (tester) async {
+  testWidgets('하단 탭 바로 두 화면을 오가고 헤더 링크도 병행한다 (ADR-0007)', (tester) async {
     await pumpApp(tester);
+    // 구식 Material 2 BottomNavigationBar가 아니라 Material 3 NavigationBar를 쓴다.
     expect(find.byType(BottomNavigationBar), findsNothing);
-    expect(find.byType(NavigationBar), findsNothing);
+    expect(find.byType(NavigationBar), findsOneWidget);
     expect(find.byKey(const Key('recipe-book-link')), findsOneWidget);
   });
 
