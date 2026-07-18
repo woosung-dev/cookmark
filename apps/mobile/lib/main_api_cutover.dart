@@ -48,7 +48,14 @@ Future<void> main() async {
     CookmarkApp(
       controller: controller,
       recipeBookController: recipeBookController,
-      backupController: BackupController(storage, server: server),
+      backupController: BackupController(
+        storage,
+        server: server,
+        // 미러가 ready가 아닌 동안 가져오기를 막는다 — 스테일 dedup 중복 등록 방지(#121).
+        serverSyncState: () => recipeBookController.syncState,
+        // 가져오기 확정 후 재수화도 같은 hydrate로 — 실패 시 error 전이로 게이트가 닫힌다.
+        serverRehydrate: recipeBookController.hydrate,
+      ),
     ),
   );
 }
