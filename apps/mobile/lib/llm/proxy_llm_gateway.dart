@@ -44,8 +44,12 @@ class ProxyLlmGateway implements LlmGateway {
     );
   }
 
+  /// [url]은 무시한다 — 파일럿 프록시는 제목 기반 그대로다(#123, 행동 0 변화).
   @override
-  Future<ExtractionResult> extractIngredients(String title) async {
+  Future<ExtractionResult> extractIngredients(
+    String title, {
+    String? url,
+  }) async {
     final body = await _post('/api/extract', {'title': title});
 
     final raw = body['ingredients'] as List<Object?>? ?? const [];
