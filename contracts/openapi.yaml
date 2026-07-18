@@ -385,6 +385,44 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/HTTPValidationError'
+  /api/v1/migration/recipes:
+    post:
+      tags:
+      - migration
+      summary: Import Recipes
+      description: '로컬 레시피 북 전체를 계정에 1회 올린다 — 재추출 없이 재료를 그대로 수용하고, 전량 성공 또는 전량 실패다.
+
+
+        성공(201)이면 클라이언트가 로컬을 지운다. 실패(500)면 아무것도 저장되지 않았으니 로컬을 유지한다.'
+      operationId: import_recipes_api_v1_migration_recipes_post
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/RecipeImportRequest'
+        required: true
+      responses:
+        '201':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                items:
+                  $ref: '#/components/schemas/RecipeResponse'
+                type: array
+                title: Response Import Recipes Api V1 Migration Recipes Post
+        '400':
+          description: 본문을 파싱할 수 없다(JSON 디코드 실패)
+        '401':
+          description: 세션이 없거나 유효하지 않다
+        '500':
+          description: 가져오기에 실패했다 — 아무것도 저장되지 않았다(로컬 데이터 유지)
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
 components:
   schemas:
     AccountResponse:
@@ -571,6 +609,50 @@ components:
       - title
       title: RecipeCreate
       description: ingredients는 받지 않는다 — 추출은 서버가 저장 시 1회 수행한다. 몰래 넣으면 422로 시끄럽게 거절.
+    RecipeImportItem:
+      properties:
+        url:
+          type: string
+          minLength: 1
+          title: Url
+        title:
+          type: string
+          minLength: 1
+          title: Title
+        ingredients:
+          items:
+            type: string
+          type: array
+          title: Ingredients
+      additionalProperties: false
+      type: object
+      required:
+      - url
+      - title
+      - ingredients
+      title: RecipeImportItem
+      description: '로컬 레시피 북 항목 1개. ingredients는 로컬에서 이미 1회 추출됐으므로 그대로 보존한다 —
+
+        서버가 재추출하지 않는다(재추출은 비용·결과 표류만 낳는다). 그래서 이 스키마엔 재료가 **있고**,
+
+        저장 시 추출하는 recipes의 RecipeCreate엔 재료가 **없다**(비대칭은 의도).
+
+
+        str_strip_whitespace를 켜지 않는다 — "보낸 그대로 보존"(AC)이라 재료 문자열을 손대지 않는다.'
+    RecipeImportRequest:
+      properties:
+        recipes:
+          items:
+            $ref: '#/components/schemas/RecipeImportItem'
+          type: array
+          minItems: 1
+          title: Recipes
+      additionalProperties: false
+      type: object
+      required:
+      - recipes
+      title: RecipeImportRequest
+      description: 명시적 가져오기 1회의 페이로드. 빈 배치는 422 — 로컬에 레시피가 있을 때만 클라이언트가 부른다.
     RecipeResponse:
       properties:
         id:
