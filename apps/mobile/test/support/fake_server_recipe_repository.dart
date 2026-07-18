@@ -1,4 +1,6 @@
 // 테스트용 결정적 서버 레시피 북 — 유닛·E2E가 ServerRecipeRepository 자리에 주입한다(#121).
+import 'dart:async';
+
 import 'package:cookmark/data/server_recipe_repository.dart';
 import 'package:cookmark/domain/recipe.dart';
 
@@ -26,6 +28,12 @@ class FakeServerRecipeRepository implements ServerRecipeRepository {
   /// 도중에 꺼야 한다(FakeLlmGateway.failure와 같은 관용구).
   RecipeApiFailure? failure;
 
+  /// null이 아니면 fetchAll만 이 실패로 끝난다 — importBulk 성공 뒤 재수화 순단을 재현한다(#121 수리).
+  RecipeApiFailure? fetchAllFailure;
+
+  /// null이 아니면 fetchAll이 complete될 때까지 응답을 멈춘다 — 하이드레이트 loading을 고정한다(E2E ⑩).
+  Completer<void>? fetchAllGate;
+
   /// 호출 기록 — "다시 시도"가 실제로 재호출하는지, 무엇을 보냈는지 검증할 때 쓴다.
   int fetchAllCallCount = 0;
   int createCallCount = 0;
@@ -48,7 +56,11 @@ class FakeServerRecipeRepository implements ServerRecipeRepository {
   @override
   Future<List<Recipe>> fetchAll() async {
     fetchAllCallCount++;
+    final gate = fetchAllGate;
+    if (gate != null) await gate.future;
     await _gate();
+    final fail = fetchAllFailure;
+    if (fail != null) throw fail;
     return List.of(recipes);
   }
 

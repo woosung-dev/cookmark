@@ -111,7 +111,14 @@ void main() {
       CookmarkApp(
         controller: controller,
         recipeBookController: book,
-        backupController: BackupController(storage, server: server),
+        backupController: BackupController(
+          storage,
+          server: server,
+          // 미러가 ready가 아닌 동안 가져오기를 막는다 — 스테일 dedup 중복 등록 방지(#121, 엔트리와 동형).
+          serverSyncState: () => book.syncState,
+          // 확정 후 재수화도 같은 hydrate로 — 실패 시 error 전이로 게이트가 닫힌다(엔트리와 동형).
+          serverRehydrate: book.hydrate,
+        ),
         imagePicker: () async => fridgePhotoFile(),
       ),
     );
@@ -476,6 +483,176 @@ void main() {
     ]);
     expect(gateway.lastMatchedRecipes!.single.ingredients, ['김치', '돼지고기']);
   });
+
+  testWidgets('⑩ 하이드레이트 loading 동안 저장 폼이 잠긴다 — 스켈레톤과 함께, 끝나면 풀린다', (
+    tester,
+  ) async {
+    // fetchAll을 Completer로 붙잡아 loading을 고정한다 — latency와 달리 시간에 안 기댄다.
+    final server = FakeServerRecipeRepository(seed: seedThree)
+      ..fetchAllGate = Completer<void>();
+    await pumpApp(tester, server: server);
+    await openRecipeBook(tester);
+
+    // 스켈레톤이 서 있는 동안 폼은 입력을 받는 척하지 않는다 — 버릴 입력이기 때문이다.
+    expect(find.byKey(const Key('recipe-list-skeleton')), findsOneWidget);
+    expect(
+      tester
+          .widget<TextField>(find.byKey(const Key('recipe-url-field')))
+          .enabled,
+      isFalse,
+    );
+    expect(
+      tester
+          .widget<FilledButton>(find.byKey(const Key('recipe-submit')))
+          .onPressed,
+      isNull,
+    );
+
+    // 서버가 응답했다 — ready로 풀리면서 리스트가 서고 폼이 열린다.
+    server.fetchAllGate!.complete();
+    await waitForVisible(
+      tester,
+      () => _visible(find.byKey(const Key('recipe-tile-https://youtu.be/1'))),
+    );
+    await tester.pumpAndSettle();
+    expect(find.byKey(const Key('recipe-list-skeleton')), findsNothing);
+    expect(
+      tester
+          .widget<TextField>(find.byKey(const Key('recipe-url-field')))
+          .enabled,
+      isTrue,
+    );
+    expect(
+      tester
+          .widget<FilledButton>(find.byKey(const Key('recipe-submit')))
+          .onPressed,
+      isNotNull,
+    );
+  });
+
+  testWidgets('⑪ 하이드레이트 error — 가져오기는 미리보기부터 거절되고 온보딩 폼도 잠긴다', (tester) async {
+    final server = FakeServerRecipeRepository(
+      failure: const RecipeApiFailure(RecipeApiFailureKind.unavailable),
+    );
+    await pumpApp(tester, server: server, skipOnboarding: false);
+    await openRecipeBook(tester);
+    await waitForVisible(
+      tester,
+      () => _visible(find.byKey(const Key('recipe-list-error'))),
+    );
+    await tester.pumpAndSettle();
+
+    // 스테일 미러 기준 dedup은 성립하지 않는다 — 미리보기부터 받지 않고 서버 호출도 없다.
+    final incoming = jsonEncode(
+      BackupData(
+        recipes: const [
+          Recipe(url: 'https://youtu.be/b', title: '계란찜', ingredients: ['계란']),
+        ],
+        events: const [],
+        exportedAt: DateTime.utc(2026, 7, 14),
+      ).toJson(),
+    );
+    final field = find.byKey(const Key('backup-import-field'));
+    await tester.ensureVisible(field);
+    await tester.pumpAndSettle();
+    await tester.enterText(field, incoming);
+    await tapVisible(tester, find.byKey(const Key('backup-preview')));
+
+    expect(find.byKey(const Key('merge-preview')), findsNothing);
+    expect(
+      find.text('서버의 레시피 목록과 연결된 뒤 가져올 수 있어요. 잠시 후 다시 시도해주세요.'),
+      findsOneWidget,
+    );
+    expect(server.importBulkCallCount, 0, reason: '거절은 클라이언트에서 끝난다 — 서버 무호출');
+
+    // 메인 탭 온보딩 폼도 같은 이유로 잠긴다 — 버릴 저장 입력을 받는 척하지 않는다.
+    await tester.tap(find.text('메인'));
+    await tester.pumpAndSettle();
+    expect(find.byKey(const Key('onboarding-card')), findsOneWidget);
+    expect(
+      tester
+          .widget<TextField>(find.byKey(const Key('recipe-url-field')))
+          .enabled,
+      isFalse,
+    );
+    expect(
+      tester
+          .widget<FilledButton>(find.byKey(const Key('recipe-submit')))
+          .onPressed,
+      isNull,
+    );
+  });
+
+  testWidgets('⑫ 확정 중 재수화 순단 — 앱은 살아 있고, 재확정 길이 닫혀 중복 등록이 없다', (tester) async {
+    final server = FakeServerRecipeRepository(
+      seed: const [
+        Recipe(url: 'https://youtu.be/a', title: '김치찌개', ingredients: ['김치']),
+      ],
+    );
+    await pumpApp(tester, server: server);
+    await openRecipeBook(tester);
+    await waitForVisible(
+      tester,
+      () => _visible(find.byKey(const Key('recipe-tile-https://youtu.be/a'))),
+    );
+
+    final incoming = jsonEncode(
+      BackupData(
+        recipes: const [
+          Recipe(url: 'https://youtu.be/b', title: '계란찜', ingredients: ['계란']),
+        ],
+        events: const [],
+        exportedAt: DateTime.utc(2026, 7, 14),
+      ).toJson(),
+    );
+    final field = find.byKey(const Key('backup-import-field'));
+    await tester.ensureVisible(field);
+    await tester.pumpAndSettle();
+    await tester.enterText(field, incoming);
+    await tapVisible(tester, find.byKey(const Key('backup-preview')));
+    expect(find.byKey(const Key('merge-preview')), findsOneWidget);
+
+    // 확정 직전에 재수화만 죽는다 — importBulk는 성공하고 fetchAll이 실패하는 순단.
+    server.fetchAllFailure = const RecipeApiFailure(
+      RecipeApiFailureKind.unavailable,
+    );
+    await tapVisible(tester, find.byKey(const Key('backup-confirm')));
+    await waitForVisible(
+      tester,
+      () => _visible(
+        find.text('가져오기는 서버에 저장됐어요. 목록을 새로 불러오지 못했으니, 앱을 새로고침하면 반영됩니다.'),
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    // 가져오기 자체는 서버에 저장 완료 — 미러는 재수화 실패라 불변이다(가짜 성공 렌더 금지).
+    expect(server.importBulkCallCount, 1);
+    expect(server.recipes.map((r) => r.url), [
+      'https://youtu.be/a',
+      'https://youtu.be/b',
+    ]);
+    expect((await Storage.open()).readRecipes().map((r) => r.url), [
+      'https://youtu.be/a',
+    ]);
+
+    // 커밋이 잠겼다 — 확정 버튼 자체가 사라져 같은 배치를 두 번 보낼 길이 없다.
+    expect(find.byKey(const Key('merge-preview')), findsNothing);
+    expect(find.byKey(const Key('backup-confirm')), findsNothing);
+    expect(
+      server.importBulkCallCount,
+      1,
+      reason: '재확정 무경로 — importBulk는 1회로 끝',
+    );
+
+    // 순단이어도 가져오기 기록은 남는다 — 재수화 성패와 무관한 계약이다.
+    await waitForEvents(
+      tester,
+      storage,
+      (events) => events.any(
+        (e) => e.type == AppEventType.backup && e.data['direction'] == 'import',
+      ),
+    );
+  });
 }
 
 /// test/support의 FakeServerRecipeRepository와 동형 사본.
@@ -500,6 +677,12 @@ class FakeServerRecipeRepository implements ServerRecipeRepository {
   /// null이 아니면 모든 호출이 이 실패로 끝난다 — 도중에 끄면 성공이 재개된다.
   RecipeApiFailure? failure;
 
+  /// null이 아니면 fetchAll만 이 실패로 끝난다 — importBulk 성공 뒤 재수화 순단을 재현한다(#121 수리).
+  RecipeApiFailure? fetchAllFailure;
+
+  /// null이 아니면 fetchAll이 complete될 때까지 응답을 멈춘다 — 하이드레이트 loading을 고정한다(E2E ⑩).
+  Completer<void>? fetchAllGate;
+
   int fetchAllCallCount = 0;
   int createCallCount = 0;
   int patchCallCount = 0;
@@ -521,7 +704,11 @@ class FakeServerRecipeRepository implements ServerRecipeRepository {
   @override
   Future<List<Recipe>> fetchAll() async {
     fetchAllCallCount++;
+    final gate = fetchAllGate;
+    if (gate != null) await gate.future;
     await _gate();
+    final fail = fetchAllFailure;
+    if (fail != null) throw fail;
     return List.of(recipes);
   }
 
