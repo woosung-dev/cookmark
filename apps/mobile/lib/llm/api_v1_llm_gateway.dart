@@ -38,35 +38,46 @@ class ApiV1LlmGateway implements LlmGateway {
       throw const LlmFailure(LlmFailureKind.lowQuality);
     }
 
-    final raw = body['ingredients'] as List<Object?>? ?? const [];
-    final ingredients = <Ingredient>[
-      for (final item in raw)
-        ?_parseIngredient((item! as Map).cast<String, Object?>()),
-    ];
-    if (ingredients.isEmpty) throw const LlmFailure(LlmFailureKind.empty);
+    // 200인데 형식이 다른 본문의 TypeError(Error라 on Exception도 못 잡는다)가 이탈하면
+    // 화면이 로딩에 고착된다(#25 arm을 죽인 결함 계열) — LlmFailure(error)로 정규화한다.
+    try {
+      final raw = body['ingredients'] as List<Object?>? ?? const [];
+      final ingredients = <Ingredient>[
+        for (final item in raw)
+          ?_parseIngredient((item! as Map).cast<String, Object?>()),
+      ];
+      if (ingredients.isEmpty) throw const LlmFailure(LlmFailureKind.empty);
 
-    return RecognitionResult(
-      ingredients: ingredients,
-      usage: _usage((body['usage']! as Map).cast<String, Object?>()),
-    );
+      return RecognitionResult(
+        ingredients: ingredients,
+        usage: _usage((body['usage']! as Map).cast<String, Object?>()),
+      );
+    } on TypeError {
+      throw const LlmFailure(LlmFailureKind.error, '응답 형식 불일치');
+    }
   }
 
   @override
   Future<ExtractionResult> extractIngredients(String title) async {
     final body = await _post('/api/v1/llm/extract', {'title': title});
 
-    final raw = body['ingredients'] as List<Object?>? ?? const [];
-    final ingredients = <String>[
-      for (final item in raw)
-        if ((item as String?)?.trim() case final name? when name.isNotEmpty)
-          name,
-    ];
-    if (ingredients.isEmpty) throw const LlmFailure(LlmFailureKind.empty);
+    // recognize와 같은 방어 — 형식 불일치 TypeError를 LlmFailure(error)로 정규화한다.
+    try {
+      final raw = body['ingredients'] as List<Object?>? ?? const [];
+      final ingredients = <String>[
+        for (final item in raw)
+          if ((item as String?)?.trim() case final name? when name.isNotEmpty)
+            name,
+      ];
+      if (ingredients.isEmpty) throw const LlmFailure(LlmFailureKind.empty);
 
-    return ExtractionResult(
-      ingredients: ingredients,
-      usage: _usage((body['usage']! as Map).cast<String, Object?>()),
-    );
+      return ExtractionResult(
+        ingredients: ingredients,
+        usage: _usage((body['usage']! as Map).cast<String, Object?>()),
+      );
+    } on TypeError {
+      throw const LlmFailure(LlmFailureKind.error, '응답 형식 불일치');
+    }
   }
 
   @override
@@ -82,45 +93,21 @@ class ApiV1LlmGateway implements LlmGateway {
       ],
     });
 
-    final raw = body['suggestions'] as List<Object?>? ?? const [];
-    final suggestions = <Suggestion>[
-      for (final item in raw)
-        ?_parseSuggestion((item! as Map).cast<String, Object?>(), recipes),
-    ];
-    if (suggestions.isEmpty) throw const LlmFailure(LlmFailureKind.empty);
-
-    // 저장 제안은 출처 URL의 og:image를 카드 히어로 사진으로 붙인다(#102). AI 제안은 URL이 없어 건너뛴다.
-    final enriched = await Future.wait(
-      suggestions.map((s) async {
-        final url = s.recipeUrl;
-        if (s.source == SuggestionSource.saved && url != null) {
-          return s.copyWith(imageUrl: await _fetchOgImage(url));
-        }
-        return s;
-      }),
-    );
-
-    return MatchResult(
-      suggestions: enriched,
-      usage: _usage((body['usage']! as Map).cast<String, Object?>()),
-    );
-  }
-
-  /// 출처 페이지의 og:image URL. 실패·부재는 조용히 null — 사진이 없으면 틴트로 폴백한다.
-  Future<String?> _fetchOgImage(String recipeUrl) async {
+    // recognize와 같은 방어 — 형식 불일치 TypeError를 LlmFailure(error)로 정규화한다.
     try {
-      final uri = Uri.parse(
-        '$_baseUrl/api/v1/og-image',
-      ).replace(queryParameters: {'url': recipeUrl});
-      final response = await _client
-          .get(uri, headers: {'authorization': 'Bearer $_sessionToken'})
-          .timeout(_timeout);
-      if (response.statusCode != 200) return null;
-      final body = (jsonDecode(utf8.decode(response.bodyBytes)) as Map)
-          .cast<String, Object?>();
-      return body['image_url'] as String?;
-    } on Exception {
-      return null;
+      final raw = body['suggestions'] as List<Object?>? ?? const [];
+      final suggestions = <Suggestion>[
+        for (final item in raw)
+          ?_parseSuggestion((item! as Map).cast<String, Object?>(), recipes),
+      ];
+      if (suggestions.isEmpty) throw const LlmFailure(LlmFailureKind.empty);
+
+      return MatchResult(
+        suggestions: suggestions,
+        usage: _usage((body['usage']! as Map).cast<String, Object?>()),
+      );
+    } on TypeError {
+      throw const LlmFailure(LlmFailureKind.error, '응답 형식 불일치');
     }
   }
 
@@ -206,6 +193,10 @@ class ApiV1LlmGateway implements LlmGateway {
           .cast<String, Object?>();
     } on FormatException catch (e) {
       throw LlmFailure(LlmFailureKind.error, '응답 파싱 실패: ${e.message}');
+    } on TypeError {
+      // 200인데 본문이 JSON 객체가 아니다([]·문자열·null) — 각 메서드의 정규화보다
+      // 앞에서 터지는 지점이라 여기서도 같은 방어를 한다(#25 계열).
+      throw const LlmFailure(LlmFailureKind.error, '응답 형식 불일치');
     }
   }
 }

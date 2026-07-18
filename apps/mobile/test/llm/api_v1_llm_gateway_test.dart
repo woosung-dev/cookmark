@@ -277,68 +277,25 @@ void main() {
       'usage': _usage,
     };
 
-    // og-image 응답만 갈아끼워 match를 태운다 — 실패 유형별 테스트가 공유하는 배선.
-    Future<MatchResult> matchWithOgHandler(
-      Future<http.Response> Function(http.Request) ogHandler,
-    ) {
-      final gateway = gatewayWith(
-        MockClient((request) async {
-          if (request.url.path == '/api/v1/og-image') return ogHandler(request);
-          return http.Response(
-            jsonEncode(
-              matchBody([
-                {
-                  'menu': '가지볶음',
-                  'source': 'saved',
-                  'missing': <Object>[],
-                  'reason': '재료가 다 있어요',
-                },
-              ]),
-            ),
-            200,
-            headers: _jsonHeaders,
-          );
-        }),
-      );
-      return gateway.match(ingredients: ['가지', '양파'], recipes: [savedRecipe]);
-    }
-
-    test('saved 제안은 /api/v1/og-image 경유로 사진이 붙고 generated는 호출하지 않는다', () async {
-      final ogRequests = <http.Request>[];
-      final gateway = gatewayWith(
-        MockClient((request) async {
-          if (request.url.path == '/api/v1/og-image') {
-            ogRequests.add(request);
-            return http.Response(
-              jsonEncode({'image_url': 'https://img.example/gaji.jpg'}),
-              200,
-              headers: _jsonHeaders,
-            );
-          }
-          return http.Response(
-            jsonEncode(
-              matchBody([
-                {
-                  'menu': '가지볶음',
-                  'source': 'saved',
-                  'missing': <Object>[],
-                  'reason': '재료가 다 있어요',
-                  'match_score': 0.92, // 서버가 실산출하지만 카드 렌더에 안 쓴다 — 무시돼야 한다.
-                },
-                {
-                  'menu': '가지전',
-                  'source': 'generated',
-                  'missing': [
-                    {'name': '부침가루'},
-                  ],
-                  'reason': '가지만 있으면 돼요',
-                },
-              ]),
-            ),
-            200,
-            headers: _jsonHeaders,
-          );
-        }),
+    test('saved 제안은 북의 원본 URL이 붙고 generated는 없다 — match_score는 무시된다', () async {
+      final gateway = gatewayReturning(
+        matchBody([
+          {
+            'menu': '가지볶음',
+            'source': 'saved',
+            'missing': <Object>[],
+            'reason': '재료가 다 있어요',
+            'match_score': 0.92, // 서버가 실산출하지만 카드 렌더에 안 쓴다 — 무시돼야 한다.
+          },
+          {
+            'menu': '가지전',
+            'source': 'generated',
+            'missing': [
+              {'name': '부침가루'},
+            ],
+            'reason': '가지만 있으면 돼요',
+          },
+        ]),
       );
 
       final result = await gateway.match(
@@ -349,35 +306,11 @@ void main() {
       final saved = result.suggestions[0];
       expect(saved.source, SuggestionSource.saved);
       expect(saved.recipeUrl, savedRecipe.url);
-      expect(saved.imageUrl, 'https://img.example/gaji.jpg');
 
       final generated = result.suggestions[1];
       expect(generated.source, SuggestionSource.generated);
-      expect(generated.imageUrl, isNull);
+      expect(generated.recipeUrl, isNull);
       expect(generated.missing.single.name, '부침가루');
-
-      // og-image는 saved 1건만 나간다 — 요청 URL·Bearer 헤더까지 확인한다.
-      final og = ogRequests.single;
-      expect(og.url.queryParameters['url'], savedRecipe.url);
-      expect(og.headers['authorization'], 'Bearer $_token');
-    });
-
-    test('og-image 비200은 조용히 null — 제안은 살아남는다', () async {
-      final result = await matchWithOgHandler(
-        (_) async => http.Response('bad gateway', 502),
-      );
-      final s = result.suggestions.single;
-      expect(s.menu, '가지볶음');
-      expect(s.imageUrl, isNull);
-    });
-
-    test('og-image 예외도 조용히 null — 제안은 살아남는다', () async {
-      final result = await matchWithOgHandler(
-        (_) async => throw const SocketExceptionStub(),
-      );
-      final s = result.suggestions.single;
-      expect(s.menu, '가지볶음');
-      expect(s.imageUrl, isNull);
     });
 
     test('saved인데 요청 recipes에 같은 제목이 없으면 generated로 강등된다', () async {
@@ -410,8 +343,76 @@ void main() {
       final s = result.suggestions.single;
       expect(s.source, SuggestionSource.generated);
       expect(s.recipeUrl, isNull);
-      // 강등됐으니 og-image 호출도 없다 — match POST 1건이 전부다.
+      // 부가 호출은 없다 — match POST 1건이 전부다.
       expect(requests.single.url.path, '/api/v1/llm/match');
+    });
+
+    test('suggestions가 비면 empty — try 안에서 던진 LlmFailure는 삼켜지지 않는다', () async {
+      final gateway = gatewayReturning(matchBody([]));
+      await expectLater(
+        gateway.match(ingredients: ['가지'], recipes: [savedRecipe]),
+        throwsA(
+          isA<LlmFailure>().having((e) => e.kind, 'kind', LlmFailureKind.empty),
+        ),
+      );
+    });
+  });
+
+  group('형식 불일치 정규화 (#121 수리 R5) — 200인데 모양이 다른 본문', () {
+    Matcher failsAsError() => throwsA(
+      isA<LlmFailure>().having((e) => e.kind, 'kind', LlmFailureKind.error),
+    );
+
+    test('recognize — ingredients 항목이 Map이 아니면 error(TypeError 아님)', () async {
+      final gateway = gatewayReturning({
+        'ingredients': [1],
+        'usage': _usage,
+      });
+      await expectLater(gateway.recognize(_photo), failsAsError());
+    });
+
+    test('본문이 JSON 객체가 아니면(List) error — _post 최상위 캐스트도 정규화', () async {
+      final gateway = gatewayReturning(const <Object?>[]);
+      await expectLater(gateway.recognize(_photo), failsAsError());
+    });
+
+    test('recognize — usage 결손이면 error', () async {
+      final gateway = gatewayReturning({
+        'ingredients': [
+          {'name': '대파', 'confidence': 'high'},
+        ],
+      });
+      await expectLater(gateway.recognize(_photo), failsAsError());
+    });
+
+    test('extract — ingredients 항목이 String이 아니면 error', () async {
+      final gateway = gatewayReturning({
+        'ingredients': [1],
+        'usage': _usage,
+      });
+      await expectLater(gateway.extractIngredients('김치찌개'), failsAsError());
+    });
+
+    test('match — suggestions가 List가 아니면 error', () async {
+      final gateway = gatewayReturning({
+        'suggestions': <String, Object?>{},
+        'usage': _usage,
+      });
+      await expectLater(
+        gateway.match(ingredients: ['가지'], recipes: const []),
+        failsAsError(),
+      );
+    });
+
+    test('match — suggestions 항목이 Map이 아니면 error', () async {
+      final gateway = gatewayReturning({
+        'suggestions': [1],
+        'usage': _usage,
+      });
+      await expectLater(
+        gateway.match(ingredients: ['가지'], recipes: const []),
+        failsAsError(),
+      );
     });
   });
 }
