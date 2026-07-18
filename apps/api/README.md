@@ -80,7 +80,7 @@ uv run python scripts/seed_sessions.py   # local-seed/pilot-1·pilot-2에 토큰
 
 | 라우트 | 행동 |
 | --- | --- |
-| `POST /api/v1/recipes` | 저장 — 제목에서 재료 추출 1회(Gemini) 후 201. 추출 실패는 **502 + 미저장**(조용한 저장 없음) |
+| `POST /api/v1/recipes` | 저장 — URL 내용(있으면)에서 재료 추출 1회(Gemini) 후 201. 추출 실패는 **502 + 미저장**(조용한 저장 없음). 추출 사다리는 `/llm/extract` 참조 |
 | `GET /api/v1/recipes` | 소유자 목록, 삽입순 |
 | `GET /api/v1/recipes/{id}` | 단건 — 추출 재료 동봉 |
 | `PATCH /api/v1/recipes/{id}` | `{title?, ingredients?}` 부분 수정. url 불변·재추출 없음 — 보내면 422 |
@@ -128,7 +128,7 @@ OpenAPI 스냅샷·드리프트 가드는 [#99](https://github.com/woosung-dev/c
 | 라우트 | 행동 |
 | --- | --- |
 | `POST /api/v1/llm/recognize` | 냉장고 사진(base64 JPEG) → 재료 후보(confidence 3단). 이미지는 메모리로만 지나간다 — 무저장 패스스루 |
-| `POST /api/v1/llm/extract` | 레시피 제목 → 재료 목록 (제목만 — 본문·자막 금지) |
+| `POST /api/v1/llm/extract` | `{title, url?}` → 재료 목록. URL 내용 기반 사다리(#123) — ①유튜브 file_uri 영상 직독 ②페이지 fetch→JSON-LD(LLM 무호출·`usage:null`)→본문 LLM ③결정적 단 실패는 제목 추론으로 폴백. LLM 자체 다운만 502 |
 | `POST /api/v1/llm/match` | 확정 재료 + 저장 레시피 → 후보 최대 6개 + **`match_score` 실산출**(ADR-0007 이월 해소). 3개 상한·라벨은 클라이언트 소관 |
 
 세 라우트 모두 **세션 필수**(무세션 401) — 공개 URL의 LLM 비용 표면을 닫는다. 업스트림 실패는 일괄 502.
