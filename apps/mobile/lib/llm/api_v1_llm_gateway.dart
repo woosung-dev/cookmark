@@ -1,8 +1,8 @@
-// 로컬 통합 스파이크 전용 LLM 경계 — apps/api FastAPI(/api/v1/llm/*)에 Bearer 세션으로 붙는다.
+// 운영 컷오버 LLM 경계 — apps/api FastAPI(/api/v1/llm/*)에 Bearer 세션으로 붙는다.
 //
 // ProxyLlmGateway(루트 .mjs 프록시)와 다른 점 세 가지 — (1) 경로가 /api/v1/llm/*, (2) 세션 필수라
 // Authorization: Bearer 를 싣는다, (3) FastAPI 응답이 snake_case(low_quality·prompt_tokens)다.
-// 파일럿 빌드(main.dart)엔 들어가지 않는다 — main_api_spike.dart 로만 조립된다.
+// main_api_cutover.dart 가 조립하는 apps/api 경계다 — 파일럿 프록시 빌드(main.dart)에는 들어가지 않는다.
 import 'dart:async';
 import 'dart:convert';
 import 'dart:typed_data';

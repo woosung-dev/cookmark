@@ -1,7 +1,7 @@
-// 로컬 통합 스파이크 엔트리 — 앱을 apps/api FastAPI(/api/v1/llm/*)에 Bearer 세션으로 붙인다.
+// 라이브 스모크 도구 — recognize·match가 apps/api FastAPI(/api/v1/llm/*)를 실제로 관통하는지 확인한다.
 //
 // 부팅 즉시 번들 사진으로 recognize를 태워 "브라우저 → FastAPI → Gemini" 관통을 화면으로 보인다.
-// 파일럿 빌드(main.dart)와 분리된 스파이크 전용이다. 실행:
+// 파일럿 빌드(main.dart)에는 포함되지 않는다. 실행:
 //   flutter build web -t lib/main_api_spike.dart \
 //     --dart-define=COOKMARK_API_BASE=http://localhost:8099 \
 //     --dart-define=COOKMARK_SESSION_TOKEN=<세션 토큰>
