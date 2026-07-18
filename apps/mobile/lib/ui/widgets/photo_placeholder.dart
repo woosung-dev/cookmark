@@ -1,6 +1,6 @@
-// 음식 사진 자리 — 실제 이미지는 백엔드(URL og:image) 이월. 지금은 홍시-틴트 플레이스홀더.
+// 음식 사진 자리 — [imageUrl]이 있으면 실 사진(og:image), 없으면 홍시-틴트 플레이스홀더.
 //
-// 제안 카드·상세·레시피 북 썸네일이 공유한다. 자산이 붙기 전까지 "사진이 올 자리"를 온기 있게 채운다.
+// 제안 카드·상세·레시피 북 썸네일이 공유한다. 로드 실패·대기 중엔 온기 있는 틴트로 폴백한다.
 import 'package:flutter/material.dart';
 
 import '../../theme/app_colors.dart';
@@ -16,6 +16,7 @@ class PhotoPlaceholder extends StatelessWidget {
     this.icon = Icons.restaurant_menu,
     this.iconSize = 40,
     this.overlay,
+    this.imageUrl,
   });
 
   /// [aspectRatio]가 있으면 그 비율로, 없으면 [width]/[height]로 채운다.
@@ -29,31 +30,37 @@ class PhotoPlaceholder extends StatelessWidget {
   /// 사진 위에 얹는 것 — 순위·매칭 배지 등(Stack으로 올린다).
   final Widget? overlay;
 
+  /// 실 음식 사진 URL(og:image). null·빈 문자열이면 틴트 플레이스홀더로 폴백한다.
+  final String? imageUrl;
+
   @override
   Widget build(BuildContext context) {
-    Widget box = DecoratedBox(
-      decoration: BoxDecoration(
-        color: AppColors.actionTint,
-        borderRadius: BorderRadius.circular(borderRadius),
-      ),
+    final tint = DecoratedBox(
+      decoration: const BoxDecoration(color: AppColors.actionTint),
       child: Center(
         child: Icon(icon, size: iconSize, color: AppColors.brand),
       ),
     );
 
+    final hasImage = imageUrl != null && imageUrl!.isNotEmpty;
+    Widget box = hasImage
+        ? Image.network(
+            imageUrl!,
+            fit: BoxFit.cover,
+            // 로드 실패·대기 중엔 틴트로 폴백 — "사진이 올 자리"가 깨져 보이지 않게.
+            errorBuilder: (_, _, _) => tint,
+            loadingBuilder: (_, child, progress) =>
+                progress == null ? child : tint,
+          )
+        : tint;
+
     if (overlay != null) {
-      box = Stack(
-        fit: StackFit.expand,
-        children: [
-          if (borderRadius > 0)
-            ClipRRect(
-              borderRadius: BorderRadius.circular(borderRadius),
-              child: box,
-            )
-          else
-            box,
-          overlay!,
-        ],
+      box = Stack(fit: StackFit.expand, children: [box, overlay!]);
+    }
+    if (borderRadius > 0) {
+      box = ClipRRect(
+        borderRadius: BorderRadius.circular(borderRadius),
+        child: box,
       );
     }
 
