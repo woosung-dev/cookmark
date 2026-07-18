@@ -76,6 +76,7 @@ flutter build web -t lib/main_api_cutover.dart \
 - [ ] **Network 탭** — 요청에 `Authorization: Bearer` 헤더, 본문/응답이 snake_case(`/api/v1/*`).
 - [ ] **CORS 프리플라이트** — `OPTIONS`가 200으로 통과하고 본 요청이 뒤따른다(막히면 §1 CORS 재기동 확인).
 - [ ] **recognize 관통 (실 Gemini 1~2회)** — `main_api_spike.dart` 빌드(동일 dart-define)로 교체 서빙 → 부팅 즉시 번들 사진 recognize → 체크리스트 렌더까지.
+- [ ] **⚠️ 끝나면 컷오버 빌드로 되돌려라** — 스파이크 빌드는 레시피 북이 **로컬 모드**(서버 미주입)라, `build/web`을 이 상태로 두면 다음에 페이지를 연 사람이 "서버 연동이 안 된다"고 오인한다(스파이크 시드 3건이 리스트에 보이면 이 상태다). §4 첫 빌드 명령을 한 번 더 실행.
 
 ## 5. 토큰 취급 요약
 
