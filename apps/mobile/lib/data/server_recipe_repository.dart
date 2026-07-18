@@ -71,7 +71,7 @@ class ServerRecipeRepository {
       ),
     );
     _ensureStatus(response, 201);
-    return Recipe.fromJson(_parseObject(response));
+    return _parseObject(response);
   }
 
   /// PATCH /api/v1/recipes/{id} → 200. url은 불변이라 ingredients만 보낸다.
@@ -87,7 +87,7 @@ class ServerRecipeRepository {
       ),
     );
     _ensureStatus(response, 200);
-    return Recipe.fromJson(_parseObject(response));
+    return _parseObject(response);
   }
 
   /// DELETE /api/v1/recipes/{id} → 204.
@@ -150,15 +150,23 @@ class ServerRecipeRepository {
     };
   }
 
-  Map<String, Object?> _parseObject(http.Response response) {
+  // 200인데 형식이 다른 본문의 TypeError(Error라 on Exception도 못 잡는다)가 이탈하면
+  // hydrate가 loading에 고착된다(#25 arm을 죽인 결함 계열) — 두 파서 모두 unavailable로 정규화한다.
+  // Recipe.fromJson의 캐스트 실패도 잡히도록 fromJson 호출을 try 범위 안에 둔다.
+
+  Recipe _parseObject(http.Response response) {
     try {
-      return (jsonDecode(utf8.decode(response.bodyBytes)) as Map)
-          .cast<String, Object?>();
+      return Recipe.fromJson(
+        (jsonDecode(utf8.decode(response.bodyBytes)) as Map)
+            .cast<String, Object?>(),
+      );
     } on FormatException catch (e) {
       throw RecipeApiFailure(
         RecipeApiFailureKind.unavailable,
         '응답 파싱 실패: ${e.message}',
       );
+    } on TypeError catch (e) {
+      throw RecipeApiFailure(RecipeApiFailureKind.unavailable, '응답 형식 불일치: $e');
     }
   }
 
@@ -174,6 +182,8 @@ class ServerRecipeRepository {
         RecipeApiFailureKind.unavailable,
         '응답 파싱 실패: ${e.message}',
       );
+    } on TypeError catch (e) {
+      throw RecipeApiFailure(RecipeApiFailureKind.unavailable, '응답 형식 불일치: $e');
     }
   }
 }

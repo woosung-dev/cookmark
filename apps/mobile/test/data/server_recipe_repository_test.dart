@@ -75,6 +75,25 @@ void main() {
         failsWith(RecipeApiFailureKind.unavailable),
       );
     });
+
+    test(
+      '200인데 List가 아닌 본문도 unavailable — TypeError로 이탈하지 않는다(#25 계열)',
+      () async {
+        await expectLater(
+          repoReturning(<String, Object?>{}).fetchAll(),
+          failsWith(RecipeApiFailureKind.unavailable),
+        );
+      },
+    );
+
+    test('항목의 필드 결손도 unavailable — Recipe.fromJson 캐스트 실패까지 정규화한다', () async {
+      await expectLater(
+        repoReturning([
+          {'id': 'aaa', 'title': '김치찌개'}, // url 결손.
+        ]).fetchAll(),
+        failsWith(RecipeApiFailureKind.unavailable),
+      );
+    });
   });
 
   group('create', () {
@@ -94,6 +113,18 @@ void main() {
       expect(recipe.id, 'srv-uuid');
       expect(recipe.ingredients, ['김치', '돼지고기']);
     });
+
+    test(
+      '201인데 필드가 결손된 본문은 unavailable — TypeError로 이탈하지 않는다(#25 계열)',
+      () async {
+        await expectLater(
+          repoReturning({
+            'id': 'srv-uuid', // url·title 결손.
+          }, status: 201).create(url: 'https://r.test/1', title: '김치찌개'),
+          failsWith(RecipeApiFailureKind.unavailable),
+        );
+      },
+    );
 
     test('502는 extractionFailed — 레시피는 저장되지 않았다', () async {
       await expectLater(
