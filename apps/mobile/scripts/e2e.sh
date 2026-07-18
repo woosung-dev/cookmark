@@ -1,6 +1,7 @@
 #!/usr/bin/env bash
 # E2E(검증의 정본) 실행 — chromedriver를 띄우고 Web 타깃으로 integration_test를 돌린다.
-# 사용법: scripts/e2e.sh [--headed]
+# 사용법: scripts/e2e.sh [--headed] [integration_test/xxx_test.dart ...]
+# 타깃 인자가 없으면 integration_test/*_test.dart 전부를 순차 실행한다(파일 추가 = 자동 편입).
 set -euo pipefail
 
 cd "$(dirname "$0")/.."
@@ -27,9 +28,18 @@ done
 DEVICE_ARGS=(-d web-server --browser-name=chrome --headless)
 if [[ "${1:-}" == "--headed" ]]; then
   DEVICE_ARGS=(-d chrome)
+  shift
 fi
 
-flutter drive \
-  --driver=test_driver/integration_test.dart \
-  --target=integration_test/core_loop_test.dart \
-  "${DEVICE_ARGS[@]}"
+TARGETS=("$@")
+if [[ ${#TARGETS[@]} -eq 0 ]]; then
+  TARGETS=(integration_test/*_test.dart)
+fi
+
+for target in "${TARGETS[@]}"; do
+  echo "▶ $target"
+  flutter drive \
+    --driver=test_driver/integration_test.dart \
+    --target="$target" \
+    "${DEVICE_ARGS[@]}"
+done

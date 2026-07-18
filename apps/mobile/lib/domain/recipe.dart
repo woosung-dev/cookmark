@@ -7,10 +7,15 @@ import 'package:flutter/foundation.dart';
 @immutable
 class Recipe {
   const Recipe({
+    this.id,
     required this.url,
     required this.title,
     required this.ingredients,
   });
+
+  /// 서버 레시피 북의 UUID. 로컬 모드·서버 미반영 상태에선 null.
+  /// ==·dedup에 넣지 않는다 — 정체성은 url이고, id는 수송 메타데이터다.
+  final String? id;
 
   final String url;
 
@@ -21,18 +26,21 @@ class Recipe {
   final List<String> ingredients;
 
   Recipe copyWith({List<String>? ingredients}) => Recipe(
+    id: id,
     url: url,
     title: title,
     ingredients: ingredients ?? this.ingredients,
   );
 
   Map<String, Object?> toJson() => {
+    if (id != null) 'id': id,
     'url': url,
     'title': title,
     'ingredients': ingredients,
   };
 
   factory Recipe.fromJson(Map<String, Object?> json) => Recipe(
+    id: json['id'] as String?,
     url: json['url']! as String,
     title: json['title']! as String,
     ingredients: [

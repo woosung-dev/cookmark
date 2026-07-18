@@ -158,7 +158,9 @@ class _BackupSectionState extends State<BackupSection> {
                           height: Space.touchMin,
                           child: FilledButton(
                             key: const Key('backup-confirm'),
-                            onPressed: merge.changesNothing
+                            // 확정이 도는 동안 비활성 — 더블탭이 같은 배치를 두 번 등록하면 안 된다(#121).
+                            onPressed:
+                                merge.changesNothing || controller.importing
                                 ? null
                                 : () async {
                                     await controller.confirmImport();

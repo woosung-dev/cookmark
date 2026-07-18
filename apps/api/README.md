@@ -68,6 +68,14 @@ CI는 `.github/workflows/api.yml`이 매 PR(`apps/api/**` paths 필터)·main pu
 
 세션 토큰은 쿠키(`cookmark_session`, HttpOnly·Secure·SameSite=Lax)와 `Authorization: Bearer` 양쪽으로 받는다 — 저장은 하나, 운반만 플랫폼별이다(§9). 계정은 `(id, iss, sub, created_at)`이 전부다(§12.1).
 
+### 로컬 시드 — 파일럿 세션 토큰 ([#121](https://github.com/woosung-dev/cookmark/issues/121) · CI 밖)
+
+```bash
+uv run python scripts/seed_sessions.py   # local-seed/pilot-1·pilot-2에 토큰 발급 — Settings 필수 env 7종 필요
+```
+
+토큰 원문은 **stdout에만** 나온다(DB엔 해시만) — 파일로 남기지 말고 셸 변수로 받아 쓴다. 재실행은 멱등(계정 재사용 + 새 토큰, 구 토큰도 TTL 30일까지 유효). env 병합·전체 스모크 절차는 [`docs/pilot/api-cutover-smoke.md`](../../docs/pilot/api-cutover-smoke.md).
+
 ## 레시피 북 (#103)
 
 | 라우트 | 행동 |

@@ -1,6 +1,7 @@
 // 레시피 북 — 사용자가 신뢰하는 저장 레시피의 화면. 앱의 두 번째이자 마지막 화면(ADR-0001).
 import 'package:flutter/material.dart';
 
+import '../data/server_recipe_repository.dart';
 import '../domain/recipe.dart';
 import '../theme/app_colors.dart';
 import '../theme/app_theme.dart';
@@ -8,7 +9,9 @@ import 'backup_controller.dart';
 import 'recipe_book_controller.dart';
 import 'widgets/backup_section.dart';
 import 'widgets/photo_placeholder.dart';
+import 'widgets/recipe_add_failure_card.dart';
 import 'widgets/recipe_form.dart';
+import 'widgets/skeleton.dart';
 
 class RecipeBookPage extends StatelessWidget {
   const RecipeBookPage({
@@ -29,6 +32,7 @@ class RecipeBookPage extends StatelessWidget {
           listenable: Listenable.merge([controller, backupController]),
           builder: (context, _) {
             final recipes = controller.recipes;
+            final syncState = controller.syncState;
             return ListView(
               padding: const EdgeInsets.all(Space.screenPad),
               children: [
@@ -37,11 +41,33 @@ class RecipeBookPage extends StatelessWidget {
                 const SizedBox(height: Space.xl),
                 RecipeForm(
                   saving: controller.saving,
+                  // 하이드레이트가 안 끝났거나(loading) 실패한(error) 동안 입력을 막아 정직하게(#121).
+                  enabled: syncState == RecipeSyncState.ready,
                   onSubmit: (url, title) =>
                       controller.add(url: url, title: title),
                 ),
+                // 서버 모드에서 저장이 실패하면(502=미저장) 폼 아래 인라인 카드로 재시도를 연다(#121).
+                if (controller.addFailure != null) ...[
+                  const SizedBox(height: Space.md),
+                  RecipeAddFailureCard(
+                    kind: controller.addFailure!,
+                    onRetry: () {
+                      final failed = controller.failedAdd!;
+                      controller.add(url: failed.url, title: failed.title);
+                    },
+                    onDismiss: controller.clearAddFailure,
+                  ),
+                ],
                 const SizedBox(height: Space.xxl),
-                if (recipes.isEmpty)
+                if (syncState == RecipeSyncState.loading)
+                  // 정직한 로딩 — 스피너 대신 곧 나타날 리스트의 모양을 정적으로 잡는다(DESIGN.md §7).
+                  const _RecipeListSkeleton()
+                else if (syncState == RecipeSyncState.error)
+                  _SyncErrorCard(
+                    kind: controller.syncFailure,
+                    onRetry: controller.hydrate,
+                  )
+                else if (recipes.isEmpty)
                   const _EmptyRecipes()
                 else ...[
                   Padding(
@@ -319,6 +345,110 @@ class _EmptyRecipes extends StatelessWidget {
           Text(
             '아직 저장한 레시피가 없어요.',
             style: AppTypography.body.copyWith(color: AppColors.muted),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+/// 하이드레이트 중 리스트 자리 — 셀 3행(좌 44×44 썸네일 + 텍스트 2줄)의 모양을 정적으로 잡는다(#121).
+///
+/// 스피너·가짜 진행 없음 — 정직한 로딩(DESIGN.md §7).
+class _RecipeListSkeleton extends StatelessWidget {
+  const _RecipeListSkeleton();
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      key: const Key('recipe-list-skeleton'),
+      decoration: BoxDecoration(
+        color: AppColors.surface,
+        borderRadius: BorderRadius.circular(Radii.card),
+      ),
+      clipBehavior: Clip.antiAlias,
+      child: Column(
+        children: [
+          for (var i = 0; i < 3; i++) ...[
+            if (i > 0) const Divider(indent: Space.lg),
+            Container(
+              constraints: const BoxConstraints(minHeight: Space.rowMin),
+              padding: const EdgeInsets.symmetric(
+                horizontal: Space.lg,
+                vertical: Space.md,
+              ),
+              child: const Row(
+                children: [
+                  SkeletonBox(width: 44, height: 44, radius: Radii.photo),
+                  SizedBox(width: Space.md),
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        SkeletonBox(width: 120, height: 16, radius: Radii.chip),
+                        SizedBox(height: Space.sm),
+                        SkeletonBox(
+                          width: double.infinity,
+                          height: 12,
+                          radius: Radii.chip,
+                        ),
+                      ],
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ],
+        ],
+      ),
+    );
+  }
+}
+
+/// 하이드레이트 실패 — 리스트 자리의 인라인 에러(막다른 화면 없음, G1 #8). "다시 시도"가 재수화를 건다.
+class _SyncErrorCard extends StatelessWidget {
+  const _SyncErrorCard({required this.kind, required this.onRetry});
+
+  final RecipeApiFailureKind? kind;
+  final VoidCallback onRetry;
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      key: const Key('recipe-list-error'),
+      padding: const EdgeInsets.all(Space.xl),
+      decoration: BoxDecoration(
+        color: AppColors.dangerBg,
+        borderRadius: BorderRadius.circular(Radii.card),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              const Icon(
+                Icons.error_outline,
+                size: 20,
+                color: AppColors.danger,
+              ),
+              const SizedBox(width: Space.sm),
+              Expanded(
+                child: Text(
+                  kind == RecipeApiFailureKind.unauthorized
+                      ? '접속 정보가 유효하지 않아요.'
+                      : '레시피 북을 불러오지 못했어요.',
+                  style: AppTypography.headline.copyWith(
+                    color: AppColors.danger,
+                  ),
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: Space.sm),
+          TextButton(
+            key: const Key('recipe-list-error-retry'),
+            onPressed: onRetry,
+            child: const Text('다시 시도'),
           ),
         ],
       ),
