@@ -11,7 +11,7 @@ from src.auth.oidc import Provider
 from src.llm.exceptions import UpstreamLLMError
 from src.recipes.models import Recipe
 from tests.idp import FakeIdp
-from tests.llm import EXTRACTIONS, FakeLLMService
+from tests.llm import VIDEO_EXTRACTION, FakeLLMService
 
 RECIPES = "/api/v1/recipes"
 
@@ -62,10 +62,11 @@ async def test_create_returns_extracted_ingredients(
     body = res.json()
     assert body["url"] == "https://youtu.be/crud-create"
     assert body["title"] == "김치찌개"
-    assert body["ingredients"] == EXTRACTIONS["김치찌개"]
+    assert body["ingredients"] == VIDEO_EXTRACTION
     assert "id" in body and "created_at" in body
-    # 제목만 보고 추출한다 — URL은 건네지 않는다.
-    assert fake_llm.extracted_titles == ["김치찌개"]
+    # url이 extract로 전달된다(#123) — 유튜브 URL은 영상 직독 단으로 가고 제목 추론은 안 탄다.
+    assert fake_llm.video_urls == ["https://youtu.be/crud-create"]
+    assert fake_llm.extracted_titles == []
     stored = await count_rows(db_session, count_by_url("https://youtu.be/crud-create"))
     assert stored == 1
 
@@ -86,7 +87,7 @@ async def test_get_by_id_returns_ingredients(
     res = await client.get(f"{RECIPES}/{created['id']}", headers=headers)
 
     assert res.status_code == 200
-    assert res.json()["ingredients"] == EXTRACTIONS["계란찜"]
+    assert res.json()["ingredients"] == VIDEO_EXTRACTION
 
 
 async def test_list_keeps_insertion_order(
@@ -131,8 +132,10 @@ async def test_patch_updates_title_without_reextraction(
     body = res.json()
     assert body["title"] == "부대찌개"
     assert body["url"] == "https://youtu.be/patch-title"  # url 불변
-    assert body["ingredients"] == EXTRACTIONS["김치찌개"]  # 재료 불변
-    assert fake_llm.extracted_titles == ["김치찌개"]  # 생성 1회뿐 — 재추출 없음
+    assert body["ingredients"] == VIDEO_EXTRACTION  # 재료 불변
+    assert fake_llm.video_urls == [
+        "https://youtu.be/patch-title"
+    ]  # 생성 1회뿐 — 재추출 없음
 
 
 async def test_patch_replaces_ingredients(
@@ -310,12 +313,15 @@ async def test_extraction_failure_is_502_and_no_row(
 async def test_extraction_empty_list_still_saves(
     client: httpx.AsyncClient, idp: FakeIdp
 ) -> None:
-    """빈 배열은 실패가 아니다 — 요리명 미인식 시 []는 프롬프트가 정의한 정상 출력이다."""
+    """빈 배열은 실패가 아니다 — 요리명 미인식 시 []는 프롬프트가 정의한 정상 출력이다.
+
+    url은 .invalid TLD(RFC 6761 영구 미해석) — fetch 단이 결정적으로 실패해 제목 추론 폴백을 탄다(#123).
+    """
     headers = await login_bearer(client, idp, "crud-extract-empty")
 
     res = await client.post(
         RECIPES,
-        json={"url": "https://youtu.be/empty", "title": "ㅁㄴㅇㄹ"},
+        json={"url": "https://recipe.invalid/empty", "title": "ㅁㄴㅇㄹ"},
         headers=headers,
     )
 

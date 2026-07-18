@@ -228,6 +228,11 @@ void main() {
       await book.retryExtraction('https://youtu.be/abc');
 
       expect(gateway.extractCallCount, 1, reason: '추출은 LLM seam으로 직접');
+      expect(
+        gateway.lastExtractUrl,
+        'https://youtu.be/abc',
+        reason: '재추출은 url도 넘긴다 — 서버 경계가 URL 사다리를 탈 수 있게(#123)',
+      );
       expect(server.patchCallCount, 1);
       expect(book.recipes.single.ingredients, contains('돼지고기'));
       expect(
