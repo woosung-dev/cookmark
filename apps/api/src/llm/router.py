@@ -51,9 +51,9 @@ async def recognize(
 async def extract(
     account: CurrentAccount, body: ExtractRequest, service: Service
 ) -> ExtractResponse:
-    """레시피 제목에서 재료를 추론한다 — 제목만 본다(본문·자막 금지)."""
+    """레시피 재료 추출 — url이 있으면 URL 내용 기반 사다리(유튜브→JSON-LD→본문→제목, #123)를 탄다."""
     try:
-        return await service.extract(body.title)
+        return await service.extract(body.title, body.url)
     except UpstreamLLMError as exc:
         raise _bad_gateway(exc) from exc
 

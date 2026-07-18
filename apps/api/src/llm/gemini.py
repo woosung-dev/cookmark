@@ -26,6 +26,11 @@ from src.llm.service import BaseLLMService, MatchCandidate, MatchOutcome
 RECOGNIZE_TIMEOUT_MS = 28_000
 EXTRACT_TIMEOUT_MS = 15_000
 MATCH_TIMEOUT_MS = 20_000
+# 영상 직독은 인식과 같은 상한 — 미디어 입력이라 텍스트보다 길고, 클라이언트 컷 30초보다 짧다(#123).
+EXTRACT_VIDEO_TIMEOUT_MS = 28_000
+
+# 영상 읽기 상한 20분 — 토큰 폭주 방지. 요리 영상 재료는 대부분 앞부분에 나온다(#123 스파이크).
+VIDEO_END_OFFSET = "1200s"
 
 
 class _RecognitionPayload(BaseModel):
@@ -114,9 +119,32 @@ class GeminiLLMService(BaseLLMService):
             usage=usage,
         )
 
-    async def extract(self, title: str) -> ExtractResponse:
+    async def extract_from_title(self, title: str) -> ExtractResponse:
         payload, usage = await self._generate(
             contents=[prompts.extract_prompt(title)],
+            schema=_ExtractionPayload,
+            timeout_ms=EXTRACT_TIMEOUT_MS,
+        )
+        return ExtractResponse(ingredients=payload.ingredients, usage=usage)
+
+    async def extract_from_video(self, url: str) -> ExtractResponse:
+        """유튜브 영상 직독(#123 스파이크 실증) — file_uri로 URL을 그대로 넘기고 영상 앞 20분만 읽는다."""
+        payload, usage = await self._generate(
+            contents=[
+                types.Part(
+                    file_data=types.FileData(file_uri=url),
+                    video_metadata=types.VideoMetadata(end_offset=VIDEO_END_OFFSET),
+                ),
+                prompts.EXTRACT_VIDEO_PROMPT,
+            ],
+            schema=_ExtractionPayload,
+            timeout_ms=EXTRACT_VIDEO_TIMEOUT_MS,
+        )
+        return ExtractResponse(ingredients=payload.ingredients, usage=usage)
+
+    async def extract_from_content(self, title: str, content: str) -> ExtractResponse:
+        payload, usage = await self._generate(
+            contents=[prompts.extract_content_prompt(title, content)],
             schema=_ExtractionPayload,
             timeout_ms=EXTRACT_TIMEOUT_MS,
         )

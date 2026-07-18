@@ -17,8 +17,9 @@ class RecipeBookService:
 
         빈 목록은 실패가 아니다 — 프롬프트가 요리명 미인식 시 []를 정당하게 돌려준다. 그대로 저장한다.
         usage는 저장하지 않는다 — 원가 계측은 LLM 라우트(#101)의 응답 표면이지 레시피 북의 것이 아니다.
+        url도 넘긴다(#123) — 추출은 제목 추론에서 URL 내용 기반 사다리로 승격됐다.
         """
-        extraction = await self._llm.extract(title)
+        extraction = await self._llm.extract(title, url)
         recipe = await self._recipes.add(
             url=url, title=title, ingredients=extraction.ingredients
         )
