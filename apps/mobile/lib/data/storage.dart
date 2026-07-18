@@ -75,6 +75,7 @@ class Storage {
       _prefs.setString(_kSession, jsonEncode(session.toJson()));
 
   /// 레시피 북 — 저장한 순서 그대로.
+  /// 서버 모드(#121)에선 여기(read/write)가 서버 응답의 미러다 — 진실원은 서버, 여긴 동기 read용 렌더 버퍼.
   List<Recipe> readRecipes() {
     final raw = _prefs.getString(_kRecipes);
     if (raw == null) return const [];

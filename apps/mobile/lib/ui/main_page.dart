@@ -22,6 +22,7 @@ import 'widgets/failure_card.dart';
 import 'widgets/in_app_browser_banner.dart';
 import 'widgets/onboarding_card.dart';
 import 'widgets/pressable_scale.dart';
+import 'widgets/recipe_add_failure_card.dart';
 import 'widgets/recipe_book_chips.dart';
 import 'widgets/recognition_loading.dart';
 import 'widgets/section_summary.dart';
@@ -305,12 +306,24 @@ class _MainPageState extends State<MainPage> {
   /// 위에 브랜드 히어로를 얹어 진입의 온기를 만든다(P2, 목업 화면 1).
   Widget _uploadSection() {
     final controller = _controller;
+    final book = widget.recipeBookController;
     final card = controller.showsOnboarding
         ? OnboardingCard(
             savedCount: controller.recipeCount,
-            saving: widget.recipeBookController.saving,
+            saving: book.saving,
             onSubmit: _saveRecipe,
             onSkip: controller.skipOnboarding,
+            // 서버 모드 저장 실패(502=미저장)도 온보딩 자리에서 인라인으로 해소한다(#121).
+            failure: book.addFailure == null
+                ? null
+                : RecipeAddFailureCard(
+                    kind: book.addFailure!,
+                    onRetry: () {
+                      final failed = book.failedAdd!;
+                      _saveRecipe(failed.url, failed.title);
+                    },
+                    onDismiss: book.clearAddFailure,
+                  ),
           )
         : UploadZone(onPick: _pickPhoto);
 

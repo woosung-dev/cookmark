@@ -3,16 +3,23 @@ import 'dart:convert';
 
 import 'package:flutter/foundation.dart';
 
+import '../data/server_recipe_repository.dart';
 import '../data/storage.dart';
 import '../domain/app_event.dart';
 import '../domain/backup.dart';
 
 class BackupController extends ChangeNotifier {
-  BackupController(this._storage, {DateTime Function()? now})
-    : _now = now ?? DateTime.now;
+  /// [server]가 null이면 로컬 모드(현행 그대로), 주어지면 가져오기 확정이 서버를 거친다(#121).
+  BackupController(
+    this._storage, {
+    DateTime Function()? now,
+    // 외부 파라미터명은 server다 — Dart 3.12 private named parameter 관용구(ApiV1LlmGateway와 동일).
+    this._server,
+  }) : _now = now ?? DateTime.now;
 
   final Storage _storage;
   final DateTime Function() _now;
+  final ServerRecipeRepository? _server;
 
   /// 확정 대기 중인 병합 — 미리보기를 보여주고 사용자가 확정해야 반영된다(C 이식).
   MergePreview? get pendingMerge => _pendingMerge;
@@ -76,6 +83,33 @@ class BackupController extends ChangeNotifier {
   Future<void> confirmImport() async {
     final merge = _pendingMerge;
     if (merge == null) return;
+
+    if (_server != null && merge.newRecipes.isNotEmpty) {
+      // 서버 모드 — newRecipes만 보낸다. 서버엔 unique가 없어 dedup 책임이 클라이언트다(#104).
+      try {
+        await _server.importBulk(merge.newRecipes);
+      } on RecipeApiFailure {
+        // 원자적 등록이라 부분 반영이 없다 — pendingMerge를 유지해 다시 확정할 수 있고 미러도 불변이다.
+        _importError = '가져오기에 실패했어요 — 서버에 저장되지 않았어요.';
+        notifyListeners();
+        return;
+      }
+      // 서버가 발급한 id·삽입순이 정본이다 — 재수화로 미러를 맞춘다.
+      await _storage.writeRecipes(await _server.fetchAll());
+      await _storage.appendEvent(
+        AppEvent.backup(
+          at: _now(),
+          direction: BackupDirection.import,
+          recipeCount: _storage.readRecipes().length,
+          eventCount: _storage.readEvents().length,
+          mergeSummary: merge.toSummary(),
+        ),
+      );
+
+      _pendingMerge = null;
+      notifyListeners();
+      return;
+    }
 
     // 레시피만 갈아끼운다 — 이벤트 로그는 이 기기의 것이고, 남의 것과 섞으면 인별 귀속이 깨진다.
     await _storage.writeRecipes(merge.mergedRecipes);

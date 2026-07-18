@@ -15,6 +15,7 @@ class OnboardingCard extends StatelessWidget {
     required this.saving,
     required this.onSubmit,
     required this.onSkip,
+    this.failure,
   });
 
   final int savedCount;
@@ -23,6 +24,9 @@ class OnboardingCard extends StatelessWidget {
 
   /// 건너뛰기는 허용된다 — 빈 레시피 북으로도 루프는 돈다(G1 #8).
   final VoidCallback onSkip;
+
+  /// 서버 모드 저장 실패 카드 슬롯 — 폼 아래에 렌더된다(#121, 없으면 현행 그대로).
+  final Widget? failure;
 
   @override
   Widget build(BuildContext context) {
@@ -58,6 +62,7 @@ class OnboardingCard extends StatelessWidget {
           ),
           const SizedBox(height: Space.xl),
           RecipeForm(saving: saving, onSubmit: onSubmit),
+          if (failure != null) ...[const SizedBox(height: Space.md), failure!],
           const SizedBox(height: Space.sm),
           TextButton(
             key: const Key('onboarding-skip'),

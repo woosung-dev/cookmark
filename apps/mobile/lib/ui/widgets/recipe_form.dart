@@ -6,10 +6,18 @@ import '../../theme/app_theme.dart';
 import 'pressable_scale.dart';
 
 class RecipeForm extends StatefulWidget {
-  const RecipeForm({super.key, required this.saving, required this.onSubmit});
+  const RecipeForm({
+    super.key,
+    required this.saving,
+    this.enabled = true,
+    required this.onSubmit,
+  });
 
   /// 추출 호출이 도는 동안 참.
   final bool saving;
+
+  /// 폼 전체 비활성 — 서버 하이드레이트가 실패한 동안 저장 입력을 막는다(#121).
+  final bool enabled;
 
   final void Function(String url, String title) onSubmit;
 
@@ -39,13 +47,14 @@ class _RecipeFormState extends State<RecipeForm> {
 
   @override
   Widget build(BuildContext context) {
+    final active = widget.enabled && !widget.saving;
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
         TextField(
           key: const Key('recipe-url-field'),
           controller: _urlController,
-          enabled: !widget.saving,
+          enabled: active,
           keyboardType: TextInputType.url,
           decoration: const InputDecoration(hintText: '레시피 링크 붙여넣기'),
         ),
@@ -53,7 +62,7 @@ class _RecipeFormState extends State<RecipeForm> {
         TextField(
           key: const Key('recipe-title-field'),
           controller: _titleController,
-          enabled: !widget.saving,
+          enabled: active,
           textInputAction: TextInputAction.done,
           onSubmitted: (_) => _submit(),
           decoration: const InputDecoration(hintText: '무슨 요리인가요? (예: 김치찌개)'),
@@ -62,10 +71,10 @@ class _RecipeFormState extends State<RecipeForm> {
         SizedBox(
           height: Space.touchMin + 4,
           child: PressableScale(
-            enabled: !widget.saving,
+            enabled: active,
             child: FilledButton(
               key: const Key('recipe-submit'),
-              onPressed: widget.saving ? null : _submit,
+              onPressed: active ? _submit : null,
               child: Text(widget.saving ? '재료를 알아보는 중…' : '레시피 북에 담기'),
             ),
           ),
