@@ -6,6 +6,7 @@
 - **`docs/adr/0006-brand-color-and-app-shell.md`** — **결정 스냅샷**. Apple 구조 + 홍시 퍼시먼을 왜 골랐는지, 무엇을 기각했는지.
 - **`docs/design/color-decision.md`** — **색상 도출 보고서**(사람용). 3가치·다출처 리서치·소크라테스 논증·순위.
 - **`docs/design/applied-app.jpeg`** — **적용 화면 목업**(Apple 구조 + 홍시 퍼시먼, 6화면). 제안 라벨 배지는 `DESIGN.md` §2 시맨틱 토큰으로 재렌더됨(#32 — 그린/앰버/딥레드, 결정 #29). §2·§8의 "색+아이콘 이중 신호" 중 **아이콘도 추가됨**(#53 — ready=`check_circle_outline`·buyOne=`add_shopping_cart`, 코드 `_styleOf`와 동일 글리프). 색·아이콘 모두 정본과 일치.
+- **`docs/design/prototype/`** — **위 목업의 HTML 프로토타입**(브라우저에서 여는 정적 산출물). `index.html`이 6화면을 실물 크기로 모아 보여주고, `01`~`06`이 화면별 페이지, `tokens.css`가 `DESIGN.md` 토큰을 그대로 옮긴 CSS다. `applied-app.jpeg`를 그대로 재현했다.
 
 ## 핵심 결론 (요약)
 - **구조**: Apple식 절제(라이트 쿨 뉴트럴 그룹 리스트·단일 액센트·희소 그림자·타이트 타이포).
