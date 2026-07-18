@@ -41,8 +41,8 @@ class RecipeBookPage extends StatelessWidget {
                 const SizedBox(height: Space.xl),
                 RecipeForm(
                   saving: controller.saving,
-                  // 하이드레이트 실패 상태의 저장은 컨트롤러가 버린다 — 입력도 막아 정직하게(#121).
-                  enabled: syncState != RecipeSyncState.error,
+                  // 하이드레이트가 안 끝났거나(loading) 실패한(error) 동안 입력을 막아 정직하게(#121).
+                  enabled: syncState == RecipeSyncState.ready,
                   onSubmit: (url, title) =>
                       controller.add(url: url, title: title),
                 ),

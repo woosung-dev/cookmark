@@ -149,9 +149,16 @@ class RecipeBookController extends ChangeNotifier {
     required String url,
     required String title,
   }) async {
-    // 하이드레이트가 안 끝났거나 실패한 상태면 조용히 버린다 — 미러가 정확하지 않아
+    // 하이드레이트가 안 끝났거나 실패한 상태면 저장하지 않는다 — 미러가 정확하지 않아
     // dedup 가드가 성립하지 않고, 에러 상태 위에 저장을 겹치면 상태가 꼬인다.
-    if (syncState != RecipeSyncState.ready) return;
+    // 무음 폐기는 금지다 — 기존 실패 카드로 표면화해 재시도 길을 연다(폼은 이미 비워졌다).
+    // 서버 호출 자체가 없었으므로 이벤트는 남기지 않는다.
+    if (syncState != RecipeSyncState.ready) {
+      _addFailure = _syncFailure ?? RecipeApiFailureKind.unavailable;
+      _failedAdd = (url: url, title: title);
+      notifyListeners();
+      return;
+    }
 
     _saving = true;
     _addFailure = null;

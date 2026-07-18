@@ -311,6 +311,8 @@ class _MainPageState extends State<MainPage> {
         ? OnboardingCard(
             savedCount: controller.recipeCount,
             saving: book.saving,
+            // 서버 미러가 ready가 아닌 동안 입력을 막는다 — 로컬 모드는 항상 ready다(#121).
+            enabled: book.syncState == RecipeSyncState.ready,
             onSubmit: _saveRecipe,
             onSkip: controller.skipOnboarding,
             // 서버 모드 저장 실패(502=미저장)도 온보딩 자리에서 인라인으로 해소한다(#121).

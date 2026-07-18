@@ -80,7 +80,6 @@ class Suggestion {
     required this.missing,
     required this.reason,
     this.recipeUrl,
-    this.imageUrl,
   });
 
   final String menu;
@@ -92,19 +91,6 @@ class Suggestion {
 
   /// 저장 레시피에서 온 제안만 원본 URL을 가진다 — "레시피 보기"가 이걸 새 탭으로 연다.
   final String? recipeUrl;
-
-  /// 카드 히어로 음식 사진(og:image). 저장 제안만 URL이 있어 채워지고, AI 제안은 null이다.
-  final String? imageUrl;
-
-  /// og:image가 해석된 뒤 사진을 붙여 다시 만든다(게이트웨이 enrich 전용).
-  Suggestion copyWith({String? imageUrl}) => Suggestion(
-    menu: menu,
-    source: source,
-    missing: missing,
-    reason: reason,
-    recipeUrl: recipeUrl,
-    imageUrl: imageUrl ?? this.imageUrl,
-  );
 
   /// 부족 4개 이상은 제안에서 뺀다 — 카드 아래 투명성 줄에 집계만 남는다.
   bool get isActionable => missing.length <= maxMissingIngredients;
@@ -127,7 +113,6 @@ class Suggestion {
     'missing': [for (final m in missing) m.toJson()],
     'reason': reason,
     if (recipeUrl != null) 'recipeUrl': recipeUrl,
-    if (imageUrl != null) 'imageUrl': imageUrl,
   };
 
   @override
@@ -137,18 +122,11 @@ class Suggestion {
       other.source == source &&
       listEquals(other.missing, missing) &&
       other.reason == reason &&
-      other.recipeUrl == recipeUrl &&
-      other.imageUrl == imageUrl;
+      other.recipeUrl == recipeUrl;
 
   @override
-  int get hashCode => Object.hash(
-    menu,
-    source,
-    Object.hashAll(missing),
-    reason,
-    recipeUrl,
-    imageUrl,
-  );
+  int get hashCode =>
+      Object.hash(menu, source, Object.hashAll(missing), reason, recipeUrl);
 
   @override
   String toString() => 'Suggestion($menu, ${source.name}, ${label.name})';

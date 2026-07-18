@@ -171,7 +171,7 @@ void main() {
       expect(book.recipes, hasLength(1));
     });
 
-    test('syncState가 ready가 아니면 add는 조용히 버려진다', () async {
+    test('syncState error에서 add는 실패 카드로 표면화된다 — 무음 폐기 금지', () async {
       final server = FakeServerRecipeRepository(
         failure: const RecipeApiFailure(RecipeApiFailureKind.unauthorized),
       );
@@ -179,13 +179,37 @@ void main() {
       await book.hydrate();
       expect(book.syncState, RecipeSyncState.error, reason: '전제');
 
-      // 서버가 살아나도 재수화 전이면 미러가 정확하지 않다 — 저장을 받지 않는다.
+      // 서버가 살아나도 재수화 전이면 미러가 정확하지 않다 — 저장은 받지 않되 표면화한다.
       server.failure = null;
+      await book.add(url: 'https://youtu.be/abc', title: '김치찌개');
+
+      expect(server.createCallCount, 0, reason: '서버 호출 자체가 없다');
+      expect(book.recipes, isEmpty, reason: '미러 무변화');
+      expect(
+        book.addFailure,
+        RecipeApiFailureKind.unauthorized,
+        reason: '하이드레이트 실패 이유 그대로',
+      );
+      expect(book.failedAdd, (url: 'https://youtu.be/abc', title: '김치찌개'));
+      expect(storage.readEvents(), isEmpty, reason: '서버 호출이 없었으니 이벤트도 없다');
+    });
+
+    test('syncState loading에서 add도 실패 카드로 표면화된다', () async {
+      final server = FakeServerRecipeRepository();
+      final book = bookWith(server);
+      expect(book.syncState, RecipeSyncState.loading, reason: '전제 — 하이드레이트 전');
+
       await book.add(url: 'https://youtu.be/abc', title: '김치찌개');
 
       expect(server.createCallCount, 0);
       expect(book.recipes, isEmpty);
-      expect(book.addFailure, isNull);
+      expect(
+        book.addFailure,
+        RecipeApiFailureKind.unavailable,
+        reason: 'syncFailure 없으면 unavailable 폴백',
+      );
+      expect(book.failedAdd, (url: 'https://youtu.be/abc', title: '김치찌개'));
+      expect(storage.readEvents(), isEmpty);
     });
   });
 

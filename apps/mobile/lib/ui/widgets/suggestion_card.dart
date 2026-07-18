@@ -84,7 +84,6 @@ class SuggestionCard extends StatelessWidget {
           children: [
             PhotoPlaceholder(
               aspectRatio: 16 / 9,
-              imageUrl: suggestion.imageUrl,
               overlay: MatchBadge(
                 rank: rank,
                 percent: matchPercentOf(suggestion),
