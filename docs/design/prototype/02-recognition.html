@@ -1,0 +1,77 @@
+<!doctype html>
+<!-- 냉파 프로토타입 ② 재료 인식 — 스캔 중 사진 + 진행바 + 스켈레톤. applied-app.jpeg 화면2 재현. -->
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>냉파 · ② 재료 인식</title>
+<link rel="stylesheet" href="tokens.css">
+<style>
+  .rec-photo { position: relative; margin-top: 4px; }
+  .rec-photo img { aspect-ratio: 4 / 3; }
+  /* 사진 위를 훑는 스캔 시머 (홍시 톤). */
+  .scan {
+    position: absolute; left: 0; right: 0; height: 70px;
+    background: linear-gradient(to bottom, rgba(232,85,45,0), rgba(232,85,45,.34), rgba(232,85,45,0));
+    border-radius: var(--r-photo);
+    animation: scan 2.1s ease-in-out infinite;
+  }
+  @keyframes scan { 0% { top: 0; } 50% { top: calc(100% - 70px); } 100% { top: 0; } }
+  @media (prefers-reduced-motion: reduce) { .scan { animation: none; top: 40%; } }
+  .skel-row { display: flex; align-items: center; gap: 14px; height: 52px; padding: 0 4px; }
+  .skel-row + .skel-row { border-top: 1px solid var(--hairline); }
+</style>
+</head>
+<body>
+<div class="stage">
+  <div class="device">
+    <div class="frame">
+      <div class="notch"></div>
+      <div class="statusbar">
+        <span class="clock">9:41</span>
+        <span class="indicators">
+          <svg width="18" height="12" viewBox="0 0 18 12" fill="currentColor"><rect x="0" y="7" width="3" height="5" rx="1"/><rect x="5" y="5" width="3" height="7" rx="1"/><rect x="10" y="2.5" width="3" height="9.5" rx="1"/><rect x="15" y="0" width="3" height="12" rx="1"/></svg>
+          <svg width="17" height="12" viewBox="0 0 17 12" fill="currentColor"><path d="M8.5 2C5.5 2 2.8 3.2 .8 5.1l1.4 1.5C3.9 5 6.1 4 8.5 4s4.6 1 6.3 2.6l1.4-1.5C14.2 3.2 11.5 2 8.5 2z"/><path d="M8.5 6.2c-1.7 0-3.3.7-4.5 1.8l1.5 1.5c.8-.8 1.9-1.2 3-1.2s2.2.4 3 1.2l1.5-1.5C11.8 6.9 10.2 6.2 8.5 6.2z"/><circle cx="8.5" cy="10.6" r="1.4"/></svg>
+          <svg width="27" height="13" viewBox="0 0 27 13"><rect x="0.5" y="0.5" width="22" height="12" rx="3.5" fill="none" stroke="currentColor" stroke-opacity=".4"/><rect x="2" y="2" width="18" height="9" rx="2" fill="currentColor"/><rect x="24" y="4" width="2" height="5" rx="1" fill="currentColor" fill-opacity=".5"/></svg>
+        </span>
+      </div>
+
+      <div class="sb-spacer"></div>
+      <div class="navbar">
+        <span class="nav-left"><button class="nav-btn">취소</button></span>
+        <span class="nav-title">재료 인식</span>
+        <span class="nav-right"></span>
+      </div>
+
+      <div class="screen-body">
+        <div class="rec-photo">
+          <img class="photo shadow" src="https://images.unsplash.com/photo-1556909212-d5b604d0c90d?w=760&q=72&auto=format&fit=crop" alt="업로드한 냉장고 사진">
+          <div class="scan"></div>
+        </div>
+
+        <div class="center" style="margin-top:24px">
+          <div class="t-title">재료를 찾는 중...</div>
+          <div class="t-footnote muted" style="margin-top:6px">사진에서 재료를 확인하고 있어요.</div>
+        </div>
+
+        <div class="progress" style="margin-top:18px"><span style="width:45%"></span></div>
+        <div class="between" style="margin-top:8px">
+          <span class="t-footnote muted"><span class="numeric">재료 7개</span> 확인 중</span>
+          <span class="t-caption muted numeric">보통 5초 정도 걸려요</span>
+        </div>
+
+        <div style="margin-top:22px">
+          <div class="skel-row"><span class="skel" style="width:22px;height:22px;border-radius:8px"></span><span class="skel" style="width:132px;height:14px"></span></div>
+          <div class="skel-row"><span class="skel" style="width:22px;height:22px;border-radius:8px"></span><span class="skel" style="width:96px;height:14px"></span></div>
+          <div class="skel-row"><span class="skel" style="width:22px;height:22px;border-radius:8px"></span><span class="skel" style="width:150px;height:14px"></span></div>
+          <div class="skel-row"><span class="skel" style="width:22px;height:22px;border-radius:8px"></span><span class="skel" style="width:110px;height:14px"></span></div>
+          <div class="skel-row"><span class="skel" style="width:22px;height:22px;border-radius:8px"></span><span class="skel" style="width:140px;height:14px"></span></div>
+        </div>
+      </div>
+
+      <div class="home-indicator"></div>
+    </div>
+  </div>
+</div>
+</body>
+</html>

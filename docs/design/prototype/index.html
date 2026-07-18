@@ -1,0 +1,112 @@
+<!doctype html>
+<!-- 냉파 프로토타입 갤러리 — 6화면을 2×3로 모아 보여주고 각 화면을 실물 크기로 연다. applied-app.jpeg 프레젠테이션 재현. -->
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>냉파(cookmark) · HTML 프로토타입</title>
+<link rel="stylesheet" href="tokens.css">
+<style>
+  body { background: #ECECEE; }
+  .page { max-width: 860px; margin: 0 auto; padding: 56px 24px 80px; }
+  .head { text-align: center; margin-bottom: 12px; }
+  .head h1 { font-size: 30px; font-weight: 700; letter-spacing: -0.5px; }
+  .head .accent { color: var(--brand); }
+  .head p { margin-top: 12px; font-size: 15px; line-height: 1.6; color: var(--muted); max-width: 620px; margin-left: auto; margin-right: auto; }
+  .head .pill {
+    display: inline-block; margin-top: 16px; padding: 7px 14px;
+    background: var(--surface); border: 1px solid var(--hairline); border-radius: var(--r-pill);
+    font-size: 13px; font-weight: 500; color: var(--muted);
+  }
+
+  .swatches { display: flex; flex-wrap: wrap; gap: 8px; justify-content: center; margin: 22px 0 4px; }
+  .sw { display: inline-flex; align-items: center; gap: 7px; background: var(--surface); border: 1px solid var(--hairline); border-radius: var(--r-pill); padding: 6px 11px 6px 7px; font-size: 12px; font-weight: 500; }
+  .sw i { width: 15px; height: 15px; border-radius: 5px; display: inline-block; }
+  .sw .numeric { color: var(--muted); }
+
+  .grid {
+    display: grid;
+    grid-template-columns: repeat(2, 230px);
+    justify-content: center;
+    gap: 44px 40px;
+    margin-top: 44px;
+  }
+  .cell { text-align: center; text-decoration: none; color: inherit; display: block; }
+  .thumb-box {
+    width: 230px; height: 500px;
+    overflow: hidden;
+    border-radius: 44px;
+    margin: 0 auto;
+    background: #E9E9EC;
+    transition: transform .16s ease, box-shadow .16s ease;
+  }
+  .cell:hover .thumb-box { transform: translateY(-4px); box-shadow: 0 18px 40px rgba(29,29,31,.18); }
+  .thumb-box iframe {
+    width: 460px; height: 1000px; border: 0;
+    transform: scale(.5); transform-origin: top left;
+    pointer-events: none;
+  }
+  .cap { margin-top: 16px; font-size: 15px; font-weight: 600; letter-spacing: -0.2px; }
+  .cap .n { color: var(--muted); font-family: var(--mono); margin-right: 4px; }
+  .cap .go { margin-left: 6px; font-size: 12px; color: var(--muted); font-weight: 500; }
+
+  .foot { text-align: center; margin-top: 56px; font-size: 13px; color: var(--muted); line-height: 1.7; }
+  .foot code { font-family: var(--mono); background: var(--surface); border: 1px solid var(--hairline); border-radius: 6px; padding: 1px 6px; }
+
+  @media (max-width: 560px) {
+    .grid { grid-template-columns: 230px; }
+  }
+</style>
+</head>
+<body>
+<div class="page">
+  <div class="head">
+    <h1>냉파<span class="accent">(cookmark)</span> · HTML 프로토타입</h1>
+    <p>Apple식 절제 구조 위에 <b style="color:var(--brand)">홍시·감 퍼시먼</b> 액센트를 얹은 6화면.
+       SF&nbsp;Pro/Pretendard · 실제 iPhone 390×844 · <code style="font-family:var(--mono)">DESIGN.md</code> 토큰 그대로.</p>
+    <div class="pill">각 화면을 누르면 실물 크기로 열려요 · <span class="numeric">applied-app.jpeg</span> 재현</div>
+  </div>
+
+  <div class="swatches">
+    <span class="sw"><i style="background:var(--brand)"></i>브랜드 <span class="numeric">#E8552D</span></span>
+    <span class="sw"><i style="background:var(--action)"></i>액션 <span class="numeric">#C0391B</span></span>
+    <span class="sw"><i style="background:var(--go-bg);border:1px solid var(--go-fg)"></i>바로 가능</span>
+    <span class="sw"><i style="background:var(--buy-bg);border:1px solid var(--buy-fg)"></i>이것만 사면</span>
+    <span class="sw"><i style="background:var(--maybe-bg);border:1px solid var(--maybe-fg)"></i>애매하지만</span>
+    <span class="sw"><i style="background:var(--danger-bg);border:1px solid var(--danger)"></i>부족</span>
+  </div>
+
+  <div class="grid">
+    <a class="cell" href="01-onboarding.html" target="_blank" rel="noopener">
+      <div class="thumb-box"><iframe src="01-onboarding.html" title="온보딩" scrolling="no" loading="lazy"></iframe></div>
+      <div class="cap"><span class="n">①</span>온보딩<span class="go">→ 열기</span></div>
+    </a>
+    <a class="cell" href="02-recognition.html" target="_blank" rel="noopener">
+      <div class="thumb-box"><iframe src="02-recognition.html" title="재료 인식" scrolling="no" loading="lazy"></iframe></div>
+      <div class="cap"><span class="n">②</span>재료 인식<span class="go">→ 열기</span></div>
+    </a>
+    <a class="cell" href="03-checklist.html" target="_blank" rel="noopener">
+      <div class="thumb-box"><iframe src="03-checklist.html" title="재료 체크리스트" scrolling="no" loading="lazy"></iframe></div>
+      <div class="cap"><span class="n">③</span>재료 체크리스트<span class="go">→ 열기</span></div>
+    </a>
+    <a class="cell" href="04-suggestions.html" target="_blank" rel="noopener">
+      <div class="thumb-box"><iframe src="04-suggestions.html" title="제안" scrolling="no" loading="lazy"></iframe></div>
+      <div class="cap"><span class="n">④</span>제안<span class="go">→ 열기</span></div>
+    </a>
+    <a class="cell" href="05-suggestion-detail.html" target="_blank" rel="noopener">
+      <div class="thumb-box"><iframe src="05-suggestion-detail.html" title="제안 상세" scrolling="no" loading="lazy"></iframe></div>
+      <div class="cap"><span class="n">⑤</span>제안 상세<span class="go">→ 열기</span></div>
+    </a>
+    <a class="cell" href="06-recipe-book.html" target="_blank" rel="noopener">
+      <div class="thumb-box"><iframe src="06-recipe-book.html" title="레시피 북" scrolling="no" loading="lazy"></iframe></div>
+      <div class="cap"><span class="n">⑥</span>레시피 북<span class="go">→ 열기</span></div>
+    </a>
+  </div>
+
+  <div class="foot">
+    디자인 언어 정본 <code>DESIGN.md</code> · 색 도출 <code>docs/design/color-decision.md</code> · 목업 <code>docs/design/applied-app.jpeg</code><br>
+    화면 구조 정본 ADR-0007(6화면 + 탭 셸) · 코어 루프 사진→재료→제안
+  </div>
+</div>
+</body>
+</html>
