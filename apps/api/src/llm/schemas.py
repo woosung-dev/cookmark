@@ -62,16 +62,19 @@ class RecognizeResponse(BaseModel):
 
 
 class ExtractRequest(BaseModel):
-    """추출 요청 — 제목만 받는다(본문·자막은 수익화·법무 리서치 #5로 범위 제한)."""
+    """추출 요청 — 제목 + (있으면) 레시피 url. url이 있으면 서버가 URL 내용 기반 사다리를 탄다(#123)."""
 
     title: NonBlankStr
+    url: str | None = None
 
 
 class ExtractResponse(BaseModel):
+    """추출 결과 — usage는 nullable(#123). JSON-LD 결정적 추출은 LLM을 안 돌아 usage가 없다."""
+
     model_config = ConfigDict(frozen=True)
 
     ingredients: list[str]
-    usage: LLMUsage
+    usage: LLMUsage | None
 
 
 class MatchRecipe(BaseModel):

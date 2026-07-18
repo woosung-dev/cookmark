@@ -97,13 +97,15 @@ class LlmFailure implements Exception {
       'LlmFailure(${kind.name}${detail == null ? '' : ': $detail'})';
 }
 
-/// 레시피 제목에서 재료를 추론한 결과.
+/// 레시피 제목(또는 URL 내용)에서 재료를 추론한 결과.
 @immutable
 class ExtractionResult {
   const ExtractionResult({required this.ingredients, required this.usage});
 
   final List<String> ingredients;
-  final LlmUsage usage;
+
+  /// 서버가 JSON-LD로 결정적 추출을 하면 LLM이 돌지 않아 usage가 없다(#123) — 그때 null이다.
+  final LlmUsage? usage;
 }
 
 /// 매칭 1회의 결과.
@@ -122,11 +124,11 @@ abstract interface class LlmGateway {
   /// 냉장고 사진에서 재료 후보를 얻는다. [jpegBytes]는 이미 768px로 리사이즈된 것이어야 한다.
   Future<RecognitionResult> recognize(Uint8List jpegBytes);
 
-  /// 레시피 제목에서 재료를 추론한다.
+  /// 레시피 제목에서 재료를 추론한다. [url]이 있으면 서버가 URL 내용 기반 추출 사다리를 탄다(#123).
   ///
-  /// 제목만 보낸다 — 본문·자막을 긁지 않는다(스펙 Out of scope, 수익화·법적 리서치 #5).
+  /// 파일럿 프록시 경계는 [url]을 무시하고 제목만 쓴다 — 행동 무변화.
   /// "김치찌개"처럼 요리명이 또렷하면 잘 되고, "오늘의 저녁"처럼 모호하면 빈약해진다.
-  Future<ExtractionResult> extractIngredients(String title);
+  Future<ExtractionResult> extractIngredients(String title, {String? url});
 
   /// 확정 재료와 저장 레시피를 맞춰 제안을 얻는다.
   ///

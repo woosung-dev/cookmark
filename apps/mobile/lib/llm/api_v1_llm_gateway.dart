@@ -58,8 +58,15 @@ class ApiV1LlmGateway implements LlmGateway {
   }
 
   @override
-  Future<ExtractionResult> extractIngredients(String title) async {
-    final body = await _post('/api/v1/llm/extract', {'title': title});
+  Future<ExtractionResult> extractIngredients(
+    String title, {
+    String? url,
+  }) async {
+    // url이 있으면 동봉한다 — 서버가 URL 내용 기반 추출 사다리를 탄다(#123, 와이어 키는 'url').
+    final body = await _post('/api/v1/llm/extract', {
+      'title': title,
+      'url': ?url,
+    });
 
     // recognize와 같은 방어 — 형식 불일치 TypeError를 LlmFailure(error)로 정규화한다.
     try {
@@ -71,9 +78,13 @@ class ApiV1LlmGateway implements LlmGateway {
       ];
       if (ingredients.isEmpty) throw const LlmFailure(LlmFailureKind.empty);
 
+      // JSON-LD 결정적 추출은 LLM을 안 돌아 usage가 null이다(#123) — 그대로 통과시킨다.
+      final usageRaw = body['usage'];
       return ExtractionResult(
         ingredients: ingredients,
-        usage: _usage((body['usage']! as Map).cast<String, Object?>()),
+        usage: usageRaw == null
+            ? null
+            : _usage((usageRaw as Map).cast<String, Object?>()),
       );
     } on TypeError {
       throw const LlmFailure(LlmFailureKind.error, '응답 형식 불일치');

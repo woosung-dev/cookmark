@@ -141,6 +141,11 @@ void main() {
       expect(book.recipes.single.ingredients, isNotEmpty);
       expect(book.recipes.single.title, '김치찌개', reason: '제목·URL은 그대로');
       expect(book.recipes, hasLength(1), reason: '레시피가 복제되면 안 된다');
+      expect(
+        gateway.lastExtractUrl,
+        'https://youtu.be/abc',
+        reason: '재추출은 url도 넘긴다 — 서버 경계가 URL 사다리를 탈 수 있게(#123)',
+      );
     });
 
     test('다시 시도의 원가도 원장에 남는다 — LLM을 불렀으니까 (US 28)', () async {
@@ -324,8 +329,8 @@ class _RecordingGateway extends FakeLlmGateway {
   final extractedTitles = <String>[];
 
   @override
-  Future<ExtractionResult> extractIngredients(String title) {
+  Future<ExtractionResult> extractIngredients(String title, {String? url}) {
     extractedTitles.add(title);
-    return super.extractIngredients(title);
+    return super.extractIngredients(title, url: url);
   }
 }

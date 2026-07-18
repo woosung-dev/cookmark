@@ -265,6 +265,82 @@ void main() {
     expect(byName['low']!.confidence, Confidence.low);
   });
 
+  group('extract (#123 URL 승격)', () {
+    const extractOk = {
+      'ingredients': ['김치', '돼지고기'],
+      'usage': _usage,
+    };
+
+    test('url을 주면 본문에 url 필드가 동봉된다 — 와이어 키는 snake_case 그대로 "url"', () async {
+      http.Request? sent;
+      final gateway = gatewayWith(
+        MockClient((request) async {
+          sent = request;
+          return http.Response(
+            jsonEncode(extractOk),
+            200,
+            headers: _jsonHeaders,
+          );
+        }),
+      );
+
+      final result = await gateway.extractIngredients(
+        '김치찌개',
+        url: 'https://youtu.be/abc',
+      );
+
+      expect(sent!.url.toString(), '$_baseUrl/api/v1/llm/extract');
+      expect(jsonDecode(sent!.body), {
+        'title': '김치찌개',
+        'url': 'https://youtu.be/abc',
+      });
+      expect(result.ingredients, ['김치', '돼지고기']);
+    });
+
+    test('url이 없으면 본문은 title뿐이다 — url 키 자체가 없다', () async {
+      http.Request? sent;
+      final gateway = gatewayWith(
+        MockClient((request) async {
+          sent = request;
+          return http.Response(
+            jsonEncode(extractOk),
+            200,
+            headers: _jsonHeaders,
+          );
+        }),
+      );
+
+      await gateway.extractIngredients('김치찌개');
+
+      expect(jsonDecode(sent!.body), {'title': '김치찌개'});
+    });
+
+    test('usage가 null이어도 죽지 않는다 — JSON-LD 결정적 추출은 LLM을 안 돈다', () async {
+      final gateway = gatewayReturning({
+        'ingredients': ['김치', '돼지고기'],
+        'usage': null,
+      });
+
+      final result = await gateway.extractIngredients(
+        '김치찌개',
+        url: 'https://example.com/recipe',
+      );
+
+      expect(result.ingredients, ['김치', '돼지고기']);
+      expect(result.usage, isNull);
+    });
+
+    test('usage가 있으면 snake_case로 매핑돼 붙는다', () async {
+      final gateway = gatewayReturning(extractOk);
+
+      final result = await gateway.extractIngredients('김치찌개');
+
+      expect(result.usage, isNotNull);
+      expect(result.usage!.promptTokens, 1157);
+      expect(result.usage!.model, 'gemini-3.1-flash-lite');
+    });
+  });
+
   group('match', () {
     const savedRecipe = Recipe(
       url: 'https://www.youtube.com/watch?v=ZsvevWrQ6M0',

@@ -58,6 +58,9 @@ class FakeLlmGateway implements LlmGateway {
   int recognizeCallCount = 0;
   int extractCallCount = 0;
 
+  /// 마지막 extract 호출에 넘어온 url — 재추출이 url을 전달하는지 검증할 때 쓴다(#123).
+  String? lastExtractUrl;
+
   /// 제목 → 재료. 없는 제목은 [_fallbackExtraction]으로 답한다.
   final Map<String, List<String>> extractions = {
     '김치찌개': ['김치', '돼지고기', '두부', '대파', '고춧가루'],
@@ -76,8 +79,12 @@ class FakeLlmGateway implements LlmGateway {
   }
 
   @override
-  Future<ExtractionResult> extractIngredients(String title) async {
+  Future<ExtractionResult> extractIngredients(
+    String title, {
+    String? url,
+  }) async {
     extractCallCount++;
+    lastExtractUrl = url;
     if (latency > Duration.zero) await Future<void>.delayed(latency);
     if (failure != null) throw failure!;
     return ExtractionResult(

@@ -31,8 +31,10 @@ async def main(image_path: Path | None) -> None:
 
     extraction = await service.extract("김치찌개")
     print(f"추출: {extraction.ingredients}")
-    _print_usage("추출", extraction.usage)
-    total += extraction.usage.cost_usd
+    # usage는 nullable(#123 — JSON-LD 경로만 None). 제목 경로는 항상 LLM을 돌아 실측이 나온다.
+    if extraction.usage is not None:
+        _print_usage("추출", extraction.usage)
+        total += extraction.usage.cost_usd
 
     outcome = await service.match(SMOKE_INGREDIENTS, [SMOKE_RECIPE])
     response = build_match_response(outcome)

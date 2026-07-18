@@ -209,7 +209,11 @@ class RecipeBookController extends ChangeNotifier {
     notifyListeners();
 
     try {
-      final result = await _gateway.extractIngredients(target.title);
+      // url도 넘긴다 — 서버 경계는 URL 내용 기반 추출 사다리를 탄다(#123, 프록시는 무시).
+      final result = await _gateway.extractIngredients(
+        target.title,
+        url: target.url,
+      );
       await _storage.writeRecipes([
         for (final r in recipes)
           if (r.url == url)
@@ -254,7 +258,11 @@ class RecipeBookController extends ChangeNotifier {
     notifyListeners();
 
     try {
-      final result = await _gateway.extractIngredients(target.title);
+      // url도 넘긴다 — 서버 경계는 URL 내용 기반 추출 사다리를 탄다(#123).
+      final result = await _gateway.extractIngredients(
+        target.title,
+        url: target.url,
+      );
       final updated = await server.patchIngredients(
         id: id,
         ingredients: result.ingredients,

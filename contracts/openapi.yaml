@@ -144,7 +144,7 @@ paths:
       tags:
       - llm
       summary: Extract
-      description: 레시피 제목에서 재료를 추론한다 — 제목만 본다(본문·자막 금지).
+      description: '레시피 재료 추출 — url이 있으면 URL 내용 기반 사다리(유튜브→JSON-LD→본문→제목, #123)를 탄다.'
       operationId: extract_api_v1_llm_extract_post
       requestBody:
         content:
@@ -455,11 +455,16 @@ components:
           type: string
           minLength: 1
           title: Title
+        url:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Url
       type: object
       required:
       - title
       title: ExtractRequest
-      description: '추출 요청 — 제목만 받는다(본문·자막은 수익화·법무 리서치 #5로 범위 제한).'
+      description: 추출 요청 — 제목 + (있으면) 레시피 url. url이 있으면 서버가 URL 내용 기반 사다리를 탄다(#123).
     ExtractResponse:
       properties:
         ingredients:
@@ -468,12 +473,16 @@ components:
           type: array
           title: Ingredients
         usage:
-          $ref: '#/components/schemas/LLMUsage'
+          anyOf:
+          - $ref: '#/components/schemas/LLMUsage'
+          - type: 'null'
       type: object
       required:
       - ingredients
       - usage
       title: ExtractResponse
+      description: 추출 결과 — usage는 nullable(#123). JSON-LD 결정적 추출은 LLM을 안 돌아 usage가
+        없다.
     HTTPValidationError:
       properties:
         detail:

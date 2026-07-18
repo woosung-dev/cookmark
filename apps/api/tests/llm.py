@@ -49,6 +49,9 @@ EXTRACTIONS = {
     "ㅁㄴㅇㄹ": [],
 }
 FALLBACK_EXTRACTION = ["소금", "식용유"]
+# 사다리(#123) 훅별 픽스처 — 경로 판별이 목적이라 제목 픽스처와 겹치지 않는 값을 쓴다.
+VIDEO_EXTRACTION = ["삼겹살", "청양고추", "대파"]
+CONTENT_EXTRACTION = ["오징어", "양파", "당근"]
 
 DEFAULT_REQUIRED = ["김치", "돼지고기", "두부", "대파", "고춧가루"]
 
@@ -58,8 +61,14 @@ class FakeLLMService(BaseLLMService):
 
     def __init__(self) -> None:
         self.failure: UpstreamLLMError | None = None
+        # 영상 직독 단만 실패시킨다 — R1(유튜브 접근 불가→제목 폴백) 검증용. failure와 달리 다른 훅은 정상이다.
+        self.video_failure: UpstreamLLMError | None = None
+        # 본문 단만 실패시킨다 — 강등 계약의 대조군(UpstreamLLMError는 강등을 통과해 502) 검증용.
+        self.content_failure: UpstreamLLMError | None = None
         self.recognized_images: list[bytes] = []
         self.extracted_titles: list[str] = []
+        self.video_urls: list[str] = []
+        self.content_calls: list[tuple[str, str]] = []
         self.match_calls: list[tuple[list[str], list[MatchRecipe]]] = []
 
     async def recognize(self, image_jpeg: bytes) -> RecognizeResponse:
@@ -70,13 +79,30 @@ class FakeLLMService(BaseLLMService):
             ingredients=RECOGNITION_FIXTURE, low_quality=False, usage=RECOGNITION_USAGE
         )
 
-    async def extract(self, title: str) -> ExtractResponse:
+    # 사다리(#123)는 BaseLLMService.extract 공통 구현이 실물로 돈다 — 페이크는 LLM 훅 3개만 바꾼다.
+    async def extract_from_title(self, title: str) -> ExtractResponse:
         if self.failure is not None:
             raise self.failure
         self.extracted_titles.append(title)
         return ExtractResponse(
             ingredients=EXTRACTIONS.get(title, FALLBACK_EXTRACTION), usage=TEXT_USAGE
         )
+
+    async def extract_from_video(self, url: str) -> ExtractResponse:
+        if self.failure is not None:
+            raise self.failure
+        if self.video_failure is not None:
+            raise self.video_failure
+        self.video_urls.append(url)
+        return ExtractResponse(ingredients=VIDEO_EXTRACTION, usage=TEXT_USAGE)
+
+    async def extract_from_content(self, title: str, content: str) -> ExtractResponse:
+        if self.failure is not None:
+            raise self.failure
+        if self.content_failure is not None:
+            raise self.content_failure
+        self.content_calls.append((title, content))
+        return ExtractResponse(ingredients=CONTENT_EXTRACTION, usage=TEXT_USAGE)
 
     async def match(
         self, ingredients: Sequence[str], recipes: Sequence[MatchRecipe]
