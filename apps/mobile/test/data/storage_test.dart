@@ -3,6 +3,9 @@ import 'dart:convert';
 
 import 'package:cookmark/data/storage.dart';
 import 'package:cookmark/domain/app_event.dart';
+import 'package:cookmark/domain/ingredient.dart';
+import 'package:cookmark/domain/recipe.dart';
+import 'package:cookmark/domain/session_state.dart';
 import 'package:cookmark/llm/llm_gateway.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:shared_preferences_platform_interface/in_memory_shared_preferences_async.dart';
@@ -168,6 +171,181 @@ void main() {
         ],
         ['photoUpload', '앞선버전이벤트', 'photoUpload'],
       );
+    });
+  });
+
+  group('손상·스키마 드리프트 강등 — localStorage는 배포를 가로질러 산다', () {
+    /// 지정한 키에 원시 문자열을 미리 깔아둔다 — 앞선 배포가 남긴 손상 데이터를 흉내낸다.
+    void seedRaw(Map<String, String> data) {
+      SharedPreferencesAsyncPlatform.instance =
+          InMemorySharedPreferencesAsync.withData(data);
+    }
+
+    group('readRecipes', () {
+      test('손상 JSON 문자열이면 크래시 없이 빈 목록이다', () async {
+        seedRaw({'recipes': '{깨진 json'});
+        final storage = await Storage.open();
+        expect(storage.readRecipes(), isEmpty);
+      });
+
+      test('List가 아니면(객체) 크래시 없이 빈 목록이다', () async {
+        seedRaw({
+          'recipes': jsonEncode({'url': 'https://a', 'title': 'a'}),
+        });
+        final storage = await Storage.open();
+        expect(storage.readRecipes(), isEmpty);
+      });
+
+      test('항목이 Map이 아니면 그 항목만 빠진다', () async {
+        seedRaw({
+          'recipes': jsonEncode([
+            'https://그냥문자열',
+            {'url': 'https://a', 'title': '김치찌개'},
+          ]),
+        });
+        final storage = await Storage.open();
+        expect(storage.readRecipes().map((r) => r.title), ['김치찌개']);
+      });
+
+      test('필수 필드(url) 결손 항목이 섞이면 파싱 가능한 것만 살린다', () async {
+        seedRaw({
+          'recipes': jsonEncode([
+            {'title': 'url 없는 항목'},
+            {'url': 'https://a', 'title': '김치찌개'},
+            {'url': 'https://b', 'title': '된장찌개'},
+          ]),
+        });
+        final storage = await Storage.open();
+        expect(storage.readRecipes().map((r) => r.title), ['김치찌개', '된장찌개']);
+      });
+
+      test('정상 데이터는 그대로 읽힌다 — 강등이 회귀를 만들지 않는다', () async {
+        final storage = await Storage.open();
+        await storage.writeRecipes([
+          const Recipe(
+            url: 'https://a',
+            title: '김치찌개',
+            ingredients: ['김치', '돼지고기'],
+          ),
+        ]);
+        final read = storage.readRecipes().single;
+        expect(read.url, 'https://a');
+        expect(read.title, '김치찌개');
+        expect(read.ingredients, ['김치', '돼지고기']);
+      });
+    });
+
+    group('readSession', () {
+      test('손상 JSON이면 크래시 없이 null이다 — 세션 없음으로 부팅한다', () async {
+        seedRaw({'session': '{깨진 json'});
+        final storage = await Storage.open();
+        expect(storage.readSession(), isNull);
+      });
+
+      test('필드 결손이면 크래시 없이 null이다', () async {
+        seedRaw({
+          'session': jsonEncode({'다른필드': 1}),
+        });
+        final storage = await Storage.open();
+        expect(storage.readSession(), isNull);
+      });
+
+      test('정상 세션은 그대로 읽힌다 — 강등이 회귀를 만들지 않는다', () async {
+        final storage = await Storage.open();
+        await storage.writeSession(
+          const SessionState(
+            ingredients: [
+              Ingredient(
+                name: '김치',
+                confidence: Confidence.high,
+                checked: true,
+              ),
+            ],
+          ),
+        );
+        final read = storage.readSession()!;
+        expect(read.ingredients.single.name, '김치');
+        expect(read.ingredients.single.checked, isTrue);
+      });
+    });
+
+    group('readEvents', () {
+      test('top-level이 손상 JSON이면 크래시 없이 빈 목록이다', () async {
+        seedRaw({'events': '[깨진 json'});
+        final storage = await Storage.open();
+        expect(storage.readEvents(), isEmpty);
+      });
+
+      test('항목이 손상(필드 결손)이면 그 항목만 빠진다', () async {
+        seedRaw({
+          'events': jsonEncode([
+            {'type': 'photoUpload'}, // at 결손 — parse가 throw하는 모양.
+            {
+              'type': 'photoUpload',
+              'at': '2026-07-15T19:00:00.000Z',
+              'bytes': 100,
+              'width': 768,
+            },
+          ]),
+        });
+        final storage = await Storage.open();
+        expect(storage.readEvents().map((e) => e.type), [
+          AppEventType.photoUpload,
+        ]);
+      });
+    });
+
+    // 하드닝은 읽기만이 아니라 쓰기(appendEvent)도 막지 않아야 한다 — 손상 blob에 첫
+    // photoUpload를 append하다 throw하면 인식이 영원히 시작 안 되고 코어 루프가 죽는다.
+    group('appendEvent (손상 blob에도 쓰기가 막히지 않는다)', () {
+      test('events가 손상 JSON이어도 append가 throw하지 않고 새 로그로 이어간다', () async {
+        seedRaw({'events': '{깨진 json'});
+        final storage = await Storage.open();
+        await storage.appendEvent(
+          AppEvent.photoUpload(
+            at: DateTime.utc(2026, 7, 20),
+            bytes: 1,
+            width: 1,
+          ),
+        );
+        expect(storage.readEvents().map((e) => e.type), [
+          AppEventType.photoUpload,
+        ]);
+      });
+
+      test('events가 List가 아니어도(객체) append가 새 로그로 시작한다', () async {
+        seedRaw({
+          'events': jsonEncode({'not': 'a list'}),
+        });
+        final storage = await Storage.open();
+        await storage.appendEvent(
+          AppEvent.photoUpload(
+            at: DateTime.utc(2026, 7, 20),
+            bytes: 1,
+            width: 1,
+          ),
+        );
+        expect(storage.readEvents(), hasLength(1));
+      });
+
+      test('정상 blob이면 기존 항목 뒤에 이어 붙인다 — 강등이 회귀를 만들지 않는다', () async {
+        final storage = await Storage.open();
+        await storage.appendEvent(
+          AppEvent.photoUpload(
+            at: DateTime.utc(2026, 7, 15),
+            bytes: 1,
+            width: 1,
+          ),
+        );
+        await storage.appendEvent(
+          AppEvent.photoUpload(
+            at: DateTime.utc(2026, 7, 16),
+            bytes: 1,
+            width: 1,
+          ),
+        );
+        expect(storage.readEvents(), hasLength(2));
+      });
     });
   });
 }

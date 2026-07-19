@@ -1,6 +1,7 @@
 // 레시피 북 — URL 저장·삭제, 제목 기반 재료 추출, 미인식 칩(#17).
 import 'package:cookmark/data/storage.dart';
 import 'package:cookmark/domain/app_event.dart';
+import 'package:cookmark/domain/recipe.dart';
 import 'package:cookmark/llm/fake_llm_gateway.dart';
 import 'package:cookmark/llm/llm_gateway.dart';
 import 'package:cookmark/ui/main_controller.dart';
@@ -98,6 +99,20 @@ void main() {
       expect(book.saving, isTrue);
       await pending;
       expect(book.saving, isFalse);
+    });
+
+    test('저장 중 더블탭은 무시된다 — 추출도 저장도 한 번만 돈다', () async {
+      final gateway = FakeLlmGateway(latency: const Duration(milliseconds: 50));
+      final book = bookWith(gateway);
+
+      // 첫 탭의 await 중 둘째 탭이 들어온다 — 가드가 없으면 옛 목록으로 dedup을 통과한다.
+      final first = book.add(url: 'https://youtu.be/abc', title: '김치찌개');
+      final second = book.add(url: 'https://youtu.be/abc', title: '김치찌개');
+      await Future.wait([first, second]);
+
+      expect(gateway.extractCallCount, 1);
+      expect(book.recipes, hasLength(1));
+      expect(bookEvents(), hasLength(1));
     });
   });
 
@@ -205,6 +220,88 @@ void main() {
       final book = bookWith(FakeLlmGateway());
       await book.remove('https://youtu.be/nope');
       expect(bookEvents(), isEmpty);
+    });
+  });
+
+  group('삭제 실행취소 (로컬 모드)', () {
+    test('삭제하면 실행취소 창이 열린다 — 지운 항목과 원위치를 기억한다', () async {
+      final book = bookWith(FakeLlmGateway());
+      await book.add(url: 'https://youtu.be/1', title: '김치찌개');
+      await book.add(url: 'https://youtu.be/2', title: '계란찜');
+
+      await book.remove('https://youtu.be/1');
+
+      expect(book.recipes.single.title, '계란찜');
+      expect(book.pendingRemove?.recipe.title, '김치찌개');
+      expect(book.pendingRemove?.index, 0);
+    });
+
+    test('실행취소하면 원위치에 복원된다 — LLM 추출 재료까지 그대로, 재추출 없음', () async {
+      final gateway = FakeLlmGateway();
+      final book = bookWith(gateway);
+      await book.add(url: 'https://youtu.be/1', title: '김치찌개');
+      await book.add(url: 'https://youtu.be/2', title: '계란찜');
+      await book.add(url: 'https://youtu.be/3', title: '애호박볶음');
+      final callsBefore = gateway.extractCallCount;
+
+      await book.remove('https://youtu.be/2');
+      await book.undoRemove();
+
+      expect(book.recipes.map((r) => r.title), ['김치찌개', '계란찜', '애호박볶음']);
+      expect(book.recipes[1].ingredients, isNotEmpty, reason: '추출 자산 보존');
+      expect(gateway.extractCallCount, callsBefore, reason: '복원은 공짜다');
+      expect(book.pendingRemove, isNull);
+    });
+
+    test('복원도 이벤트를 남긴다 — 취소도 이벤트다(cooked/cookedUndo 대칭)', () async {
+      final book = bookWith(FakeLlmGateway());
+      await book.add(url: 'https://youtu.be/1', title: '김치찌개');
+      await book.remove('https://youtu.be/1');
+      await book.undoRemove();
+
+      // restore가 없으면 원장엔 remove만 남는데 레시피는 북에 존재해 분석 이력이 어긋난다.
+      expect(bookEvents().map((e) => e.data['action']), [
+        'add',
+        'remove',
+        'restore',
+      ]);
+    });
+
+    test('다른 삭제가 pending을 밀어냈으면 이 창의 닫힘은 그걸 건드리지 않는다', () async {
+      final book = bookWith(FakeLlmGateway());
+      await book.add(url: 'https://youtu.be/1', title: '김치찌개');
+      await book.add(url: 'https://youtu.be/2', title: '계란찜');
+
+      await book.remove('https://youtu.be/1');
+      await book.remove('https://youtu.be/2'); // pending이 2번으로 바뀐다.
+
+      // 1번 토스트가 뒤늦게(다른 화면 clearSnackBars로) 닫혀도 URL 대조라 2번 pending은 산다.
+      book.dismissRemoveUndoFor(
+        const Recipe(url: 'https://youtu.be/1', title: '김치찌개', ingredients: []),
+      );
+      expect(book.pendingRemove?.recipe.url, 'https://youtu.be/2');
+    });
+
+    test('창이 닫힌 뒤에는 되돌릴 수 없다', () async {
+      final book = bookWith(FakeLlmGateway());
+      await book.add(url: 'https://youtu.be/1', title: '김치찌개');
+      await book.remove('https://youtu.be/1');
+
+      book.dismissRemoveUndo();
+      await book.undoRemove();
+
+      expect(book.recipes, isEmpty);
+    });
+
+    test('실행취소 전에 같은 URL을 다시 저장했으면 복제하지 않는다', () async {
+      final book = bookWith(FakeLlmGateway());
+      await book.add(url: 'https://youtu.be/1', title: '김치찌개');
+      await book.remove('https://youtu.be/1');
+      await book.add(url: 'https://youtu.be/1', title: '김치찌개');
+
+      await book.undoRemove();
+
+      expect(book.recipes, hasLength(1), reason: 'URL이 식별자다');
     });
   });
 

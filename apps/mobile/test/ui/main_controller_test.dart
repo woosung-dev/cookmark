@@ -167,6 +167,50 @@ void main() {
     expect(controller.failure, LlmFailureKind.empty);
   });
 
+  group('재업로드 — 첫 인식 뒤에도 코어 루프를 다시 시작할 수 있다 (T3)', () {
+    test('startNewPhoto는 업로드 상태로 되돌리고 체크리스트를 비운다', () async {
+      final controller = controllerWith(FakeLlmGateway());
+      await controller.uploadPhoto(fridgePhoto());
+      await controller.startNewPhoto();
+
+      expect(controller.phase, MainPhase.upload);
+      expect(controller.ingredients, isEmpty);
+      expect(controller.photo, isNull);
+    });
+
+    test('startNewPhoto 뒤 세션 복원은 옛 체크리스트를 되살리지 않는다', () async {
+      final controller = controllerWith(FakeLlmGateway());
+      await controller.uploadPhoto(fridgePhoto());
+      await controller.startNewPhoto();
+
+      controller.restoreSession();
+      expect(controller.phase, MainPhase.upload);
+      expect(controller.ingredients, isEmpty);
+    });
+
+    test('startNewPhoto는 이벤트를 남기지 않는다 — photoUpload는 다음 사진에서 찍힌다', () async {
+      final controller = controllerWith(FakeLlmGateway());
+      await controller.uploadPhoto(fridgePhoto());
+      final before = storage.readEvents().length;
+      await controller.startNewPhoto();
+
+      expect(storage.readEvents().length, before);
+    });
+
+    test('startNewPhoto는 떠 있던 제안·stale·접힘도 치운다', () async {
+      final controller = controllerWith(FakeLlmGateway());
+      await controller.uploadPhoto(fridgePhoto());
+      await controller.requestSuggestions();
+      await controller.toggle('대파');
+      await controller.startNewPhoto();
+
+      expect(controller.suggestions, isEmpty);
+      expect(controller.isStale, isFalse);
+      expect(controller.checklistExpanded, isTrue);
+      expect(controller.pendingCooked, isNull);
+    });
+  });
+
   test('페이크 fixture는 P1 실측을 닮았다 — 3단 혼합 + 뭉뚱그림 항목', () {
     final confidences = defaultRecognitionFixture
         .map((i) => i.confidence)

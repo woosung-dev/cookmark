@@ -58,6 +58,38 @@ void main() {
 
       expect(eventOf(AppEventType.cooked).data['stale'], isFalse);
     });
+
+    test('실행취소 창이 살아 있는 동안 같은 제안 재탭은 cooked를 한 번만 남긴다', () async {
+      final controller = await withSuggestions();
+      final target = controller.suggestions.first;
+      expect(await controller.markCooked(target), isTrue);
+      expect(await controller.markCooked(target), isFalse);
+
+      expect(eventsOf(AppEventType.cooked), hasLength(1));
+      // 실행취소 창 자체는 살아 있다 — 가드는 이중 계상만 막는다.
+      expect(controller.pendingCooked, target);
+    });
+
+    test('실행취소로 되돌린 뒤의 재탭은 다시 기록된다 — 마음이 바뀐 건 실수가 아니다', () async {
+      final controller = await withSuggestions();
+      final target = controller.suggestions.first;
+      await controller.markCooked(target);
+      await controller.undoCooked();
+
+      expect(await controller.markCooked(target), isTrue);
+      expect(eventsOf(AppEventType.cooked), hasLength(2));
+    });
+
+    test('다른 제안 탭은 창이 살아 있어도 기록된다 — 가드는 같은 제안에만 건다', () async {
+      final controller = await withSuggestions();
+      final first = controller.suggestions[0];
+      final second = controller.suggestions[1];
+      await controller.markCooked(first);
+
+      expect(await controller.markCooked(second), isTrue);
+      expect(eventsOf(AppEventType.cooked), hasLength(2));
+      expect(controller.pendingCooked, second);
+    });
   });
 
   group('실행취소', () {
@@ -93,6 +125,20 @@ void main() {
       final controller = await withSuggestions();
       await controller.undoCooked();
       expect(eventsOf(AppEventType.cookedUndo), isEmpty);
+    });
+
+    test('다른 제안이 pending을 밀어냈으면 이 제안 창의 닫힘은 그걸 안 건드린다', () async {
+      final controller = await withSuggestions();
+      final first = controller.suggestions[0];
+      final second = controller.suggestions[1];
+      await controller.markCooked(first);
+      await controller.markCooked(second); // pending이 second로 바뀐다.
+
+      // first 토스트가 뒤늦게(레시피 북 clearSnackBars 등) 닫혀도 제안 대조라 second는 산다.
+      controller.dismissUndoFor(first);
+      expect(controller.pendingCooked, second);
+      controller.dismissUndoFor(second);
+      expect(controller.pendingCooked, isNull);
     });
   });
 

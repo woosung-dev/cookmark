@@ -45,30 +45,58 @@ class Storage {
   List<AppEvent> readEvents() {
     final raw = _prefs.getString(_kEvents);
     if (raw == null) return const [];
-    final list = jsonDecode(raw) as List<Object?>;
-    return [
-      // 못 읽는 유형은 조용히 빠진다 — 디스크의 원본은 그대로다(appendEvent 참조).
-      for (final e in list)
-        ?AppEvent.parse((e! as Map).cast<String, Object?>()),
-    ];
+    // localStorage는 배포를 가로질러 산다 — 손상·스키마 드리프트가 부팅을 막으면 안 된다.
+    // 읽기는 강등만 한다. 디스크의 원본은 그대로다(appendEvent 참조).
+    final Object? decoded;
+    try {
+      decoded = jsonDecode(raw);
+    } on FormatException {
+      return const [];
+    }
+    if (decoded is! List) return const [];
+    final events = <AppEvent>[];
+    for (final e in decoded) {
+      try {
+        // 못 읽는 유형은 parse가 null을 주고, 손상 항목은 throw한다 — 둘 다 조용히 빠진다.
+        final event = AppEvent.parse((e! as Map).cast<String, Object?>());
+        if (event != null) events.add(event);
+      } catch (_) {
+        // 이 항목만 건너뛴다.
+      }
+    }
+    return events;
   }
 
   /// 로그에 덧붙인다 — 읽어서 다시 쓰지 않는다. 못 읽는 이벤트가 있어도 쓰기가 막히지 않고,
   /// 그 원본도 지워지지 않는다. 로그는 덧붙이기만 한다.
   Future<void> appendEvent(AppEvent event) async {
     final raw = _prefs.getString(_kEvents);
-    final stored = raw == null
-        ? const <Object?>[]
-        : jsonDecode(raw) as List<Object?>;
+    // 손상·비-List blob이면 이어 붙일 원본이 없으니 새 로그로 시작한다 — 쓰기가 throw해서
+    // 코어 루프(사진 업로드부터)가 조용히 죽는 것보다 낫다. readEvents가 이미 []로 강등하는
+    // 그 원본이라 복구할 것도 없다. 정상 blob은 그대로 이어 붙인다(못 읽는 미래 스키마도 보존).
+    List<Object?> stored = const [];
+    if (raw != null) {
+      try {
+        final decoded = jsonDecode(raw);
+        if (decoded is List) stored = decoded;
+      } on FormatException {
+        // 손상 blob — stored는 빈 목록으로 두고 새 로그를 시작한다.
+      }
+    }
     await _prefs.setString(_kEvents, jsonEncode([...stored, event.toJson()]));
   }
 
   SessionState? readSession() {
     final raw = _prefs.getString(_kSession);
     if (raw == null) return null;
-    return SessionState.fromJson(
-      (jsonDecode(raw) as Map).cast<String, Object?>(),
-    );
+    try {
+      return SessionState.fromJson(
+        (jsonDecode(raw) as Map).cast<String, Object?>(),
+      );
+    } catch (_) {
+      // 손상·필드 결손이면 세션 없음으로 강등한다 — 부팅이 계속된다. 원본은 지우지 않는다.
+      return null;
+    }
   }
 
   Future<void> writeSession(SessionState session) =>
@@ -79,10 +107,23 @@ class Storage {
   List<Recipe> readRecipes() {
     final raw = _prefs.getString(_kRecipes);
     if (raw == null) return const [];
-    return [
-      for (final r in jsonDecode(raw) as List<Object?>)
-        Recipe.fromJson((r! as Map).cast<String, Object?>()),
-    ];
+    // 매 build가 동기 호출하는 경로다 — 손상 한 건이 앱 전체를 던지면 안 된다(readEvents와 동형).
+    final Object? decoded;
+    try {
+      decoded = jsonDecode(raw);
+    } on FormatException {
+      return const [];
+    }
+    if (decoded is! List) return const [];
+    final recipes = <Recipe>[];
+    for (final r in decoded) {
+      try {
+        recipes.add(Recipe.fromJson((r! as Map).cast<String, Object?>()));
+      } catch (_) {
+        // 손상 항목만 건너뛴다 — 파싱 가능한 것은 살린다. 원본은 지우지 않는다.
+      }
+    }
+    return recipes;
   }
 
   Future<void> writeRecipes(List<Recipe> recipes) => _prefs.setString(

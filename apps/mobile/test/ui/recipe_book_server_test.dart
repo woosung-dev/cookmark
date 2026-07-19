@@ -160,6 +160,21 @@ void main() {
       expect(bookEvents().single.data['action'], 'add');
     });
 
+    test('저장 중 더블탭은 서버까지 가지 않는다 — create는 1회다', () async {
+      final server = FakeServerRecipeRepository(
+        latency: const Duration(milliseconds: 50),
+      );
+      final book = bookWith(server);
+      await book.hydrate();
+
+      final first = book.add(url: 'https://youtu.be/abc', title: '김치찌개');
+      final second = book.add(url: 'https://youtu.be/abc', title: '김치찌개');
+      await Future.wait([first, second]);
+
+      expect(server.createCallCount, 1);
+      expect(book.recipes, hasLength(1));
+    });
+
     test('같은 URL은 서버까지 가지 않는다 — dedup 가드는 분기 앞 공통', () async {
       final server = FakeServerRecipeRepository(seed: const [seedRecipe]);
       final book = bookWith(server);
@@ -303,6 +318,35 @@ void main() {
       expect(book.recipes, hasLength(1));
       expect(bookEvents(), isEmpty);
       expect(errorEvents().single.data['stage'], 'remove');
+    });
+
+    test('실패(비-404)는 removeFailure로 표면화되고 재시도 성공 시 걷힌다', () async {
+      final server = FakeServerRecipeRepository(seed: const [seedRecipe]);
+      final book = bookWith(server);
+      await book.hydrate();
+      server.failure = const RecipeApiFailure(RecipeApiFailureKind.unavailable);
+
+      await book.remove(seedRecipe.url);
+
+      expect(book.removeFailure, RecipeApiFailureKind.unavailable);
+      expect(book.recipes, hasLength(1), reason: '미러 유지 — 타일이 남는 이유가 보인다');
+
+      // 서버가 살아났다 — 다시 X를 누르면 실패 상태가 걷히고 지워진다.
+      server.failure = null;
+      await book.remove(seedRecipe.url);
+
+      expect(book.removeFailure, isNull);
+      expect(book.recipes, isEmpty);
+    });
+
+    test('서버 모드 삭제는 실행취소 창을 열지 않는다 — undo는 재-POST 재추출이라 범위 밖', () async {
+      final server = FakeServerRecipeRepository(seed: const [seedRecipe]);
+      final book = bookWith(server);
+      await book.hydrate();
+
+      await book.remove(seedRecipe.url);
+
+      expect(book.pendingRemove, isNull);
     });
   });
 }

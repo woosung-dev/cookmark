@@ -93,6 +93,10 @@ class RecipeBookController extends ChangeNotifier {
   /// vision-tech 리서치가 예고한 "추출 실패 시 수동 입력 폴백"의 자리이기도 하다.
   /// 서버 모드는 반대로 추출 실패=미저장이 서버 정책이다 — [_addToServer] 참조.
   Future<void> add({required String url, required String title}) async {
+    // 더블탭 가드 — 첫 탭의 await 중 둘째 탭이 옛 목록으로 dedup을 통과해 추출·저장이
+    // 2회 돌던 결함의 수리다. _saving은 로컬(아래)·서버([_addToServer]) 모두 첫 await 전에
+    // 동기로 세팅되므로 최상단 동기 가드가 양 모드에서 성립한다.
+    if (_saving) return;
     final trimmedUrl = url.trim();
     final trimmedTitle = title.trim();
     if (trimmedUrl.isEmpty || trimmedTitle.isEmpty) return;
@@ -302,9 +306,23 @@ class RecipeBookController extends ChangeNotifier {
   String? get retryingUrl => _retryingUrl;
   String? _retryingUrl;
 
+  /// 삭제 직후 실행취소 창이 열려 있는 항목 — 로컬 모드에서만 채워진다.
+  ///
+  /// 서버 모드의 undo는 재-POST가 서버 재추출(LLM 원가)을 다시 돌려야 해 범위 밖이다(#121).
+  ({Recipe recipe, int index})? get pendingRemove => _pendingRemove;
+  ({Recipe recipe, int index})? _pendingRemove;
+
+  /// 마지막 서버 삭제 실패(비-404) — 타일은 남고(미러 유지), 페이지가 스낵바로 표면화한다.
+  RecipeApiFailureKind? get removeFailure => _removeFailure;
+  RecipeApiFailureKind? _removeFailure;
+
   Future<void> remove(String url) async {
-    final target = recipes.where((r) => r.url == url).firstOrNull;
-    if (target == null) return;
+    final before = recipes;
+    final index = before.indexWhere((r) => r.url == url);
+    if (index < 0) return;
+    final target = before[index];
+
+    _removeFailure = null;
 
     if (_server != null) {
       // 서버 미반영 항목(id 없음)은 지울 곳이 없다 — 서버 모드 미러엔 생기지 않는다(방어).
@@ -316,10 +334,12 @@ class RecipeBookController extends ChangeNotifier {
         // 부재(404)는 성공 취급 — 삭제의 목표 상태(없음)가 이미 이루어져 있다.
         if (e.kind != RecipeApiFailureKind.notFound) {
           // 서버에 남은 걸 화면에서만 지우면 다음 하이드레이트에 되살아난다 — 미러 유지,
-          // 1차는 무표면이라 로그만 남긴다(승인된 플랜).
+          // 실패 이유는 removeFailure로 표면화한다(무표면이면 X를 눌러도 타일만 남는다).
+          _removeFailure = e.kind;
           await _storage.appendEvent(
             AppEvent.errorShown(at: _now(), kind: e.kind.name, stage: 'remove'),
           );
+          notifyListeners();
           return;
         }
       }
@@ -338,6 +358,53 @@ class RecipeBookController extends ChangeNotifier {
         ingredientCount: target.ingredients.length,
       ),
     );
+    if (_server == null) {
+      // 파괴적 삭제에 5초 실행취소를 연다 — LLM 추출 원가가 든 자산이라 실수 한 번에 잃지
+      // 않게(cooked의 markCooked/undoCooked와 같은 문법, G1 #8).
+      _pendingRemove = (recipe: target, index: index);
+    }
+    notifyListeners();
+  }
+
+  /// 5초 안에 되돌렸다 — 지운 레시피를 원위치에 복원한다(로컬 모드 전용).
+  Future<void> undoRemove() async {
+    final pending = _pendingRemove;
+    if (pending == null) return;
+    _pendingRemove = null;
+    final list = [...recipes];
+    // 실행취소 창이 열린 사이 같은 URL이 다시 저장됐다면 복제하지 않는다 — URL이 식별자다.
+    if (list.any((r) => r.url == pending.recipe.url)) {
+      notifyListeners();
+      return;
+    }
+    list.insert(pending.index.clamp(0, list.length), pending.recipe);
+    await _storage.writeRecipes(list);
+    // 취소도 이벤트다 — remove만 확정 기록으로 남으면 분석의 레시피 북 이력이 실제 북과
+    // 어긋난다(cooked/cookedUndo 짝과 동형). 복원은 재추출·원가가 없어 usage를 남기지 않는다.
+    await _storage.appendEvent(
+      AppEvent.recipeBookChanged(
+        at: _now(),
+        action: RecipeBookAction.restore,
+        url: pending.recipe.url,
+        title: pending.recipe.title,
+        ingredientCount: pending.recipe.ingredients.length,
+      ),
+    );
+    notifyListeners();
+  }
+
+  /// 실행취소 창이 닫혔다 — 되돌릴 수 없다(cooked의 dismissUndo와 같은 문법).
+  void dismissRemoveUndo() {
+    if (_pendingRemove == null) return;
+    _pendingRemove = null;
+    notifyListeners();
+  }
+
+  /// 이 레시피의 실행취소 창이 닫혔다 — 그 사이 다른 삭제가 pending을 바꿨다면 건드리지 않는다.
+  /// URL 대조로 판정하니 스낵바 hide 출처(다른 화면의 clearSnackBars 포함)와 무관하게 성립한다.
+  void dismissRemoveUndoFor(Recipe recipe) {
+    if (_pendingRemove?.recipe.url != recipe.url) return;
+    _pendingRemove = null;
     notifyListeners();
   }
 }
