@@ -369,12 +369,18 @@ class MainController extends ChangeNotifier {
   }
 
   /// "이거 했어요" — 성공 지표 2의 판정 장치. 5초 실행취소가 열린다.
-  Future<void> markCooked(Suggestion suggestion) async {
+  ///
+  /// 같은 제안의 실행취소 창이 살아 있는 동안의 재탭은 무시한다(false 반환) — 빠른 더블탭이
+  /// cooked를 이중으로 남겨 성공 지표 2를 부풀리는 것을 막는다. 실행취소로 되돌린 뒤의
+  /// 재탭은 새 기록이다 — 마음이 바뀐 건 실수가 아니다.
+  Future<bool> markCooked(Suggestion suggestion) async {
+    if (_pendingCooked == suggestion) return false;
     _pendingCooked = suggestion;
     notifyListeners();
     await _storage.appendEvent(
       AppEvent.cooked(at: _now(), suggestion: suggestion, stale: _stale),
     );
+    return true;
   }
 
   /// 5초 안에 되돌렸다. 취소도 이벤트다 — 실수인지 마음이 바뀐 건지는 분석이 판단한다.
@@ -393,6 +399,37 @@ class MainController extends ChangeNotifier {
     if (_pendingCooked == null) return;
     _pendingCooked = null;
     notifyListeners();
+  }
+
+  /// 이 제안의 실행취소 창이 닫혔다 — 그 사이 다른 제안의 "이거 했어요"가 pending을 바꿔
+  /// 이 창을 밀어냈다면 pending은 그 새 제안의 것이므로 건드리지 않는다. 제안 대조로 판정하니
+  /// 스낵바 hide 출처(레시피 북의 clearSnackBars 포함)와 무관하게 성립한다.
+  void dismissUndoFor(Suggestion suggestion) {
+    if (_pendingCooked != suggestion) return;
+    _pendingCooked = null;
+    notifyListeners();
+  }
+
+  /// "다른 사진으로 다시" — 코어 루프를 업로드부터 다시 시작한다(매일 찍는 2주 파일럿).
+  ///
+  /// 이벤트는 남기지 않는다 — 진짜 photoUpload는 다음 사진을 고르는 순간 찍힌다(측정 순도).
+  /// 세션은 비워서 저장한다 — 안 비우면 브라우저를 닫았다 열 때 옛 체크리스트가 되살아난다.
+  Future<void> startNewPhoto() async {
+    // 날고 있는 인식·매칭 응답을 버린다 — 뒤늦게 돌아와 업로드 화면을 덮지 않게.
+    _abandonInFlightRecognition();
+    _matchGeneration++;
+    _ingredients = [];
+    _photo = null;
+    _lastResizedPhoto = null;
+    _suggestions = [];
+    _excludedCount = 0;
+    _stale = false;
+    _checklistExpanded = true;
+    _pendingCooked = null;
+    _failure = null;
+    _phase = MainPhase.upload;
+    notifyListeners();
+    await _saveSession();
   }
 
   /// 매칭 로딩 문구에 쓰는 수 — "레시피 북 N개와 맞춰보는 중".

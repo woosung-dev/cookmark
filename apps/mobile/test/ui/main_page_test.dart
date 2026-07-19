@@ -154,6 +154,49 @@ void main() {
     });
   });
 
+  group('다른 사진으로 다시 (T3)', () {
+    /// 체크리스트가 선 화면. 사진 경로를 타지 않는다 — 상단 주석대로 FakeAsync에서 이미지
+    /// 디코드가 끝나지 않으므로, 세션 복원으로 체크리스트를 세운다. 레시피 3개를 채워
+    /// 업로드 존이 온보딩 카드에 가려지지 않게 한다.
+    Future<void> pumpWithChecklist(WidgetTester tester) async {
+      await storage.writeRecipes(const [
+        Recipe(url: 'https://youtu.be/a', title: '김치찌개', ingredients: ['김치']),
+        Recipe(url: 'https://youtu.be/b', title: '된장찌개', ingredients: ['두부']),
+        Recipe(url: 'https://youtu.be/c', title: '파전', ingredients: ['대파']),
+      ]);
+      await storage.writeSession(
+        SessionState(ingredients: defaultRecognitionFixture),
+      );
+      final llm = FakeLlmGateway();
+      final controller = MainController(llm, storage)..restoreSession();
+
+      await tester.pumpWidget(
+        CookmarkApp(
+          controller: controller,
+          recipeBookController: RecipeBookController(llm, storage),
+          backupController: BackupController(storage),
+          imagePicker: () async =>
+              XFile.fromData(fridgePhoto(), mimeType: 'image/jpeg'),
+        ),
+      );
+      await tester.pumpAndSettle();
+    }
+
+    testWidgets('인식 뒤에도 재업로드 자리가 남고, 누르면 업로드 존이 돌아온다', (tester) async {
+      await pumpWithChecklist(tester);
+
+      final button = find.byKey(const Key('start-new-photo'));
+      expect(button, findsOneWidget);
+
+      await tester.tap(button);
+      await tester.pumpAndSettle();
+
+      expect(find.byKey(const Key('upload-photo')), findsOneWidget);
+      // 업로드 상태에선 버튼이 없다 — 업로드 존 자체가 그 자리다.
+      expect(find.byKey(const Key('start-new-photo')), findsNothing);
+    });
+  });
+
   group('실행취소 토스트', () {
     /// 제안이 떠 있는 화면. 사진 경로를 타지 않는다 — 위 주석대로 FakeAsync에서 이미지
     /// 디코드가 끝나지 않으므로, 세션 복원으로 체크리스트를 세우고 매칭만 돌린다.

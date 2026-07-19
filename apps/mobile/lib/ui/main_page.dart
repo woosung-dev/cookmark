@@ -86,8 +86,9 @@ class _MainPageState extends State<MainPage> {
 
   /// "이거 했어요" → 5초 실행취소 토스트. 실수 입력을 바로 되돌린다(G1 #8).
   Future<void> _markCooked(Suggestion suggestion) async {
-    await _controller.markCooked(suggestion);
-    if (!mounted) return;
+    // 더블탭 재진입이 무시됐으면 토스트도 다시 띄우지 않는다 — 실행취소 창을 연장하지 않게.
+    final recorded = await _controller.markCooked(suggestion);
+    if (!recorded || !mounted) return;
 
     final messenger = ScaffoldMessenger.of(context);
     messenger.clearSnackBars();
@@ -104,13 +105,11 @@ class _MainPageState extends State<MainPage> {
           ),
         )
         .closed
-        .then((reason) {
-          // 위 clearSnackBars가 앞선 토스트를 닫은 것이라면(reason: hide), 그 닫힘은 방금 연
-          // 실행취소 창의 것이 아니라 밀려난 창의 것이다. 구별하지 않으면 연속 "이거 했어요"에서
-          // 두 번째 창이 뜨자마자 죽는다 — 버튼은 살아 있는데 눌러도 아무 일이 없다.
-          // hide를 만드는 곳은 이 파일의 clearSnackBars 하나뿐이다.
-          if (reason == SnackBarClosedReason.hide) return;
-          _controller.dismissUndo();
+        .then((_) {
+          // 이 토스트가 닫혔다(사유 무관) — 실행취소를 안 눌렀다면 pending을 정리한다. 그 사이
+          // 다른 제안의 "이거 했어요"가 pending을 바꿔 이 창을 밀어냈거나, 레시피 북에서 삭제해
+          // clearSnackBars로 밀려났어도 제안 대조로 안전하다(dismissUndoFor 참조).
+          _controller.dismissUndoFor(suggestion);
         });
   }
 
@@ -237,6 +236,20 @@ class _MainPageState extends State<MainPage> {
           onTap: widget.onOpenRecipeBook,
         ),
         const SizedBox(height: Space.lg),
+      ],
+
+      // 재업로드 자리는 첫 인식 뒤에도 남는다 — 매일 새로 찍는 2주 파일럿의 반복 진입점.
+      // 이벤트는 남기지 않는다. 진짜 photoUpload는 다음 사진을 고르는 순간 찍힌다.
+      if (controller.phase != MainPhase.upload) ...[
+        Align(
+          alignment: Alignment.centerRight,
+          child: TextButton(
+            key: const Key('start-new-photo'),
+            onPressed: controller.startNewPhoto,
+            child: const Text('다른 사진으로 다시'),
+          ),
+        ),
+        const SizedBox(height: Space.sm),
       ],
 
       switch (controller.phase) {
