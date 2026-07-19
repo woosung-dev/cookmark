@@ -1,5 +1,6 @@
 // 레시피 북 — 사용자가 신뢰하는 저장 레시피의 화면. 앱의 두 번째이자 마지막 화면(ADR-0001).
 import 'package:flutter/material.dart';
+import 'package:url_launcher/url_launcher.dart';
 
 import '../data/server_recipe_repository.dart';
 import '../domain/recipe.dart';
@@ -22,6 +23,66 @@ class RecipeBookPage extends StatelessWidget {
 
   final RecipeBookController controller;
   final BackupController backupController;
+
+  /// 행 탭 — 저장한 레시피 원문을 새 탭으로 연다(main_page._openRecipe와 같은 방식).
+  ///
+  /// url이 비었거나 못 열면 조용히 무시한다 — 북에서 크래시는 금지다.
+  Future<void> _openRecipe(Recipe recipe) async {
+    final uri = Uri.tryParse(recipe.url);
+    if (recipe.url.trim().isEmpty || uri == null) return;
+    try {
+      await launchUrl(
+        uri,
+        mode: LaunchMode.externalApplication,
+        webOnlyWindowName: '_blank',
+      );
+    } on Exception {
+      // 브라우저가 열기를 거부해도 조용히 무시한다 — 저장 자산은 그대로다.
+    }
+  }
+
+  /// 행의 X — 즉시 지우되 로컬 모드는 5초 실행취소를 연다(cooked 토스트와 같은 문법).
+  ///
+  /// 서버 모드는 undo 대신 삭제 실패(비-404)를 스낵바로 표면화한다 — 타일이 남는 이유를 알린다.
+  Future<void> _removeRecipe(BuildContext context, Recipe recipe) async {
+    final messenger = ScaffoldMessenger.of(context);
+    await controller.remove(recipe.url);
+
+    if (controller.pendingRemove != null) {
+      messenger.clearSnackBars();
+      messenger
+          .showSnackBar(
+            SnackBar(
+              key: const Key('recipe-remove-toast'),
+              content: Text('${recipe.title} — 삭제했어요.'),
+              duration: const Duration(seconds: 5),
+              action: SnackBarAction(
+                label: '실행취소',
+                onPressed: controller.undoRemove,
+              ),
+            ),
+          )
+          .closed
+          .then((_) {
+            // 이 토스트가 닫혔다(사유 무관) — 실행취소를 안 눌렀다면 pending을 정리한다.
+            // 다른 삭제가 pending을 밀어냈으면 URL 대조로 건드리지 않는다(dismissRemoveUndoFor).
+            controller.dismissRemoveUndoFor(recipe);
+          });
+    } else if (controller.removeFailure != null) {
+      messenger.clearSnackBars();
+      messenger.showSnackBar(
+        SnackBar(
+          key: const Key('recipe-remove-failure-toast'),
+          content: Text(
+            controller.removeFailure == RecipeApiFailureKind.unauthorized
+                ? '접속 정보가 유효하지 않아 삭제하지 못했어요.'
+                : '삭제하지 못했어요 — 잠시 후 다시 시도해 주세요.',
+          ),
+          duration: const Duration(seconds: 5),
+        ),
+      );
+    }
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -95,7 +156,8 @@ class RecipeBookPage extends StatelessWidget {
                           if (index > 0) const Divider(indent: Space.lg),
                           _RecipeRow(
                             recipe: recipe,
-                            onRemove: () => controller.remove(recipe.url),
+                            onTap: () => _openRecipe(recipe),
+                            onRemove: () => _removeRecipe(context, recipe),
                             retrying: controller.retryingUrl == recipe.url,
                             onRetry: () =>
                                 controller.retryExtraction(recipe.url),
@@ -123,12 +185,16 @@ class RecipeBookPage extends StatelessWidget {
 class _RecipeRow extends StatelessWidget {
   const _RecipeRow({
     required this.recipe,
+    required this.onTap,
     required this.onRemove,
     required this.retrying,
     required this.onRetry,
   });
 
   final Recipe recipe;
+
+  /// 행 탭 — 저장한 레시피 원문을 연다(북의 유일한 열람 경로).
+  final VoidCallback onTap;
   final VoidCallback onRemove;
 
   /// 이 레시피의 재추출이 도는 중인가 — 진행 표시는 자기 자리에서만 뜬다.
@@ -137,79 +203,83 @@ class _RecipeRow extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return Container(
+    // InkWell은 이 화면 셀 탭의 기존 문법이다(suggestion_card·section_summary와 동일).
+    return InkWell(
       key: Key('recipe-tile-${recipe.url}'),
-      constraints: const BoxConstraints(minHeight: Space.rowMin),
-      padding: const EdgeInsets.symmetric(
-        horizontal: Space.lg,
-        vertical: Space.md,
-      ),
-      child: Row(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          // 좌 썸네일 — 음식 사진 자리(홍시-틴트 placeholder, 백엔드 오면 og:image로 교체, ADR-0007).
-          const PhotoPlaceholder(
-            width: 44,
-            height: 44,
-            borderRadius: Radii.photo,
-            icon: Icons.restaurant_menu,
-            iconSize: 22,
-          ),
-          const SizedBox(width: Space.md),
-          Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(recipe.title, style: AppTypography.headline),
-                const SizedBox(height: Space.xs),
-                // 재료 0개면 이 레시피는 영원히 매칭되지 않는다 — 그 자리에서 복구할 길을 준다
-                // (US 22 인라인 원칙, 에러 화면 없음).
-                if (recipe.ingredients.isEmpty) ...[
-                  Text(
-                    '재료를 알아내지 못했어요 — 매칭에는 제목만 쓰입니다.',
-                    style: AppTypography.footnote.copyWith(
-                      color: AppColors.danger,
-                    ),
-                  ),
+      onTap: onTap,
+      child: Container(
+        constraints: const BoxConstraints(minHeight: Space.rowMin),
+        padding: const EdgeInsets.symmetric(
+          horizontal: Space.lg,
+          vertical: Space.md,
+        ),
+        child: Row(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            // 좌 썸네일 — 음식 사진 자리(홍시-틴트 placeholder, 백엔드 오면 og:image로 교체, ADR-0007).
+            const PhotoPlaceholder(
+              width: 44,
+              height: 44,
+              borderRadius: Radii.photo,
+              icon: Icons.restaurant_menu,
+              iconSize: 22,
+            ),
+            const SizedBox(width: Space.md),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(recipe.title, style: AppTypography.headline),
                   const SizedBox(height: Space.xs),
-                  if (retrying)
+                  // 재료 0개면 이 레시피는 영원히 매칭되지 않는다 — 그 자리에서 복구할 길을 준다
+                  // (US 22 인라인 원칙, 에러 화면 없음).
+                  if (recipe.ingredients.isEmpty) ...[
                     Text(
-                      '재료를 다시 찾는 중이에요…',
+                      '재료를 알아내지 못했어요 — 매칭에는 제목만 쓰입니다.',
+                      style: AppTypography.footnote.copyWith(
+                        color: AppColors.danger,
+                      ),
+                    ),
+                    const SizedBox(height: Space.xs),
+                    if (retrying)
+                      Text(
+                        '재료를 다시 찾는 중이에요…',
+                        style: AppTypography.footnote.copyWith(
+                          color: AppColors.muted,
+                        ),
+                      )
+                    else
+                      TextButton(
+                        key: Key('recipe-retry-${recipe.url}'),
+                        onPressed: onRetry,
+                        style: TextButton.styleFrom(
+                          padding: EdgeInsets.zero,
+                          minimumSize: const Size(0, 0),
+                          tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                        ),
+                        child: const Text('다시 시도'),
+                      ),
+                  ] else
+                    // 출처(url host 파생) + 재료를 한 메타 줄로 — 재료 문자열은 매칭 근거라 보존한다.
+                    Text(
+                      '${_sourceLabel(recipe.url)} · ${recipe.ingredients.join(' · ')}',
                       style: AppTypography.footnote.copyWith(
                         color: AppColors.muted,
                       ),
-                    )
-                  else
-                    TextButton(
-                      key: Key('recipe-retry-${recipe.url}'),
-                      onPressed: onRetry,
-                      style: TextButton.styleFrom(
-                        padding: EdgeInsets.zero,
-                        minimumSize: const Size(0, 0),
-                        tapTargetSize: MaterialTapTargetSize.shrinkWrap,
-                      ),
-                      child: const Text('다시 시도'),
                     ),
-                ] else
-                  // 출처(url host 파생) + 재료를 한 메타 줄로 — 재료 문자열은 매칭 근거라 보존한다.
-                  Text(
-                    '${_sourceLabel(recipe.url)} · ${recipe.ingredients.join(' · ')}',
-                    style: AppTypography.footnote.copyWith(
-                      color: AppColors.muted,
-                    ),
-                  ),
-              ],
+                ],
+              ),
             ),
-          ),
-          const SizedBox(width: Space.sm),
-          IconButton(
-            key: Key('recipe-remove-${recipe.url}'),
-            onPressed: onRemove,
-            icon: const Icon(Icons.close, size: 20),
-            color: AppColors.muted,
-            tooltip: '삭제',
-          ),
-        ],
+            const SizedBox(width: Space.sm),
+            IconButton(
+              key: Key('recipe-remove-${recipe.url}'),
+              onPressed: onRemove,
+              icon: const Icon(Icons.close, size: 20),
+              color: AppColors.muted,
+              tooltip: '삭제',
+            ),
+          ],
+        ),
       ),
     );
   }
