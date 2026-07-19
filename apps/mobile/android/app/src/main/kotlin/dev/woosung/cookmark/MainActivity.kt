@@ -1,0 +1,5 @@
+package dev.woosung.cookmark
+
+import io.flutter.embedding.android.FlutterActivity
+
+class MainActivity : FlutterActivity()
