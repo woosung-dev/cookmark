@@ -1,0 +1,16 @@
+gradle-wrapper.jar
+/.gradle
+# 루트 Gradle 프로젝트의 리포트가 여기 떨어진다 — 서브프로젝트 산출물만 ../build로 옮겨진다.
+/build
+/captures/
+/gradlew
+/gradlew.bat
+/local.properties
+GeneratedPluginRegistrant.java
+.cxx/
+
+# Remember to never publicly share your keystore.
+# See https://flutter.dev/to/reference-keystore
+key.properties
+**/*.keystore
+**/*.jks

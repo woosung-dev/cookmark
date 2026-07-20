@@ -1,0 +1,53 @@
+<manifest xmlns:android="http://schemas.android.com/apk/res/android">
+    <!-- INTERNET는 flutter create가 debug/profile 매니페스트에만 넣는다. release(파일럿) 빌드는
+         여기 없으면 네트워크가 전멸한다 — LLM 프록시 도달 불가. 지도 #129 결정 #131. 삭제 금지. -->
+    <uses-permission android:name="android.permission.INTERNET"/>
+    <!-- allowBackup=false — 기본값(true)이면 재설치 때 Android Auto Backup이 클라우드에서 옛 이벤트·
+         레시피를 되살려 D0 기록 초기화를 조용히 무효화한다. 첫 설치에는 안 나타나고 재설치에서만
+         발현한다. n=2 표본에서 오염 1건은 실험 전체를 버린다(ADR-0004 · #141). 삭제 금지.
+         핫픽스 흐름은 다치지 않는다 — 같은 서명 앱 업데이트의 데이터 보존은 이 값과 무관하다. -->
+    <application
+        android:label="cookmark"
+        android:name="${applicationName}"
+        android:icon="@mipmap/ic_launcher"
+        android:allowBackup="false">
+        <activity
+            android:name=".MainActivity"
+            android:exported="true"
+            android:launchMode="singleTop"
+            android:taskAffinity=""
+            android:theme="@style/LaunchTheme"
+            android:configChanges="orientation|keyboardHidden|keyboard|screenSize|smallestScreenSize|locale|layoutDirection|fontScale|screenLayout|density|uiMode"
+            android:hardwareAccelerated="true"
+            android:windowSoftInputMode="adjustResize">
+            <!-- Specifies an Android theme to apply to this Activity as soon as
+                 the Android process has started. This theme is visible to the user
+                 while the Flutter UI initializes. After that, this theme continues
+                 to determine the Window background behind the Flutter UI. -->
+            <meta-data
+              android:name="io.flutter.embedding.android.NormalTheme"
+              android:resource="@style/NormalTheme"
+              />
+            <intent-filter>
+                <action android:name="android.intent.action.MAIN"/>
+                <category android:name="android.intent.category.LAUNCHER"/>
+            </intent-filter>
+        </activity>
+        <!-- Don't delete the meta-data below.
+             This is used by the Flutter tool to generate GeneratedPluginRegistrant.java -->
+        <meta-data
+            android:name="flutterEmbedding"
+            android:value="2" />
+    </application>
+    <!-- Required to query activities that can process text, see:
+         https://developer.android.com/training/package-visibility and
+         https://developer.android.com/reference/android/content/Intent#ACTION_PROCESS_TEXT.
+
+         In particular, this is used by the Flutter engine in io.flutter.plugin.text.ProcessTextPlugin. -->
+    <queries>
+        <intent>
+            <action android:name="android.intent.action.PROCESS_TEXT"/>
+            <data android:mimeType="text/plain"/>
+        </intent>
+    </queries>
+</manifest>
