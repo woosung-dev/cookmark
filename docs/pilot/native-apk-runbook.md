@@ -87,7 +87,16 @@ cd apps/mobile && flutter build apk --release --dart-define=COOKMARK_API_BASE=ht
 
 - `Signer #1 certificate DN: CN=cookmark pilot, …` 와 `Verified using v2 scheme …: true` — §1에서 만든 키로 서명됐다.
 - `package: name='dev.woosung.cookmark' versionCode='N'` 과 `application-label:'cookmark'`.
-- 권한은 **`android.permission.INTERNET` 하나뿐**이다. `CAMERA`·`READ_MEDIA_IMAGES`·`READ_EXTERNAL_STORAGE`가 보이면 플러그인이 주입한 것이니 멈추고 [#131](https://github.com/woosung-dev/cookmark/issues/131)로 돌아간다 — 선언만으로 런타임 권한 다이얼로그가 강제되어 온보딩에 승인 단계가 낀다.
+- 권한은 **정확히 아래 두 줄**이다(debug APK 실측 — 병합 결과이므로 릴리스도 같다).
+
+  ```
+  uses-permission: name='android.permission.INTERNET'
+  uses-permission: name='dev.woosung.cookmark.DYNAMIC_RECEIVER_NOT_EXPORTED_PERMISSION'
+  ```
+
+  둘째 줄에 **놀라지 않는다** — AndroidX Core가 자기 브로드캐스트 리시버용으로 주입하는 `protectionLevel=signature`(0x2) 권한이고, 우리 앱이 우리 앱에게 주는 것이라 **런타임 다이얼로그가 뜨지 않는다.** 이름이 애플리케이션 ID로 시작하는 게 그 표식이다.
+
+  멈춰야 하는 건 **`android.permission.` 로 시작하는 줄이 `INTERNET` 말고 더 있을 때**다 — 특히 `CAMERA`·`READ_MEDIA_IMAGES`·`READ_EXTERNAL_STORAGE`. 플러그인이 주입한 것이니 [#131](https://github.com/woosung-dev/cookmark/issues/131)로 돌아간다. 선언만으로 런타임 권한 다이얼로그가 강제되어 온보딩에 승인 단계가 낀다.
 - `android:allowBackup(0x0101000d)=(type 0x12)0x0` — `0x0`이 false다.
 
 ## 5. 배우자 기기 설치 — 카톡으로 보내고 파운더가 직접 깐다

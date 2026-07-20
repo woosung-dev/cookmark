@@ -37,11 +37,24 @@
 - [x] `flutter analyze --fatal-infos` (No issues)
 - [x] `flutter test` (403 passed)
 
+## main 재기준 + 재검증 (2026-07-20)
+
+브랜치가 `458b0b9` 기준이라 #142·#143·#144가 빠져 있었다. `main`(eabd789) 위로 리베이스했고 — 충돌 0, 내용 동일 — 게이트와 서명 가드를 다시 돌렸다.
+
+- [x] `main` 위로 리베이스 (충돌 0, `git diff ed24ffe HEAD`가 main 변경분만)
+- [x] `dart format` (86 files, 0 changed) · `flutter analyze --fatal-infos` (No issues) · `flutter test` (**427 passed**)
+- [x] 부정 테스트 재실행 — 키 없이 `--release` → 976ms만에 GradleException, `app-release.apk` 미생성
+- [x] 양성 대조 재실행 — 키 없이 `--debug` → 6.9초 성공 (가드가 릴리스에만 걸린다)
+- [x] **병합 매니페스트를 debug APK에서 실측** — `allowBackup=false` · `label='cookmark'` · `package=dev.woosung.cookmark` · 위험 권한 0건
+- [x] 실측이 런북 §4의 "`INTERNET` 하나뿐" 기대값을 반증 → AndroidX Core 주입 권한(signature) 포함해 고침
+
 ## HITL · 실기기 검증 (파운더)
+
+> 아래는 **키스토어가 있어야만** 가능하다. 위 재검증이 그 앞까지를 전부 덮는다 — 남은 건 실제 서명과 기기다.
 
 - [ ] 파운더가 런북 §1로 키스토어 + `key.properties` 생성
 - [ ] 릴리스 APK 빌드
-- [ ] `apksigner`/`aapt2`로 서명·`allowBackup`·`INTERNET` 단독·라벨 확인
+- [ ] `apksigner`로 서명 DN·v2 scheme 확인 (매니페스트 4종은 위에서 실측 완료)
 - [ ] 에뮬레이터 설치 + 레시피 심기
 - [ ] 핫픽스 루프 리허설 — `versionCode` 범프 → 재설치 → 데이터 생존 (`firstInstallTime` 불변)
 
