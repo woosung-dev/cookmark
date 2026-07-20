@@ -205,6 +205,17 @@ void main() {
     await tester.pumpAndSettle();
   }
 
+  /// 파운더가 D0 직전에 하는 그대로 — 푸터의 초기화 버튼 → 확인(#144).
+  ///
+  /// 확인 다이얼로그를 우회하는 경로를 일부러 두지 않는다. 테스트가 컨트롤러를 직접
+  /// 부르면 "확인 단계가 1개"라는 AC가 테스트에서 증발한다 — 푸터를 여는 경로와 같은 원칙이다.
+  /// ([tapVisible]보다 뒤에 있어야 한다 — Dart 지역 함수는 선언 전 참조가 안 된다.)
+  Future<void> resetPilotRecord(WidgetTester tester) async {
+    await tapVisible(tester, find.byKey(const Key('reset-record')));
+    await tester.tap(find.byKey(const Key('reset-confirm')));
+    await tester.pumpAndSettle();
+  }
+
   /// 체크리스트가 길면 "오늘 뭐 해먹지"가 뷰포트 밖에 있다 — 스크롤해 올린 뒤 탭한다.
   Future<void> tapRequestSuggestions(WidgetTester tester) async {
     final button = find.byKey(const Key('request-suggestions'));
@@ -1235,7 +1246,9 @@ void main() {
     expect(exported['recipes'], isNotEmpty);
   });
 
-  testWidgets('D0 전 기록 초기화 리허설 — 지우고 가져와도 레시피만 돌아온다 (#41)', (tester) async {
+  testWidgets('D0 전 기록 초기화 리허설 — 푸터에서 지우면 레시피만 남는다 (#41, #144)', (
+    tester,
+  ) async {
     // 관통 테스트 흔적을 실 UI로 만든다 — 레시피 저장 + 업로드·인식 + 체크 수정 + 매칭.
     final book = RecipeBookController(FakeLlmGateway(), storage);
     await book.add(url: 'https://youtu.be/abc', title: '김치찌개');
@@ -1245,64 +1258,87 @@ void main() {
     await tapVisible(tester, find.byKey(const Key('ingredient-row-대파')));
     await tapRequestSuggestions(tester);
 
-    // 절차 ① 기록 복사하기 — 관통 이벤트 4종이 백업에 실제로 담겨 있어야 리허설이 성립한다.
-    // 버튼 대신 컨트롤러로 export 한다(#22 관용구) — 클립보드는 헤드리스 브라우저에서 못 읽는다.
-    final backupJson = await BackupController(storage).exportJson();
-    final backedUpTypes =
-        ((jsonDecode(backupJson) as Map<String, Object?>)['events'] as List)
-            .cast<Map<String, Object?>>()
-            .map((e) => e['type'])
-            .toSet();
+    // 지울 것이 실제로 쌓였는지 먼저 본다 — 안 쌓였으면 아래 "0이 됐다"가 공허해진다.
+    final before = storage.readEvents().map((e) => e.type).toSet();
     for (final type in [
-      'photoUpload',
-      'recognitionDone',
-      'checklistEdit',
-      'matchingDone',
+      AppEventType.photoUpload,
+      AppEventType.recognitionDone,
+      AppEventType.checklistEdit,
+      AppEventType.matchingDone,
     ]) {
-      expect(backedUpTypes, contains(type), reason: '관통 이벤트 $type이(가) 백업에 없다');
+      expect(before, contains(type), reason: '관통 이벤트 $type이(가) 안 쌓였다');
     }
 
-    // 절차 ② 브라우저 사이트 데이터 삭제 — 이벤트·레시피 전부 소멸.
-    await storage.clear();
+    // 절차 ① 제스처로 측정 푸터를 연다. 절차 ② 초기화 → 확인. 끝이다.
+    //
+    // 웹 시절의 5단계(복사 → 카톡 보관 → 사이트 데이터 삭제 → 재열기 → 붙여넣기)는
+    // **브라우저가 선택적 삭제를 못 해서** 생긴 우회였다. 네이티브는 키 단위로 지우므로
+    // export도 재import도 절차에서 통째로 빠진다(#144).
+    await openDebugFooter(tester);
+    await resetPilotRecord(tester);
 
-    // 절차 ③ 앱을 다시 열고 보관한 JSON을 가져오기에 붙여넣는다.
-    await restartApp(tester);
+    // 웹에서는 재import가 backup/import 1건을 남겨 "이벤트 1"이 정상이었다.
+    // 재import가 사라졌으므로 네이티브에서는 **0이 정상**이다 — 불변식이 뒤집혔다.
+    final footer = find.byKey(const Key('debug-footer'));
+    await tester.ensureVisible(footer);
+    await tester.pumpAndSettle();
+    expect(find.text('이벤트 0'), findsOneWidget);
+    expect(find.text('수동 수정 0'), findsOneWidget);
+
+    // 레시피 북은 그대로다 — 파일럿의 입력이라 살아남아야 한다.
     await tester.tap(find.byKey(const Key('recipe-book-link')));
     await tester.pumpAndSettle();
-
-    final field = find.byKey(const Key('backup-import-field'));
-    await tester.ensureVisible(field);
-    await tester.pumpAndSettle();
-    await tester.enterText(field, backupJson);
-    await tapVisible(tester, find.byKey(const Key('backup-preview')));
-    await tapVisible(tester, find.byKey(const Key('backup-confirm')));
-
-    final events = await waitForEvents(
-      tester,
-      storage,
-      (events) => events.any((e) => e.type == AppEventType.backup),
-    );
-    await tester.pumpAndSettle();
-
-    // 레시피만 돌아온다 — 관통 이벤트는 무시되고, 로그에는 방금의 가져오기 1건뿐이다.
     expect(
       find.byKey(const Key('recipe-tile-https://youtu.be/abc')),
       findsOneWidget,
     );
-    expect(events, hasLength(1));
-    expect(events.single.type, AppEventType.backup);
-    expect(events.single.data['direction'], 'import');
 
-    // 절차 ④ 측정 푸터 확인 — 이슈 #41의 "이벤트가 비었는지"는 정확히는
-    // "이벤트 1"이다. 가져오기 자체가 backup/import 이벤트 1건을 남기기 때문이고,
-    // 지표를 오염시키는 관통 이벤트·수동 수정은 0이어야 한다.
+    // 다시 띄워도 지워진 채다 — 그리고 관통 테스트의 체크리스트가 되살아나지 않는다.
+    // 세션까지 지우는 이유가 정확히 이것이다(#144 보존 경계).
     await restartApp(tester);
+    expect(storage.readEvents(), isEmpty);
+    expect(find.byKey(const Key('ingredient-row-대파')), findsNothing);
+    expect(storage.readRecipes(), hasLength(1));
+  });
+
+  testWidgets('초기화 확인을 취소하면 아무것도 지워지지 않는다 (#144)', (tester) async {
+    final book = RecipeBookController(FakeLlmGateway(), storage);
+    await book.add(url: 'https://youtu.be/abc', title: '김치찌개');
+
+    await pumpApp(tester);
+    await uploadAndWait(tester);
+    await tapVisible(tester, find.byKey(const Key('ingredient-row-대파')));
+
+    final before = storage.readEvents();
+    expect(before, isNotEmpty, reason: '지울 것이 없으면 취소 테스트가 공허하다');
+
     await openDebugFooter(tester);
-    final footer = find.byKey(const Key('debug-footer'));
-    await tester.ensureVisible(footer);
+    await tapVisible(tester, find.byKey(const Key('reset-record')));
+    await tester.tap(find.byKey(const Key('reset-cancel')));
     await tester.pumpAndSettle();
-    expect(find.text('이벤트 1'), findsOneWidget);
-    expect(find.text('수동 수정 0'), findsOneWidget);
+
+    // 파괴적 동작이 숨은 화면 안의 단일 탭이면 오조작이 곧 데이터 손실이다 —
+    // 확인 단계가 실제로 막아주는지가 이 테스트의 전부다.
+    expect(storage.readEvents().length, before.length);
+    expect(storage.readRecipes(), hasLength(1));
+    // 화면도 그대로다 — 취소가 세션까지 되감지 않는다.
+    expect(find.byKey(const Key('ingredient-row-대파')), findsOneWidget);
+  });
+
+  testWidgets('초기화 버튼은 푸터 안에만 있다 — 배우자에게는 도달 경로가 없다 (#144)', (tester) async {
+    await pumpApp(tester);
+    await uploadAndWait(tester);
+
+    // 푸터를 열기 전에는 버튼이 트리에 없다. 배우자는 제스처를 모르므로 푸터를 못 열고,
+    // 따라서 파일럿 데이터를 지울 방법 자체가 없다(ADR-0004 단일맹검).
+    expect(find.byKey(const Key('reset-record')), findsNothing);
+
+    await openDebugFooter(tester);
+    expect(find.byKey(const Key('reset-record')), findsOneWidget);
+
+    // 푸터를 도로 닫으면 버튼도 같이 사라진다.
+    await openDebugFooter(tester);
+    expect(find.byKey(const Key('reset-record')), findsNothing);
   });
 
   testWidgets('하단 탭 바로 레시피 북에 오가고 헤더 링크도 병행한다 (ADR-0007)', (tester) async {

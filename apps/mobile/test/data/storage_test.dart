@@ -348,4 +348,101 @@ void main() {
       });
     });
   });
+
+  group('기록 초기화 — 보존 경계는 "레시피 빼고 다" (#144)', () {
+    /// 5개 키 전부에 값을 채운다 — 초기화가 무엇을 지우고 무엇을 남기는지 재려면
+    /// 시작 상태에 그 다섯이 **모두** 있어야 한다. 하나라도 비면 그 키의 단언이 공허해진다.
+    Future<Storage> seedEveryKey() async {
+      final storage = await Storage.open();
+      await storage.appendEvent(
+        AppEvent.photoUpload(
+          at: DateTime.utc(2026, 7, 20),
+          bytes: 100,
+          width: 768,
+        ),
+      );
+      await storage.writeSession(
+        const SessionState(ingredients: [Ingredient.added('대파')]),
+      );
+      await storage.writeRecipes([
+        const Recipe(
+          url: 'https://youtu.be/abc',
+          title: '김치찌개',
+          ingredients: ['김치', '돼지고기'],
+        ),
+      ]);
+      await storage.writeLastBackupAt(DateTime.utc(2026, 7, 19));
+      await storage.markExpectationNoteSeen();
+      return storage;
+    }
+
+    /// 디스크에 실제로 남아 있는 키 — 공개 게터가 아니라 영속층을 직접 본다.
+    ///
+    /// 게터로만 재면 "null을 돌려주니 지워졌다"까지만 알 수 있는데, 그건 빈 값을 써넣은
+    /// 경우와 구별되지 않는다. 티켓이 요구하는 "키 단위" 고정은 이 층에서만 성립한다.
+    Future<Set<String>> storedKeys() async =>
+        (await SharedPreferencesAsyncPlatform.instance!.getPreferences(
+          const GetPreferencesParameters(filter: PreferencesFilters()),
+          const SharedPreferencesOptions(),
+        )).keys.toSet();
+
+    test('레시피 키만 남고 나머지 4개는 사라진다', () async {
+      final storage = await seedEveryKey();
+      expect(await storedKeys(), {
+        'events',
+        'session',
+        'recipes',
+        'lastBackupAt',
+        'expectationNoteSeen',
+      }, reason: '초기화 전에 5개 키가 다 있어야 이 테스트가 공허하지 않다');
+
+      await storage.clearPilotRecord();
+
+      // 여기가 문서가 약속하는 "레시피 빼고 다"의 기계적 정본이다. 키가 추가되면
+      // 이 단언이 깨지고, 다음 세션은 그 키를 어느 쪽에 둘지 **결정하도록 강제된다**.
+      expect(await storedKeys(), {'recipes'});
+    });
+
+    test('레시피는 내용까지 그대로다 — 지우고 되살리는 게 아니다', () async {
+      final storage = await seedEveryKey();
+      await storage.clearPilotRecord();
+
+      final recipes = storage.readRecipes();
+      expect(recipes, hasLength(1));
+      expect(recipes.single.url, 'https://youtu.be/abc');
+      expect(recipes.single.title, '김치찌개');
+      expect(recipes.single.ingredients, ['김치', '돼지고기']);
+    });
+
+    test('초기화 후 읽기는 갓 설치한 기기와 같다 — 이벤트 0이 정상이다', () async {
+      final storage = await seedEveryKey();
+      await storage.clearPilotRecord();
+
+      // 웹에서는 재import가 backup/import 1건을 남겨 "이벤트 1"이 정상이었다.
+      // 네이티브는 재import 자체가 사라져 0이 정상이다(#41 불변식 반전).
+      expect(storage.readEvents(), isEmpty);
+      expect(storage.readSession(), isNull);
+      expect(storage.readLastBackupAt(), isNull);
+      expect(storage.readExpectationNoteSeen(), isFalse);
+    });
+
+    test('다시 열어도 지워진 채다 — 캐시만 비운 게 아니다', () async {
+      final storage = await seedEveryKey();
+      await storage.clearPilotRecord();
+
+      final reopened = await Storage.open();
+      expect(reopened.readEvents(), isEmpty);
+      expect(reopened.readSession(), isNull);
+      expect(reopened.readRecipes(), hasLength(1));
+    });
+
+    test('빈 스토리지에서 초기화해도 터지지 않는다 — 두 번 눌러도 같다', () async {
+      final storage = await Storage.open();
+      await storage.clearPilotRecord();
+      await storage.clearPilotRecord();
+
+      expect(storage.readEvents(), isEmpty);
+      expect(await storedKeys(), isEmpty);
+    });
+  });
 }

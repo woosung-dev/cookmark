@@ -171,7 +171,32 @@ class Storage {
   Future<void> writeLastBackupAt(DateTime at) =>
       _prefs.setString(_kLastBackupAt, at.toUtc().toIso8601String());
 
-  /// E2E가 브라우저 localStorage를 비우고 시작할 수 있게 — 앱에는 데이터를 지우는 경로가 없다.
+  /// D0 직전 기록 초기화 — **레시피 빼고 다** 지운다(#144, 절차 #41).
+  ///
+  /// 베이스라인 구간의 기술 관통 테스트가 만든 이벤트가 파일럿 데이터에 섞이면 지표 1(자발 사용)이
+  /// 부풀고 P2 킬 기준(수동 수정 주 평균)이 테스트 조작으로 오염된다. 레시피 북은 파일럿의 **입력**이라
+  /// 살아남아야 한다 — 지우면 파운더가 배우자의 레시피를 다시 넣어야 하고 그건 D0 당일에 할 일이 아니다.
+  ///
+  /// 세션·백업 시각·1회성 플래그를 이벤트와 함께 지우는 이유는 셋 다 "이번 파일럿 런"의 수명을 갖기
+  /// 때문이다. 특히 세션을 남기면 초기화 직후 재부팅에서 [readSession]이 관통 테스트의 체크리스트를
+  /// 되살려 리셋이 눈에 보이게 깨진다.
+  ///
+  /// [clear]와 **일부러 별개 API**다 — 그쪽은 레시피까지 날리는 테스트 전용 경로다.
+  ///
+  /// 지울 키를 열거하지 않고 [_allowList]에서 레시피만 뺀다 — 계약이 "레시피 빼고 다"이므로
+  /// 새 키가 생기면 **지워지는 쪽이 기본값**이어야 문서와 코드가 갈라지지 않는다. 열거식이면
+  /// 새 키가 조용히 살아남아 다음 파일럿 런으로 새어나간다. 보존이 필요한 키가 생기면
+  /// 여기 예외 집합에 넣도록 강제되고, 키 단위 유닛 테스트가 그 결정을 표면화한다.
+  Future<void> clearPilotRecord() => Future.wait([
+    for (final key in _allowList.difference(_preservedOnReset))
+      _prefs.remove(key),
+  ]);
+
+  /// 기록 초기화가 살려두는 키 — 레시피 북은 파일럿의 **입력**이라 살아남아야 한다(#144).
+  static const _preservedOnReset = <String>{_kRecipes};
+
+  /// E2E가 브라우저 localStorage를 비우고 시작할 수 있게 — 레시피까지 날린다.
+  /// 앱 안에서 파운더가 쓰는 초기화는 [clearPilotRecord]다.
   @visibleForTesting
   Future<void> clear() => _prefs.clear();
 }
