@@ -43,7 +43,7 @@ chmod 600 android/key.properties
 ```bash
 git status --short
 git check-ignore -v android/key.properties
-# → android/.gitignore:12:key.properties   android/key.properties
+# → android/.gitignore:14:key.properties   android/key.properties
 ```
 
 `git status`에 `key.properties`나 `*.jks`가 보이면 **즉시 멈춘다**. 키스토어를 잃으면 같은 서명을 다시 만들 방법이 없고, 파일럿 도중 데이터를 보존하는 핫픽스가 영구히 불가능해진다. `~/.cookmark/`를 **비공개** 백업(외장 디스크 등)에 1부 둔다 — 리포·공개 드라이브 금지.
