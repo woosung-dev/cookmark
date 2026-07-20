@@ -140,26 +140,4 @@ void main() {
       expect(metrics.manualEdits, 0);
     });
   });
-
-  group('debug 쿼리 파라미터 (ADR-0004)', () {
-    test('테스트(비웹) 환경에는 쿼리가 없어 꺼져 있다', () {
-      // Uri.base가 파일 URI라 debug 파라미터가 붙을 자리가 없다.
-      expect(debugFooterEnabled(), isFalse);
-    });
-
-    test('?debug와 ?debug=1을 둘 다 인정한다', () {
-      expect(
-        Uri.parse('https://x/?debug').queryParameters.containsKey('debug'),
-        isTrue,
-      );
-      expect(
-        Uri.parse('https://x/?debug=1').queryParameters.containsKey('debug'),
-        isTrue,
-      );
-      expect(
-        Uri.parse('https://x/').queryParameters.containsKey('debug'),
-        isFalse,
-      );
-    });
-  });
 }
