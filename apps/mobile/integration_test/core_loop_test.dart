@@ -14,11 +14,14 @@ import 'package:cookmark/domain/recipe.dart';
 import 'package:cookmark/domain/suggestion.dart';
 import 'package:cookmark/llm/fake_llm_gateway.dart';
 import 'package:cookmark/llm/llm_gateway.dart';
+import 'package:cookmark/llm/proxy_llm_gateway.dart';
 import 'package:cookmark/ui/backup_controller.dart';
 import 'package:cookmark/ui/main_controller.dart';
 import 'package:cookmark/ui/recipe_book_controller.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:http/http.dart' as http;
+import 'package:http/testing.dart';
 import 'package:image/image.dart' as img;
 import 'package:image_picker/image_picker.dart';
 import 'package:integration_test/integration_test.dart';
@@ -70,6 +73,46 @@ class _FakeUrlLauncher extends Fake
   Future<bool> launchUrl(String url, LaunchOptions options) async => true;
 }
 
+/// 프록시가 200을 주는데 모양이 다르다 — 오형식 200 고착(#142)을 화면 수준에서 재현하는 페이크.
+///
+/// 페이크를 LLM 경계가 아니라 **HTTP 층**에 꽂는 것이 핵심이다. 결함은 게이트웨이와 컨트롤러
+/// **사이**에 있었으므로(정규화되지 않은 `TypeError`가 그 틈으로 샜다) 실 [ProxyLlmGateway]를
+/// 통과시켜야 재현된다. `FakeLlmGateway`는 `LlmFailure`를 얌전히 던지므로 이 결함을 못 만든다.
+///
+/// [byPath]에 없는 경로는 전부 `[]`(Map이 아닌 200)로 답한다 — 오형식이 기본값이다.
+ProxyLlmGateway proxyReturning(
+  Map<String, Object> byPath, {
+  List<String>? requestLog,
+}) {
+  return ProxyLlmGateway(
+    client: MockClient((request) async {
+      requestLog?.add(request.url.path);
+      return http.Response(
+        jsonEncode(byPath[request.url.path] ?? const <Object>[]),
+        200,
+        headers: {'content-type': 'application/json; charset=utf-8'},
+      );
+    }),
+  );
+}
+
+/// 인식만 정상으로 돌려줄 때 쓰는 본문 — 매칭 단계까지 가야 그 단계의 고착을 볼 수 있다.
+/// T1 #6 실측표의 flash-lite 기본·768px 행 그대로다(지어낸 숫자를 쓰지 않는다).
+const _validRecognitionBody = {
+  'ingredients': [
+    {'name': '대파', 'confidence': 'high'},
+    {'name': '두부', 'confidence': 'high'},
+  ],
+  'usage': {
+    'promptTokens': 1157,
+    'outputTokens': 295,
+    'thoughtTokens': 0,
+    'imageTokens': 1064,
+    'costUsd': 0.00073,
+    'model': 'gemini-3.1-flash-lite',
+  },
+};
+
 /// 이벤트가 스토리지에 실제로 도착할 때까지 기다린다.
 ///
 /// pumpAndSettle은 프레임만 기다린다 — 버튼을 눌러 시작된 스토리지 쓰기(async)까지
@@ -106,9 +149,11 @@ void main() {
     await storage.clear();
   });
 
+  /// [gateway]가 `LlmGateway`인 이유는 [proxyReturning] 참조 — 오형식 200 고착(#142)은
+  /// 실 게이트웨이를 통과시켜야 재현된다.
   Future<void> pumpApp(
     WidgetTester tester, {
-    FakeLlmGateway? gateway,
+    LlmGateway? gateway,
     bool skipOnboarding = true,
     String userAgent = 'Mozilla/5.0 Chrome/120.0.0.0 Mobile Safari/537.36',
     bool debug = false,
@@ -286,6 +331,105 @@ void main() {
       (e) => e.type == AppEventType.errorShown,
     );
     expect(errors.single.data['kind'], 'empty');
+  });
+
+  testWidgets('인식이 오형식 200을 받아도 로딩에 고착하지 않는다 (#142)', (tester) async {
+    // 200이지만 본문이 Map이 아니다. 예전에는 여기서 TypeError가 게이트웨이 밖으로 새어
+    // 컨트롤러의 on LlmFailure를 지나쳤고, phase가 recognizing에 영원히 머물렀다 —
+    // 사용자에게는 영영 도는 스캔 시머만 남고 실패 카드도 재시도 버튼도 없었다.
+    final requests = <String>[];
+    await pumpApp(
+      tester,
+      gateway: proxyReturning(const {}, requestLog: requests),
+    );
+
+    await uploadAndWait(tester);
+
+    // 고착의 부재를 화면으로 확인한다 — 로딩이 아니라 실패 카드다.
+    expect(find.byKey(const Key('loading-message')), findsNothing);
+    expect(find.byKey(const Key('failure-card')), findsOneWidget);
+    expect(find.text('인식에 실패했어요.'), findsOneWidget);
+
+    // 재시도 경로가 살아 있다. 같은 오형식이 또 와도 두 번째 실패까지 화면에 도달한다 —
+    // 실패가 로그에 두 번 남는 것이 "이번에도 고착하지 않았다"의 증거다.
+    await tester.ensureVisible(find.byKey(const Key('failure-retry')));
+    await tester.pumpAndSettle();
+    await tester.tap(find.byKey(const Key('failure-retry')));
+    await tester.pump();
+    await waitForEvents(
+      tester,
+      storage,
+      (events) =>
+          events.where((e) => e.type == AppEventType.errorShown).length == 2,
+    );
+    await tester.pumpAndSettle();
+
+    expect(requests.length, 2, reason: '"다시 시도"가 실제로 다시 호출한다');
+    expect(find.byKey(const Key('failure-card')), findsOneWidget);
+
+    // 막다른 화면이 아니다 — 직접 입력으로 루프를 이어간다(G1 #8).
+    await tapVisible(tester, find.byKey(const Key('failure-manual')));
+    expect(find.text('냉장고에 있는 것'), findsOneWidget);
+    expect(find.byKey(const Key('failure-card')), findsNothing);
+
+    // 오형식 200은 error로 정규화되어 로그에 남는다.
+    final errors = (await Storage.open()).readEvents().where(
+      (e) => e.type == AppEventType.errorShown,
+    );
+    expect(errors.map((e) => e.data['kind']), ['error', 'error']);
+    expect(errors.first.data['stage'], 'recognition');
+  });
+
+  testWidgets('매칭이 오형식 200을 받아도 로딩에 고착하지 않는다 (#142)', (tester) async {
+    // 인식은 정상, 매칭만 오형식 200 — 같은 공통 경로라 같은 모양으로 고착했다.
+    final requests = <String>[];
+    await pumpApp(
+      tester,
+      gateway: proxyReturning(const {
+        '/api/recognize': _validRecognitionBody,
+      }, requestLog: requests),
+    );
+
+    await uploadAndWait(tester);
+    expect(find.text('냉장고에 있는 것'), findsOneWidget);
+
+    await tapRequestSuggestions(tester);
+
+    expect(find.byKey(const Key('matching-message')), findsNothing);
+    expect(find.byKey(const Key('failure-card')), findsOneWidget);
+    expect(find.text('메뉴를 고르지 못했어요.'), findsOneWidget);
+
+    // 재시도가 실제로 매칭을 다시 부른다 — 버튼이 있기만 하고 아무것도 안 하면
+    // 사용자에게는 고착과 구별되지 않는다.
+    await tester.ensureVisible(find.byKey(const Key('failure-retry')));
+    await tester.pumpAndSettle();
+    await tester.tap(find.byKey(const Key('failure-retry')));
+    await tester.pump();
+    await waitForEvents(
+      tester,
+      storage,
+      (events) =>
+          events.where((e) => e.type == AppEventType.errorShown).length == 2,
+    );
+    await tester.pumpAndSettle();
+
+    expect(
+      requests.where((path) => path == '/api/match').length,
+      2,
+      reason: '"다시 시도"가 매칭을 실제로 다시 호출한다',
+    );
+    expect(find.byKey(const Key('failure-card')), findsOneWidget);
+
+    // 매칭 실패의 탈출구는 재료로 돌아가는 것이다.
+    await tapVisible(tester, find.byKey(const Key('failure-manual')));
+    expect(find.byKey(const Key('failure-card')), findsNothing);
+
+    // 첫 실패와 재시도 실패 둘 다 매칭 단계로 귀속돼 남는다 — 인식은 성공했다.
+    final errors = (await Storage.open()).readEvents().where(
+      (e) => e.type == AppEventType.errorShown,
+    );
+    expect(errors.map((e) => e.data['kind']), ['error', 'error']);
+    expect(errors.map((e) => e.data['stage']), ['matching', 'matching']);
   });
 
   testWidgets('행 전체를 탭해 재료를 토글하고, 그게 유형·경로와 함께 남는다 (#15)', (tester) async {

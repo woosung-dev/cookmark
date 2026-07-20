@@ -97,6 +97,30 @@ class LlmFailure implements Exception {
       'LlmFailure(${kind.name}${detail == null ? '' : ': $detail'})';
 }
 
+/// 응답 해석에서 나온 **어떤** 실패든 [LlmFailure]로 정규화한다 — 구현이 공통으로 쓰는 계약 강제 장치.
+///
+/// 왜 필요한가 — 200인데 모양이 다른 본문(Map이 아님·`usage` 없음·항목 모양이 다름)은 JSON 파싱을
+/// 통과하므로 `FormatException`이 아니라 **`TypeError`** 를 낳는다. `TypeError`는 `Error`이지
+/// `Exception`이 아니라서 `on FormatException`도 `on Exception`도, 컨트롤러의 `on LlmFailure`도
+/// 못 잡는다. 그러면 컨트롤러가 phase를 실패로 넘기지 못하고 **화면이 로딩에 영구 고착**한다
+/// (폐기된 arm #25를 죽인 결함이 랜딩된 #26에 그대로 살아 있었다 — #142).
+///
+/// 예외 유형을 열거하지 않는 것이 핵심이다. `on TypeError`만 잡으면 응답 모양이 조금 달라질 때
+/// `NoSuchMethodError`·`RangeError`가 대신 나와 고착이 그대로 돌아온다 — 두더지잡기다(#123 교훈:
+/// "결정적 경로는 광범위 except로 최종단을 보장한다"). **정규화되지 않은 실패가 게이트웨이 밖으로
+/// 새지 않는 것이 이 경계의 계약이고**, 이 함수가 그 계약의 유일한 강제 지점이다.
+Future<T> normalizeLlmFailures<T>(Future<T> Function() interpret) async {
+  try {
+    return await interpret();
+  } on LlmFailure {
+    // empty·lowQuality는 이미 정규화된 도메인 실패다 — error로 뭉개면 실패 카드 문구가 갈린다.
+    rethrow;
+  } catch (e) {
+    // bare catch는 Error까지 잡는다 — on Exception이 못 잡는 그 차이가 결함의 전부였다.
+    throw LlmFailure(LlmFailureKind.error, '응답 형식 불일치: $e');
+  }
+}
+
 /// 레시피 제목(또는 URL 내용)에서 재료를 추론한 결과.
 @immutable
 class ExtractionResult {

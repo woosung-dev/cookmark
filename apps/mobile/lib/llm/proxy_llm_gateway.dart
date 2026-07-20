@@ -22,7 +22,9 @@ class ProxyLlmGateway implements LlmGateway {
   final http.Client _client;
 
   @override
-  Future<RecognitionResult> recognize(Uint8List jpegBytes) async {
+  Future<RecognitionResult> recognize(
+    Uint8List jpegBytes,
+  ) => normalizeLlmFailures(() async {
     final body = await _post('/api/recognize', {
       'imageBase64': base64Encode(jpegBytes),
     });
@@ -42,36 +44,36 @@ class ProxyLlmGateway implements LlmGateway {
       ingredients: ingredients,
       usage: LlmUsage.fromJson((body['usage']! as Map).cast<String, Object?>()),
     );
-  }
+  });
 
   /// [url]은 무시한다 — 파일럿 프록시는 제목 기반 그대로다(#123, 행동 0 변화).
   @override
-  Future<ExtractionResult> extractIngredients(
-    String title, {
-    String? url,
-  }) async {
-    final body = await _post('/api/extract', {'title': title});
+  Future<ExtractionResult> extractIngredients(String title, {String? url}) =>
+      normalizeLlmFailures(() async {
+        final body = await _post('/api/extract', {'title': title});
 
-    final raw = body['ingredients'] as List<Object?>? ?? const [];
-    final ingredients = <String>[
-      for (final item in raw)
-        if ((item as String?)?.trim() case final name? when name.isNotEmpty)
-          name,
-    ];
+        final raw = body['ingredients'] as List<Object?>? ?? const [];
+        final ingredients = <String>[
+          for (final item in raw)
+            if ((item as String?)?.trim() case final name? when name.isNotEmpty)
+              name,
+        ];
 
-    if (ingredients.isEmpty) throw const LlmFailure(LlmFailureKind.empty);
+        if (ingredients.isEmpty) throw const LlmFailure(LlmFailureKind.empty);
 
-    return ExtractionResult(
-      ingredients: ingredients,
-      usage: LlmUsage.fromJson((body['usage']! as Map).cast<String, Object?>()),
-    );
-  }
+        return ExtractionResult(
+          ingredients: ingredients,
+          usage: LlmUsage.fromJson(
+            (body['usage']! as Map).cast<String, Object?>(),
+          ),
+        );
+      });
 
   @override
   Future<MatchResult> match({
     required List<String> ingredients,
     required List<Recipe> recipes,
-  }) async {
+  }) => normalizeLlmFailures(() async {
     final body = await _post('/api/match', {
       'ingredients': ingredients,
       'recipes': [
@@ -92,7 +94,7 @@ class ProxyLlmGateway implements LlmGateway {
       suggestions: suggestions,
       usage: LlmUsage.fromJson((body['usage']! as Map).cast<String, Object?>()),
     );
-  }
+  });
 
   /// 메뉴명·출처가 없으면 카드로 세울 수 없다 — 버린다.
   static Suggestion? _parseSuggestion(
