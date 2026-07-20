@@ -156,15 +156,9 @@ void main() {
     LlmGateway? gateway,
     bool skipOnboarding = true,
     String userAgent = 'Mozilla/5.0 Chrome/120.0.0.0 Mobile Safari/537.36',
-    bool debug = false,
   }) async {
     final llm = gateway ?? FakeLlmGateway();
-    final controller = MainController(
-      llm,
-      storage,
-      userAgent: () => userAgent,
-      debugEnabled: () => debug,
-    );
+    final controller = MainController(llm, storage, userAgent: () => userAgent);
     await tester.pumpWidget(
       CookmarkApp(
         controller: controller,
@@ -182,6 +176,25 @@ void main() {
       await tester.tap(skip);
       await tester.pumpAndSettle();
     }
+  }
+
+  /// 파운더가 실기기에서 하는 그대로 — 앱바 타이틀을 길게 누른다(#143).
+  ///
+  /// 주입 훅이 없으므로 테스트도 이 경로로만 푸터를 연다. "테스트는 통과하는데
+  /// 실기기에서는 안 열린다"가 구조적으로 불가능해진다.
+  Future<void> openDebugFooter(WidgetTester tester) async {
+    await tester.longPress(find.byKey(const Key('app-title')));
+    await tester.pumpAndSettle();
+  }
+
+  /// 앱을 껐다 켠 것과 같게 만든다 — 트리를 완전히 내리고 새 컨트롤러로 다시 띄운다.
+  ///
+  /// 같은 `CookmarkApp`을 곧바로 다시 pump하면 엘리먼트가 재사용돼 위에 쌓인 라우트가
+  /// 남고, 그 아래 메인 페이지는 offstage라 finder에 안 잡힌다. 재시작에 기대는
+  /// 단언(세션 한정 푸터·초기화 리허설)은 전부 이 헬퍼를 지나야 한다.
+  Future<void> restartApp(WidgetTester tester) async {
+    await tester.pumpWidget(const SizedBox.shrink());
+    await pumpApp(tester);
   }
 
   /// 스크롤 안의 위젯은 뷰포트 밖이면 탭이 안 먹는다 — 올린 뒤 누른다.
@@ -1062,9 +1075,14 @@ void main() {
     expect(error.data['kind'], 'timeout');
   });
 
-  testWidgets('측정 푸터는 debug 파라미터가 있을 때만 존재한다 (#22, ADR-0004)', (tester) async {
-    await pumpApp(tester, debug: true);
+  testWidgets('측정 푸터는 앱바 타이틀 롱프레스로만 열린다 (#143, ADR-0004)', (tester) async {
+    await pumpApp(tester);
     await uploadAndWait(tester);
+
+    // 열기 전에는 트리에 없다 — 제스처를 모르는 배우자에게는 도달 경로가 없다.
+    expect(find.byKey(const Key('debug-footer')), findsNothing);
+
+    await openDebugFooter(tester);
 
     final footer = find.byKey(const Key('debug-footer'));
     await tester.ensureVisible(footer);
@@ -1074,9 +1092,13 @@ void main() {
     expect(find.textContaining('인식'), findsWidgets);
     // 파운더는 수동 수정 수를 본다 — 여기서만.
     expect(find.textContaining('수동 수정'), findsOneWidget);
+
+    // 같은 제스처로 도로 닫는다 — 배우자가 다가오면 재시작 말고 이걸 쓴다.
+    await openDebugFooter(tester);
+    expect(find.byKey(const Key('debug-footer')), findsNothing);
   });
 
-  testWidgets('debug가 없으면 측정 푸터가 트리에 없다 — 숨김이 아니라 부재다 (#22)', (tester) async {
+  testWidgets('제스처 전에는 측정 푸터가 트리에 없다 — 숨김이 아니라 부재다 (#143)', (tester) async {
     await pumpApp(tester);
     await uploadAndWait(tester);
 
@@ -1084,6 +1106,19 @@ void main() {
     // 배우자 화면 어디에도 계측이 새지 않는다(ADR-0004).
     expect(find.textContaining('수동 수정'), findsNothing);
     expect(find.textContaining('토큰'), findsNothing);
+  });
+
+  testWidgets('앱을 다시 띄우면 푸터는 도로 숨는다 — 그 세션 한정이다 (#143)', (tester) async {
+    await pumpApp(tester);
+    await openDebugFooter(tester);
+    expect(find.byKey(const Key('debug-footer')), findsOneWidget);
+
+    // [restartApp]은 컨트롤러를 새로 만들지만 [storage]는 그대로 살아 있다 — 그래서
+    // 이 단언의 이빨은 "누군가 열림 여부를 영속층에 저장했는가"에 정확히 걸린다.
+    // 저장하는 순간 배우자 기기에 잔상이 남고 단일맹검(ADR-0004)이 깨진다.
+    await restartApp(tester);
+
+    expect(find.byKey(const Key('debug-footer')), findsNothing);
   });
 
   testWidgets('코어 루프+백업 관통 후 export JSON에 이벤트 12종이 전부 있다 (#22)', (
@@ -1231,9 +1266,7 @@ void main() {
     await storage.clear();
 
     // 절차 ③ 앱을 다시 열고 보관한 JSON을 가져오기에 붙여넣는다.
-    // 재열기 = 이전 트리를 완전히 내리고 새로 pump — 엘리먼트 재사용에 기대지 않는다.
-    await tester.pumpWidget(const SizedBox.shrink());
-    await pumpApp(tester);
+    await restartApp(tester);
     await tester.tap(find.byKey(const Key('recipe-book-link')));
     await tester.pumpAndSettle();
 
@@ -1260,15 +1293,11 @@ void main() {
     expect(events.single.type, AppEventType.backup);
     expect(events.single.data['direction'], 'import');
 
-    // 절차 ④ ?debug 푸터 확인 — 이슈 #41의 "이벤트가 비었는지"는 정확히는
+    // 절차 ④ 측정 푸터 확인 — 이슈 #41의 "이벤트가 비었는지"는 정확히는
     // "이벤트 1"이다. 가져오기 자체가 backup/import 이벤트 1건을 남기기 때문이고,
     // 지표를 오염시키는 관통 이벤트·수동 수정은 0이어야 한다.
-    //
-    // 트리를 먼저 완전히 내린다 — 같은 CookmarkApp을 다시 pump하면 엘리먼트가
-    // 재사용돼 위에 쌓인 레시피 북 라우트가 남고, 그 아래 메인 페이지(푸터)는
-    // offstage라 finder에 안 잡힌다. 주소에 ?debug를 붙여 새로 여는 동작과도 같다.
-    await tester.pumpWidget(const SizedBox.shrink());
-    await pumpApp(tester, debug: true);
+    await restartApp(tester);
+    await openDebugFooter(tester);
     final footer = find.byKey(const Key('debug-footer'));
     await tester.ensureVisible(footer);
     await tester.pumpAndSettle();

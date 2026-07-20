@@ -102,7 +102,6 @@ void main() {
       llm,
       storage,
       userAgent: () => 'Mozilla/5.0 Chrome/120.0.0.0 Mobile Safari/537.36',
-      debugEnabled: () => false,
     );
     final book = RecipeBookController(llm, storage, server: server);
     // 부팅 킥 — 기다리지 않는다. 지연·실패는 화면 상태(스켈레톤·에러 카드)로 가시화된다.

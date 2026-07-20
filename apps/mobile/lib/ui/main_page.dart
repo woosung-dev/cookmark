@@ -153,7 +153,17 @@ class _MainPageState extends State<MainPage> {
   Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(
-        title: const Text('냉파'),
+        // 파운더 전용 측정 푸터의 유일한 트리거(#143, ADR-0004). 배우자에게는 아무
+        // 표식이 없어 도달 경로가 없고, 앱을 다시 띄우면 도로 숨는다.
+        //
+        // excludeFromSemantics — 안 끄면 접근성 트리에 longPress 액션이 공표되어
+        // 스크린 리더가 "여기 뭔가 있다"고 읽는다. 시각적 무표식만으로는 맹검이 안 된다.
+        title: GestureDetector(
+          key: const Key('app-title'),
+          excludeFromSemantics: true,
+          onLongPress: _controller.toggleDebugFooter,
+          child: const Text('냉파'),
+        ),
         actions: [
           // 헤더 '둘러보기' 링크도 레시피 북 탭으로 전환한다(하단 탭 바와 병행, ADR-0007).
           TextButton(
@@ -309,7 +319,7 @@ class _MainPageState extends State<MainPage> {
         _ => const SizedBox.shrink(),
       },
 
-      // debug 파라미터가 없으면 이 위젯은 트리에 존재하지 않는다(ADR-0004).
+      // 제스처로 열기 전에는 이 위젯이 트리에 존재하지 않는다(ADR-0004).
       if (controller.showsDebugFooter)
         DebugFooter(metrics: controller.debugMetrics),
     ];

@@ -1,29 +1,33 @@
-# #142 LLM 경계 오형식 200 하드닝 — 체크리스트
+# #143 계측 트리거 네이티브 등가물 — 체크리스트
 
-티켓 정본은 [#142](https://github.com/woosung-dev/cookmark/issues/142), 상류는 스펙 [#140](https://github.com/woosung-dev/cookmark/issues/140)(지도 [#129](https://github.com/woosung-dev/cookmark/issues/129) · 완화 근거 [#133](https://github.com/woosung-dev/cookmark/issues/133)). 결정 로그는 context-notes.md.
+티켓 정본은 [#143](https://github.com/woosung-dev/cookmark/issues/143), 상류는 스펙 [#140](https://github.com/woosung-dev/cookmark/issues/140)(지도 [#129](https://github.com/woosung-dev/cookmark/issues/129) · 결정 [#136](https://github.com/woosung-dev/cookmark/issues/136) · 단일맹검 ADR-0004). 결정 로그는 context-notes.md.
 
-목표 한 줄 — **프록시가 오형식 200을 줘도 사용자가 영원한 로딩에 갇히지 않는다.**
+목표 한 줄 — **파운더가 네이티브에서 측정 수치를 볼 수 있고, 배우자에게는 잔상조차 남지 않는다.**
 
 ## 구현
 
-- [x] 작업 문서(checklist·context-notes) — #142로 갱신
-- [x] `lib/llm/llm_gateway.dart` — `normalizeLlmFailures` 추가(경계 계약의 강제 지점, 광범위 catch)
-- [x] `lib/llm/proxy_llm_gateway.dart` — recognize·extractIngredients·match 3개 전부를 감싼다
-- [x] `lib/llm/api_v1_llm_gateway.dart` — `on TypeError` 열거 4곳을 같은 헬퍼로 치환(두더지잡기 제거)
-- [x] `test/architecture/llm_gateway_contract_test.dart` — 계약 트립와이어(리뷰 반영)
-- [x] `main_controller.dart` 무변경 — #143과 세션이 겹치지 않게 (수정은 게이트웨이 안에서 끝난다)
+- [x] 작업 문서(checklist·context-notes) — #143으로 갱신
+- [x] `lib/domain/debug_metrics.dart` — `debugFooterEnabled()`(`Uri.base` 판정) 삭제
+- [x] `lib/ui/main_controller.dart` — `debugEnabled` 주입 훅 삭제, `showsDebugFooter`를 `late final`에서 세션 한정 가변 상태 + `toggleDebugFooter()`로
+- [x] `lib/ui/main_page.dart` — 앱바 타이틀을 `GestureDetector(onLongPress:)`로 감싼다(`Key('app-title')`)
+- [x] `lib/ui/widgets/debug_footer.dart` 무변경 — 여는 방법만 바꾸고 내용은 그대로다
 
 ## AC 검증
 
-- [x] 유닛 — 본문이 Map이 아님 / `usage` 없음 / 항목 모양이 다름 × recognize·extract·match 9종 (`test/llm/proxy_llm_gateway_test.dart`)
-- [x] 유닛 — 정규화되지 않은 실패가 새지 않는다(계약 자체를 고정하는 테스트)
-- [x] E2E — 오형식 200 페이크(실 `ProxyLlmGateway` + `MockClient`)로 코어 루프: 인식 실패 카드 + "다시 시도"가 화면에 보인다
-- [x] E2E — 매칭 단계에서도 같은 오형식 200이 실패 카드로 해소된다(고착 아님)
-- [x] 새 화면 0개 — 기존 `failure-card`·`failure-retry`·`failure-manual` 재사용
+- [x] 롱프레스로 열린다 — E2E `측정 푸터는 앱바 타이틀 롱프레스로만 열린다 (#143, ADR-0004)`
+- [x] 기본 숨김 · 트리 부재 — E2E `제스처 전에는 측정 푸터가 트리에 없다 — 숨김이 아니라 부재다 (#143)` (`?debug` 시절의 부재 단언을 그대로 승계)
+- [x] 그 세션 한정 — E2E `앱을 다시 띄우면 푸터는 도로 숨는다 — 그 세션 한정이다 (#143)` (신규)
+- [x] 푸터 내용 무변경 — 렌더되는 수치·표시 문자열 `'측정 (debug)'` 그대로. `debug_footer.dart`는 첫 줄 헤더 주석만 고쳤다(리뷰 반영, 동작 0)
+- [x] `?debug` 경로 제거 — `apps/**/*.dart`에 `debugFooterEnabled`·`debugEnabled`·`?debug` 잔재 0건
+- [x] E2E가 트리거를 우회하지 않는다 — `pumpApp`의 `debug` 파라미터를 지웠고(양쪽 E2E 파일), 푸터를 여는 경로는 `openDebugFooter()` 헬퍼의 `tester.longPress`뿐이다
+- [x] `?debug` 유닛 테스트 삭제 — `test/domain/debug_metrics_test.dart`의 `debug 쿼리 파라미터 (ADR-0004)` 그룹을 대상 코드와 함께 지웠다(417 → 415)
+- [x] #41 리허설 E2E도 제스처 경로로 이관 — 주입 훅이 없으니 구조적으로 강제된다
 
 ## 마무리
 
-- [x] 인루프 게이트 — `dart format` · `flutter analyze` · `flutter test`
-- [x] E2E — `scripts/e2e.sh integration_test/core_loop_test.dart`
-- [x] `/code-review` 2축(Standards·Spec) → 지적 반영(계약 트립와이어·sweep 확장·매칭 재시도 실증·한국어 종결 콜론)
-- [x] 커밋
+- [x] 인루프 게이트 — `dart format`(0 changed) · `flutter analyze --fatal-infos`(No issues) · `flutter test`(415)
+- [x] E2E — `scripts/e2e.sh` 전량(core_loop · api_cutover) green
+- [x] 레드 선행 확인 — 구현 전 E2E에서 정확히 제스처 의존 3건만 실패
+- [x] `/code-review` 2축(Standards·Spec) → 지적 반영(접근성 semantics 누수 · 헤더 주석 · 닫는 쪽 단언 · `restartApp` 추출 · 세션 테스트 과대주장 제거)
+- [x] 반영 후 게이트 재실행 — `dart format` · `flutter analyze` · `flutter test` · `scripts/e2e.sh` 전량 green
+- [ ] 커밋

@@ -29,10 +29,8 @@ class MainController extends ChangeNotifier {
     this._storage, {
     DateTime Function()? now,
     String Function()? userAgent,
-    bool Function()? debugEnabled,
   }) : _now = now ?? DateTime.now,
-       _userAgent = userAgent ?? currentUserAgent,
-       _debugEnabled = debugEnabled ?? debugFooterEnabled;
+       _userAgent = userAgent ?? currentUserAgent;
 
   final LlmGateway _gateway;
   final Storage _storage;
@@ -43,12 +41,18 @@ class MainController extends ChangeNotifier {
   /// 테스트가 인앱 브라우저를 흉내 낼 수 있게 — 브라우저를 진짜로 띄울 수는 없다.
   final String Function() _userAgent;
 
-  final bool Function() _debugEnabled;
-
-  /// 측정 푸터는 debug 쿼리 파라미터가 있을 때만 존재한다(ADR-0004 단일맹검).
+  /// 측정 푸터는 파운더가 앱바 타이틀을 롱프레스한 세션에만 존재한다(ADR-0004 단일맹검).
   ///
   /// 배우자에게 계측을 노출하면 P2 킬 기준 측정이 왜곡되고, 한 번 공개하면 되돌릴 수 없다.
-  late final bool showsDebugFooter = _debugEnabled();
+  /// 영속하지 않는 것이 계약이다 — 앱을 다시 띄우면 도로 숨어 잔상이 남지 않는다.
+  bool get showsDebugFooter => _showsDebugFooter;
+  bool _showsDebugFooter = false;
+
+  /// 숨은 제스처의 유일한 진입점(#143). 다시 누르면 도로 닫힌다.
+  void toggleDebugFooter() {
+    _showsDebugFooter = !_showsDebugFooter;
+    notifyListeners();
+  }
 
   /// 파운더가 볼 원시값 — 파일럿 중 로그 건전성 일일 확인용.
   DebugMetrics get debugMetrics => debugMetricsFrom(_storage.readEvents());
