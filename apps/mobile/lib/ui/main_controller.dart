@@ -54,6 +54,47 @@ class MainController extends ChangeNotifier {
     notifyListeners();
   }
 
+  /// D0 직전 기록 초기화 — 관통 테스트가 남긴 것을 지운다(#144, 절차 #41).
+  ///
+  /// 계약은 한 문장이다 — **초기화 후의 앱은 레시피만 남은 기기에서 처음 켠 것과 구별되지 않는다.**
+  /// 영속층은 [Storage.clearPilotRecord]가 지우고, 여기서는 그 위에 얹힌 메모리 상태를 되감는다.
+  /// 영속 키만 지우면 화면에는 관통 테스트의 체크리스트·제안이 그대로 남아 리셋이 눈에 보이게 깨진다.
+  ///
+  /// 단 하나의 예외가 [showsDebugFooter]다 — 파운더는 초기화 직후 푸터에서 "이벤트 0"을 확인해야
+  /// 한다. 같이 닫으면 확인하려고 제스처를 다시 해야 하고, 애초에 영속되지 않는 세션 상태라
+  /// 보존 경계와 충돌하지도 않는다.
+  ///
+  /// ⚠️ 루프 상태를 비우는 코드가 [startNewPhoto]와 겹친다. **합치지 않은 건 의도**다 —
+  /// 그쪽은 빈 세션을 도로 쓰고(여긴 키가 없어야 한다) 1회성 문구·온보딩을 안 건드린다.
+  /// 대가로 **새 루프 필드를 추가하면 두 곳 다 비워야 한다.**
+  Future<void> resetPilotRecord() async {
+    await _storage.clearPilotRecord();
+
+    // 날고 있는 인식·매칭 응답을 버린다 — 뒤늦게 돌아와 방금 비운 화면을 덮지 않게.
+    // 세대 가드는 **화면만** 막는다. 이벤트까지 막는 건 아래 _recordEpoch다.
+    _abandonInFlightRecognition();
+    _matchGeneration++;
+    _recordEpoch++;
+
+    _ingredients = [];
+    _photo = null;
+    _lastResizedPhoto = null;
+    _recognizeStartedAt = null;
+    _suggestions = [];
+    _excludedCount = 0;
+    _stale = false;
+    _checklistExpanded = true;
+    _pendingCooked = null;
+    _failure = null;
+    _failureStage = FailureStage.recognition;
+    _showExpectationNote = false;
+    // 영속 플래그를 지웠으므로 온보딩도 갓 부팅 상태로 — 레시피가 3개 미만이면 다시 안내한다.
+    _onboardingSkipped = false;
+    _phase = MainPhase.upload;
+
+    notifyListeners();
+  }
+
   /// 파운더가 볼 원시값 — 파일럿 중 로그 건전성 일일 확인용.
   DebugMetrics get debugMetrics => debugMetricsFrom(_storage.readEvents());
 
@@ -291,10 +332,12 @@ class MainController extends ChangeNotifier {
     final ingredients = [for (final i in matchableIngredients) i.name];
     if (ingredients.isEmpty) return;
     final generation = ++_matchGeneration;
+    final epoch = _recordEpoch;
 
     // 이미 제안이 있는데 다시 부르는 건 "다시 제안"이다 — 낡은 걸 갱신하는 행위(ADR-0001).
     if (_suggestions.isNotEmpty) {
-      await _storage.appendEvent(
+      await _appendUnlessReset(
+        epoch,
         AppEvent.rematch(at: _now(), previousCount: _suggestions.length),
       );
     }
@@ -316,7 +359,9 @@ class MainController extends ChangeNotifier {
 
       // 대체된 호출도 Gemini까지 갔고 토큰을 썼다 — 원가 원장은 호출마다 남긴다(스펙 US 28:
       // "LLM 호출마다 토큰 수와 추정 원가가 이벤트에 부착"). 세대 가드는 화면과 노출만 막는다.
-      await _storage.appendEvent(
+      // 기록 초기화만 예외로 이 append를 건너뛴다(_recordEpoch 참조).
+      await _appendUnlessReset(
+        epoch,
         AppEvent.matchingDone(
           at: _now(),
           latency: _now().difference(startedAt),
@@ -334,7 +379,8 @@ class MainController extends ChangeNotifier {
         for (final i in matchableIngredients) i.name,
       ]);
 
-      await _storage.appendEvent(
+      await _appendUnlessReset(
+        epoch,
         AppEvent.suggestionsShown(
           at: _now(),
           suggestions: selection.shown,
@@ -350,7 +396,8 @@ class MainController extends ChangeNotifier {
     } on LlmFailure catch (e) {
       // 대체된 호출의 뒤늦은 실패 카드가 살아 있는 매칭을 덮지 않는다.
       if (generation != _matchGeneration) return;
-      await _storage.appendEvent(
+      await _appendUnlessReset(
+        epoch,
         AppEvent.errorShown(at: _now(), kind: e.kind.name, stage: 'matching'),
       );
       _failure = e.kind;
@@ -474,10 +521,12 @@ class MainController extends ChangeNotifier {
 
   /// 사진 1장 → 리사이즈 → 인식 → 재료 체크리스트. 코어 루프의 시작이다.
   Future<void> uploadPhoto(Uint8List original) async {
+    final epoch = _recordEpoch;
     final resized = await resizeForRecognition(original);
     _photo = resized.bytes;
     _lastResizedPhoto = resized.bytes;
-    await _storage.appendEvent(
+    await _appendUnlessReset(
+      epoch,
       AppEvent.photoUpload(
         at: _now(),
         bytes: resized.bytes.length,
@@ -509,6 +558,23 @@ class MainController extends ChangeNotifier {
     await _saveSession();
   }
 
+  /// 기록 구간의 세대(#144). [resetPilotRecord]가 올린다.
+  ///
+  /// 원가 원장은 **버려진 호출도** 기록하는 게 원칙이다(스펙 US 28) — 취소하든 재업로드하든
+  /// Gemini까지 갔고 토큰을 썼기 때문이다. 그래서 `appendEvent`는 세대 가드보다 **앞에** 있다.
+  ///
+  /// 초기화만 예외다. 초기화는 그 호출이 속한 **구간 자체를 지운다** — 이미 지워진 구간의
+  /// 이벤트가 응답 지연으로 뒤늦게 되살아나면 파운더가 푸터에서 보는 수는 "이벤트 1"이 되고,
+  /// AC("초기화 후 정상 상태 = 이벤트 0")가 깨진다. 실 인식이 5~10초라 창이 좁지도 않다.
+  /// 손실이 아니다 — 그 이벤트는 초기화가 어차피 지웠을 구간의 것이다.
+  int _recordEpoch = 0;
+
+  /// 시작할 때의 구간이 아직 살아 있을 때만 기록한다 — 초기화된 구간의 이벤트는 버린다.
+  Future<void> _appendUnlessReset(int epoch, AppEvent event) async {
+    if (epoch != _recordEpoch) return;
+    await _storage.appendEvent(event);
+  }
+
   /// 지금 날고 있는 인식 호출을 버린다 — 취소·이탈에 쓴다.
   ///
   /// Future 자체는 못 끊는다(HTTP는 서버까지 갔다). 대신 세대 번호를 올려, 돌아온 응답이
@@ -518,6 +584,7 @@ class MainController extends ChangeNotifier {
 
   Future<void> _recognize(Uint8List jpegBytes) async {
     final generation = ++_recognizeGeneration;
+    final epoch = _recordEpoch;
     _phase = MainPhase.recognizing;
     _failure = null;
     // 지연은 호출별 지역 변수로 잰다 — 필드에 두면 겹친 호출이 덮어써 앞선 응답의 지연이 틀어진다.
@@ -530,7 +597,9 @@ class MainController extends ChangeNotifier {
       final result = await _gateway.recognize(jpegBytes);
       // 버려진 호출도 Gemini까지 갔고 토큰을 썼다 — 원가 원장은 호출마다 남긴다(스펙 US 28:
       // "LLM 호출마다 토큰 수와 추정 원가가 이벤트에 부착"). 세대 가드는 화면만 막는다.
-      await _storage.appendEvent(
+      // 기록 초기화만 예외로 이 append를 건너뛴다(_recordEpoch 참조).
+      await _appendUnlessReset(
+        epoch,
         AppEvent.recognitionDone(
           at: _now(),
           latency: _now().difference(startedAt),
@@ -557,7 +626,8 @@ class MainController extends ChangeNotifier {
     } on LlmFailure catch (e) {
       // 취소하고 넘어간 사용자에게 뒤늦은 에러 카드를 띄우지 않는다.
       if (generation != _recognizeGeneration) return;
-      await _storage.appendEvent(
+      await _appendUnlessReset(
+        epoch,
         AppEvent.errorShown(
           at: _now(),
           kind: e.kind.name,

@@ -170,6 +170,19 @@ ThemeData buildAppTheme() {
       thickness: 1,
       space: 1,
     ),
+    // 확인 다이얼로그(DESIGN.md §7). Material 3 기본값은 elevation 6·radius 28이고
+    // 배경이 `surfaceContainerHigh`인데, ColorScheme에 그 역할을 안 넘겨서 M3 베이스라인의
+    // 라벤더그레이(#ECE6F0)로 떨어진다 — flat·라운드 스케일 잠금·쿨 뉴트럴 셋 다 어긋난다.
+    dialogTheme: const DialogThemeData(
+      backgroundColor: AppColors.surface,
+      surfaceTintColor: Colors.transparent,
+      elevation: 0,
+      titleTextStyle: AppTypography.title,
+      contentTextStyle: AppTypography.body,
+      shape: RoundedRectangleBorder(
+        borderRadius: BorderRadius.all(Radius.circular(Radii.card)),
+      ),
+    ),
     filledButtonTheme: FilledButtonThemeData(
       style: FilledButton.styleFrom(
         backgroundColor: AppColors.action,

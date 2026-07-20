@@ -2,6 +2,7 @@
 import 'package:cookmark/data/storage.dart';
 import 'package:cookmark/domain/app_event.dart';
 import 'package:cookmark/domain/ingredient.dart';
+import 'package:cookmark/domain/recipe.dart';
 import 'package:cookmark/llm/fake_llm_gateway.dart';
 import 'package:cookmark/llm/llm_gateway.dart';
 import 'package:cookmark/ui/main_controller.dart';
@@ -208,6 +209,127 @@ void main() {
       expect(controller.isStale, isFalse);
       expect(controller.checklistExpanded, isTrue);
       expect(controller.pendingCooked, isNull);
+    });
+  });
+
+  group('기록 초기화 — 갓 부팅 상태로 되감는다 (#144)', () {
+    /// 관통 테스트가 남길 법한 것을 전부 만든다 — 이벤트·세션·체크리스트·제안·1회성 문구.
+    Future<MainController> afterThroughputTest() async {
+      final controller = controllerWith(FakeLlmGateway());
+      await controller.uploadPhoto(fridgePhoto());
+      await controller.toggle('대파');
+      await controller.requestSuggestions();
+      return controller;
+    }
+
+    test('메모리 상태가 화면에서 사라진다 — 영속 키만 지우면 리셋이 눈에 보이게 깨진다', () async {
+      final controller = await afterThroughputTest();
+      expect(controller.ingredients, isNotEmpty, reason: '지울 것이 있어야 공허하지 않다');
+      expect(controller.suggestions, isNotEmpty);
+
+      await controller.resetPilotRecord();
+
+      expect(controller.phase, MainPhase.upload);
+      expect(controller.ingredients, isEmpty);
+      expect(controller.suggestions, isEmpty);
+      expect(controller.isStale, isFalse);
+      expect(controller.checklistExpanded, isTrue);
+      expect(controller.pendingCooked, isNull);
+      expect(controller.failure, isNull);
+    });
+
+    test('1회성 문구가 다시 뜬다 — 영속 플래그를 지웠으니 메모리도 같이 되감는다', () async {
+      final controller = await afterThroughputTest();
+      expect(storage.readExpectationNoteSeen(), isTrue);
+
+      await controller.resetPilotRecord();
+      expect(controller.showsExpectationNote, isFalse);
+
+      // 지웠으므로 다음 인식에서 처음처럼 다시 뜬다 — 배우자의 첫 인식이 진짜 첫 인식이 된다.
+      await controller.uploadPhoto(fridgePhoto());
+      expect(controller.showsExpectationNote, isTrue);
+    });
+
+    test('이벤트는 0이고 레시피는 남는다 — 스토리지 경계를 그대로 통과한다', () async {
+      await storage.writeRecipes([
+        const Recipe(
+          url: 'https://youtu.be/abc',
+          title: '김치찌개',
+          ingredients: ['김치'],
+        ),
+      ]);
+      final controller = await afterThroughputTest();
+      expect(storage.readEvents(), isNotEmpty);
+
+      await controller.resetPilotRecord();
+
+      expect(storage.readEvents(), isEmpty);
+      expect(controller.debugMetrics.eventCount, 0);
+      expect(controller.debugMetrics.manualEdits, 0);
+      expect(storage.readRecipes(), hasLength(1));
+      expect(controller.recipeCount, 1);
+    });
+
+    test('푸터는 열린 채로 남는다 — 파운더가 여기서 "이벤트 0"을 확인한다', () async {
+      final controller = await afterThroughputTest();
+      controller.toggleDebugFooter();
+      expect(controller.showsDebugFooter, isTrue);
+
+      await controller.resetPilotRecord();
+
+      // 보존 경계의 유일한 예외다. 같이 닫으면 확인하려고 제스처를 다시 해야 한다.
+      expect(controller.showsDebugFooter, isTrue);
+    });
+
+    test('초기화 자체는 이벤트를 남기지 않는다 — 0이 정상이라는 계약이 깨진다', () async {
+      final controller = await afterThroughputTest();
+      await controller.resetPilotRecord();
+
+      // 웹에서는 재import가 backup/import 1건을 남겨 "이벤트 1"이 정상이었다(#41).
+      // 네이티브에서 초기화가 자기 흔적을 남기면 그 반전이 무의미해진다.
+      expect(storage.readEvents(), isEmpty);
+    });
+
+    test('날고 있던 인식이 초기화 뒤에 돌아와도 이벤트를 남기지 않는다', () async {
+      // 실 Gemini 인식은 5~10초다 — 파운더가 기다리다 초기화하면 그 사이에 응답이 온다.
+      // 원가 원장(US 28)은 버려진 호출도 기록하지만, **초기화는 그 호출이 속한 구간 자체를
+      // 지운다** — 지워진 구간의 이벤트가 뒤늦게 되살아나면 파운더가 보는 수는 "이벤트 1"이다.
+      final gateway = FakeLlmGateway(
+        latency: const Duration(milliseconds: 300),
+      );
+      final controller = controllerWith(gateway);
+
+      final inFlight = controller.uploadPhoto(fridgePhoto());
+      await Future<void>.delayed(const Duration(milliseconds: 50));
+      await controller.resetPilotRecord();
+      await inFlight;
+
+      expect(
+        storage.readEvents(),
+        isEmpty,
+        reason: '초기화 후 돌아온 응답이 이벤트를 남기면 "이벤트 0"이 깨진다',
+      );
+      expect(controller.phase, MainPhase.upload, reason: '화면도 안 덮는다');
+    });
+
+    test('취소·재업로드로 버려진 호출은 여전히 원장에 남는다 — 원가는 실제로 썼다', () async {
+      // 초기화만 예외다. `startNewPhoto`는 구간을 지우지 않으므로 US 28이 그대로 산다 —
+      // 이 테스트가 없으면 위 수정이 원가 원장을 조용히 망가뜨려도 아무도 모른다.
+      final gateway = FakeLlmGateway(
+        latency: const Duration(milliseconds: 300),
+      );
+      final controller = controllerWith(gateway);
+
+      final inFlight = controller.uploadPhoto(fridgePhoto());
+      await Future<void>.delayed(const Duration(milliseconds: 50));
+      await controller.startNewPhoto();
+      await inFlight;
+
+      expect(
+        storage.readEvents().map((e) => e.type),
+        contains(AppEventType.recognitionDone),
+        reason: '토큰을 실제로 썼으므로 원장에는 남아야 한다(US 28)',
+      );
     });
   });
 

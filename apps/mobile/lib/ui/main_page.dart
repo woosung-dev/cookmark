@@ -321,8 +321,42 @@ class _MainPageState extends State<MainPage> {
 
       // 제스처로 열기 전에는 이 위젯이 트리에 존재하지 않는다(ADR-0004).
       if (controller.showsDebugFooter)
-        DebugFooter(metrics: controller.debugMetrics),
+        DebugFooter(
+          metrics: controller.debugMetrics,
+          onReset: _confirmResetPilotRecord,
+        ),
     ];
+  }
+
+  /// 기록 초기화의 확인 1단계(#144). 취소하면 아무것도 지워지지 않는다.
+  ///
+  /// 파일럿 데이터를 지우는 파괴적 동작이 숨은 화면 안의 단일 탭이면 오조작이 곧 데이터 손실이다.
+  /// 되돌릴 수 없으므로 실행취소 토스트(cooked 방식)로는 부족하고, 지우기 **전에** 막아야 한다.
+  ///
+  /// `showDialog`는 오버레이 라우트라 화면 push가 아니다 — ADR-0007의 "화면은 2개"와도,
+  /// navigation_test의 명령형 push 트립와이어(#50)와도 무관하다.
+  Future<void> _confirmResetPilotRecord() async {
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (dialogContext) => AlertDialog(
+        title: const Text('기록을 초기화할까요?'),
+        content: const Text('이벤트 기록과 진행 중인 재료 목록이 지워져요.\n레시피 북은 그대로 남아요.'),
+        actions: [
+          TextButton(
+            key: const Key('reset-cancel'),
+            onPressed: () => Navigator.of(dialogContext).pop(false),
+            child: const Text('취소'),
+          ),
+          TextButton(
+            key: const Key('reset-confirm'),
+            onPressed: () => Navigator.of(dialogContext).pop(true),
+            child: const Text('초기화'),
+          ),
+        ],
+      ),
+    );
+    if (confirmed != true) return;
+    await _controller.resetPilotRecord();
   }
 
   /// 첫 방문이면 업로드 존 자리에 온보딩 카드가 온다 — 별도 화면이 아니다(G1 #8).
