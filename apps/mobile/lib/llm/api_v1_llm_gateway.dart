@@ -28,74 +28,65 @@ class ApiV1LlmGateway implements LlmGateway {
   final String _sessionToken;
   final http.Client _client;
 
+  // 세 호출 모두 normalizeLlmFailures로 감싼다 — 200인데 형식이 다른 본문에서 나는 실패가
+  // 어떤 유형이든(TypeError·NoSuchMethodError·…) LlmFailure로 정규화되어야 화면이 로딩에
+  // 고착하지 않는다(#25 arm을 죽인 결함 계열, #142). 유형 열거는 두더지잡기다.
   @override
-  Future<RecognitionResult> recognize(Uint8List jpegBytes) async {
-    final body = await _post('/api/v1/llm/recognize', {
-      'image_base64': base64Encode(jpegBytes),
-    });
+  Future<RecognitionResult> recognize(Uint8List jpegBytes) =>
+      normalizeLlmFailures(() async {
+        final body = await _post('/api/v1/llm/recognize', {
+          'image_base64': base64Encode(jpegBytes),
+        });
 
-    if (body['low_quality'] == true) {
-      throw const LlmFailure(LlmFailureKind.lowQuality);
-    }
+        if (body['low_quality'] == true) {
+          throw const LlmFailure(LlmFailureKind.lowQuality);
+        }
 
-    // 200인데 형식이 다른 본문의 TypeError(Error라 on Exception도 못 잡는다)가 이탈하면
-    // 화면이 로딩에 고착된다(#25 arm을 죽인 결함 계열) — LlmFailure(error)로 정규화한다.
-    try {
-      final raw = body['ingredients'] as List<Object?>? ?? const [];
-      final ingredients = <Ingredient>[
-        for (final item in raw)
-          ?_parseIngredient((item! as Map).cast<String, Object?>()),
-      ];
-      if (ingredients.isEmpty) throw const LlmFailure(LlmFailureKind.empty);
+        final raw = body['ingredients'] as List<Object?>? ?? const [];
+        final ingredients = <Ingredient>[
+          for (final item in raw)
+            ?_parseIngredient((item! as Map).cast<String, Object?>()),
+        ];
+        if (ingredients.isEmpty) throw const LlmFailure(LlmFailureKind.empty);
 
-      return RecognitionResult(
-        ingredients: ingredients,
-        usage: _usage((body['usage']! as Map).cast<String, Object?>()),
-      );
-    } on TypeError {
-      throw const LlmFailure(LlmFailureKind.error, '응답 형식 불일치');
-    }
-  }
+        return RecognitionResult(
+          ingredients: ingredients,
+          usage: _usage((body['usage']! as Map).cast<String, Object?>()),
+        );
+      });
 
   @override
-  Future<ExtractionResult> extractIngredients(
-    String title, {
-    String? url,
-  }) async {
-    // url이 있으면 동봉한다 — 서버가 URL 내용 기반 추출 사다리를 탄다(#123, 와이어 키는 'url').
-    final body = await _post('/api/v1/llm/extract', {
-      'title': title,
-      'url': ?url,
-    });
+  Future<ExtractionResult> extractIngredients(String title, {String? url}) =>
+      normalizeLlmFailures(() async {
+        // url이 있으면 동봉한다 — 서버가 URL 내용 기반 추출 사다리를 탄다(#123, 와이어 키는 'url').
+        final body = await _post('/api/v1/llm/extract', {
+          'title': title,
+          'url': ?url,
+        });
 
-    // recognize와 같은 방어 — 형식 불일치 TypeError를 LlmFailure(error)로 정규화한다.
-    try {
-      final raw = body['ingredients'] as List<Object?>? ?? const [];
-      final ingredients = <String>[
-        for (final item in raw)
-          if ((item as String?)?.trim() case final name? when name.isNotEmpty)
-            name,
-      ];
-      if (ingredients.isEmpty) throw const LlmFailure(LlmFailureKind.empty);
+        final raw = body['ingredients'] as List<Object?>? ?? const [];
+        final ingredients = <String>[
+          for (final item in raw)
+            if ((item as String?)?.trim() case final name? when name.isNotEmpty)
+              name,
+        ];
+        if (ingredients.isEmpty) throw const LlmFailure(LlmFailureKind.empty);
 
-      // JSON-LD 결정적 추출은 LLM을 안 돌아 usage가 null이다(#123) — 그대로 통과시킨다.
-      final usageRaw = body['usage'];
-      return ExtractionResult(
-        ingredients: ingredients,
-        usage: usageRaw == null
-            ? null
-            : _usage((usageRaw as Map).cast<String, Object?>()),
-      );
-    } on TypeError {
-      throw const LlmFailure(LlmFailureKind.error, '응답 형식 불일치');
-    }
-  }
+        // JSON-LD 결정적 추출은 LLM을 안 돌아 usage가 null이다(#123) — 그대로 통과시킨다.
+        final usageRaw = body['usage'];
+        return ExtractionResult(
+          ingredients: ingredients,
+          usage: usageRaw == null
+              ? null
+              : _usage((usageRaw as Map).cast<String, Object?>()),
+        );
+      });
 
   @override
   Future<MatchResult> match({
     required List<String> ingredients,
     required List<Recipe> recipes,
-  }) async {
+  }) => normalizeLlmFailures(() async {
     final body = await _post('/api/v1/llm/match', {
       'ingredients': ingredients,
       'recipes': [
@@ -104,23 +95,18 @@ class ApiV1LlmGateway implements LlmGateway {
       ],
     });
 
-    // recognize와 같은 방어 — 형식 불일치 TypeError를 LlmFailure(error)로 정규화한다.
-    try {
-      final raw = body['suggestions'] as List<Object?>? ?? const [];
-      final suggestions = <Suggestion>[
-        for (final item in raw)
-          ?_parseSuggestion((item! as Map).cast<String, Object?>(), recipes),
-      ];
-      if (suggestions.isEmpty) throw const LlmFailure(LlmFailureKind.empty);
+    final raw = body['suggestions'] as List<Object?>? ?? const [];
+    final suggestions = <Suggestion>[
+      for (final item in raw)
+        ?_parseSuggestion((item! as Map).cast<String, Object?>(), recipes),
+    ];
+    if (suggestions.isEmpty) throw const LlmFailure(LlmFailureKind.empty);
 
-      return MatchResult(
-        suggestions: suggestions,
-        usage: _usage((body['usage']! as Map).cast<String, Object?>()),
-      );
-    } on TypeError {
-      throw const LlmFailure(LlmFailureKind.error, '응답 형식 불일치');
-    }
-  }
+    return MatchResult(
+      suggestions: suggestions,
+      usage: _usage((body['usage']! as Map).cast<String, Object?>()),
+    );
+  });
 
   /// 서버가 match_score를 실산출하지만 스파이크는 카드 렌더에 쓰지 않는다 — 무시하고 버린다.
   static Suggestion? _parseSuggestion(
@@ -204,10 +190,8 @@ class ApiV1LlmGateway implements LlmGateway {
           .cast<String, Object?>();
     } on FormatException catch (e) {
       throw LlmFailure(LlmFailureKind.error, '응답 파싱 실패: ${e.message}');
-    } on TypeError {
-      // 200인데 본문이 JSON 객체가 아니다([]·문자열·null) — 각 메서드의 정규화보다
-      // 앞에서 터지는 지점이라 여기서도 같은 방어를 한다(#25 계열).
-      throw const LlmFailure(LlmFailureKind.error, '응답 형식 불일치');
     }
+    // 본문이 JSON 객체가 아닐 때(`[]`·문자열)의 캐스트 실패는 호출부의
+    // normalizeLlmFailures가 잡는다 — 유형 열거를 여기 남기면 계약이 두 곳으로 갈린다.
   }
 }

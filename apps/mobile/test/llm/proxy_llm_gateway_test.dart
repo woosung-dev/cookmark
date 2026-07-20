@@ -208,6 +208,165 @@ void main() {
     });
   });
 
+  // 200인데 모양이 다른 응답 — JSON 파싱은 통과하므로 FormatException이 아니라 TypeError가 난다.
+  // TypeError는 Error이지 Exception이 아니라서 컨트롤러의 on LlmFailure를 그냥 지나쳤고,
+  // 화면이 로딩에 영구 고착했다(#25 arm을 죽인 결함이 #26에 살아 있었다 — #142).
+  group('오형식 200 (#142)', () {
+    Matcher throwsNormalizedFailure() => throwsA(
+      isA<LlmFailure>().having((e) => e.kind, 'kind', LlmFailureKind.error),
+    );
+
+    /// 세 호출을 같은 오형식 본문으로 한 번씩 태운다 — 셋 다 같은 공통 경로를 쓰고
+    /// 셋 다 같은 모양의 고착을 만들었다. 하나라도 빠지면 그 단계만 다시 고착한다.
+    void expectAllThreeNormalize(
+      String description,
+      Object recognizeBody, {
+      required Object extractBody,
+      required Object matchBody,
+    }) {
+      test('$description — 인식', () async {
+        await expectLater(
+          gatewayReturning(recognizeBody).recognize(_photo),
+          throwsNormalizedFailure(),
+        );
+      });
+
+      test('$description — 추출', () async {
+        await expectLater(
+          gatewayReturning(extractBody).extractIngredients('김치찌개'),
+          throwsNormalizedFailure(),
+        );
+      });
+
+      test('$description — 매칭', () async {
+        await expectLater(
+          gatewayReturning(matchBody).match(ingredients: ['두부'], recipes: []),
+          throwsNormalizedFailure(),
+        );
+      });
+    }
+
+    expectAllThreeNormalize(
+      '본문이 Map이 아니다',
+      <Object>[],
+      extractBody: <Object>[],
+      matchBody: <Object>[],
+    );
+
+    expectAllThreeNormalize(
+      'usage가 없다',
+      {
+        'ingredients': [
+          {'name': '대파', 'confidence': 'high'},
+        ],
+      },
+      extractBody: {
+        'ingredients': ['김치', '두부'],
+      },
+      matchBody: {
+        'suggestions': [
+          {'menu': '김치찌개', 'source': 'generated', 'reason': '있는 재료로 돼요.'},
+        ],
+      },
+    );
+
+    expectAllThreeNormalize(
+      '항목 모양이 다르다',
+      {
+        'ingredients': ['대파'],
+        'usage': _usage,
+      },
+      extractBody: {
+        'ingredients': [
+          {'name': '김치'},
+        ],
+        'usage': _usage,
+      },
+      matchBody: {
+        'suggestions': ['김치찌개'],
+        'usage': _usage,
+      },
+    );
+
+    // 계약 자체를 고정한다 — 위 세 모양은 오늘 아는 것일 뿐이고, 모델·프록시가 바뀌면
+    // 내일은 다른 모양이 온다. 유형을 열거해 잡으면(on TypeError 등) 두더지잡기가 되므로
+    // "정규화되지 않은 실패가 게이트웨이 밖으로 새지 않는다"를 통째로 검증한다.
+    test('어떤 오형식 본문이든 LlmFailure 밖으로 새지 않는다', () async {
+      const malformed = <Object>[
+        <Object>[],
+        'just a string',
+        42,
+        <String, Object?>{},
+        {'ingredients': 'not-a-list', 'usage': _usage},
+        {'ingredients': null, 'usage': 'not-a-map'},
+        {
+          'ingredients': [
+            {'name': '대파', 'confidence': 'high'},
+          ],
+          'usage': {'promptTokens': 'many'},
+        },
+        {
+          'ingredients': [
+            {'name': '대파', 'confidence': 'high'},
+          ],
+          'usage': <String, Object?>{},
+        },
+        {
+          'ingredients': [null],
+          'usage': _usage,
+        },
+        {'suggestions': 'nope', 'usage': _usage},
+        {
+          'suggestions': [
+            {'menu': '김치찌개', 'source': 'generated', 'missing': 'not-a-list'},
+          ],
+          'usage': _usage,
+        },
+      ];
+
+      for (final body in malformed) {
+        final gateway = gatewayReturning(body);
+        for (final call in <(String, Future<Object?> Function())>[
+          ('recognize', () => gateway.recognize(_photo)),
+          ('extract', () => gateway.extractIngredients('김치찌개')),
+          ('match', () => gateway.match(ingredients: ['두부'], recipes: [])),
+        ]) {
+          await expectLater(
+            call.$2(),
+            throwsA(isA<LlmFailure>()),
+            reason: '${call.$1}이 $body에서 LlmFailure가 아닌 것을 던졌다',
+          );
+        }
+      }
+    });
+
+    test('이미 정규화된 실패는 뭉개지 않는다 — empty가 error로 바뀌지 않는다', () async {
+      final gateway = gatewayReturning({
+        'ingredients': <Object>[],
+        'usage': _usage,
+      });
+      await expectLater(
+        gateway.recognize(_photo),
+        throwsA(
+          isA<LlmFailure>().having((e) => e.kind, 'kind', LlmFailureKind.empty),
+        ),
+      );
+    });
+
+    test('저품질 플래그도 뭉개지 않는다 — lowQuality가 error로 바뀌지 않는다', () async {
+      await expectLater(
+        gatewayReturning({'lowQuality': true}).recognize(_photo),
+        throwsA(
+          isA<LlmFailure>().having(
+            (e) => e.kind,
+            'kind',
+            LlmFailureKind.lowQuality,
+          ),
+        ),
+      );
+    });
+  });
+
   test('confidence 3단 전부가 초기 상태로 반영된다', () async {
     final gateway = gatewayReturning({
       'ingredients': [

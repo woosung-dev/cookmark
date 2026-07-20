@@ -1,31 +1,29 @@
-# #102 api-6 og:image 프록시 — 체크리스트
+# #142 LLM 경계 오형식 200 하드닝 — 체크리스트
 
-티켓 정본은 [#102](https://github.com/woosung-dev/cookmark/issues/102), 상류는 스펙 [#96](https://github.com/woosung-dev/cookmark/issues/96) + ADR-0009 1기 범위 절(그릴링 [#75](https://github.com/woosung-dev/cookmark/issues/75) 이월 2건). 선행 #97(스캐폴드)·#100(인증) 머지 완료. 계획 전문은 세션 플랜 파일, 결정 로그는 context-notes.md.
+티켓 정본은 [#142](https://github.com/woosung-dev/cookmark/issues/142), 상류는 스펙 [#140](https://github.com/woosung-dev/cookmark/issues/140)(지도 [#129](https://github.com/woosung-dev/cookmark/issues/129) · 완화 근거 [#133](https://github.com/woosung-dev/cookmark/issues/133)). 결정 로그는 context-notes.md.
+
+목표 한 줄 — **프록시가 오형식 200을 줘도 사용자가 영원한 로딩에 갇히지 않는다.**
 
 ## 구현
 
-- [x] 작업 문서(checklist·context-notes) — #102로 갱신
-- [x] `apps/api/pyproject.toml` — httpx를 `[project].dependencies`로 이동(dev 그룹 제거) + `uv lock` 재생성
-- [x] `src/ogimage/parser.py` — og:image 추출(HTMLParser, property/name 허용) — 유닛 테스트 선행(TDD)
-- [x] `src/ogimage/guard.py` — SSRF 가드(`is_global` + multicast/reserved 보강 · IPv4-mapped 언랩 · 대괄호 IPv6 · userinfo 거부 · getaddrinfo 전 주소 검사) — 유닛 테스트 선행
-- [x] `src/ogimage/service.py` — 수동 리다이렉트 루프(≤5, hop마다 가드+scheme 재검사) · 스트리밍 1 MiB 상한 · incremental 디코딩 · `asyncio.timeout(10)` 전체 데드라인
-- [x] `src/ogimage/{schemas,exceptions,router}.py` + `main.py` 등록 — GET `/api/v1/og-image?url=`, 401/400 문서화
-- [x] `src/auth/` — `UNAUTHORIZED` 상수를 dependencies.py로 이동(도메인 횡단 import 해소, 계약 무변경)
-- [x] `contracts/openapi.yaml` 재생성 커밋
+- [x] 작업 문서(checklist·context-notes) — #142로 갱신
+- [x] `lib/llm/llm_gateway.dart` — `normalizeLlmFailures` 추가(경계 계약의 강제 지점, 광범위 catch)
+- [x] `lib/llm/proxy_llm_gateway.dart` — recognize·extractIngredients·match 3개 전부를 감싼다
+- [x] `lib/llm/api_v1_llm_gateway.dart` — `on TypeError` 열거 4곳을 같은 헬퍼로 치환(두더지잡기 제거)
+- [x] `test/architecture/llm_gateway_contract_test.dart` — 계약 트립와이어(리뷰 반영)
+- [x] `main_controller.dart` 무변경 — #143과 세션이 겹치지 않게 (수정은 게이트웨이 안에서 끝난다)
 
-## AC 검증 (tests/test_og_image.py)
+## AC 검증
 
-- [x] og:image 있는 페이지 → 이미지 URL 반환 (mock — respx 전용 `pages` fixture)
-- [x] og:image 없음·비HTML·fetch 실패(연결·upstream 5xx) → 200 `{"image_url": null}`, 500 아님
-- [x] 사설 IP·localhost 직접(리터럴 7종 parametrize + 사설 resolve 호스트네임) → 400 + fetch 0건 증거
-- [x] 리다이렉트 경유 사설 대상 → 400
-- [x] 타임아웃 → null · 응답 크기 상한(상한 밖 og:image → null, 상한 안 → 발견)
-- [x] 무세션 → 401 (+ 로그인 상태 쓰레기 URL → 422)
-- [x] 계약 가드 green — 스냅샷 갱신 포함(`export_openapi.py --check`)
+- [x] 유닛 — 본문이 Map이 아님 / `usage` 없음 / 항목 모양이 다름 × recognize·extract·match 9종 (`test/llm/proxy_llm_gateway_test.dart`)
+- [x] 유닛 — 정규화되지 않은 실패가 새지 않는다(계약 자체를 고정하는 테스트)
+- [x] E2E — 오형식 200 페이크(실 `ProxyLlmGateway` + `MockClient`)로 코어 루프: 인식 실패 카드 + "다시 시도"가 화면에 보인다
+- [x] E2E — 매칭 단계에서도 같은 오형식 200이 실패 카드로 해소된다(고착 아님)
+- [x] 새 화면 0개 — 기존 `failure-card`·`failure-retry`·`failure-manual` 재사용
 
 ## 마무리
 
-- [x] 인루프 게이트 — `pytest` · `ruff format --check` · `ruff check` · `mypy src/ scripts/` · 스냅샷 `--check` 전부 green
-- [x] schemathesis 로컬 1회(플레이스홀더 env + uvicorn 8090 — 로컬 8000 상시 점유)
-- [x] `/code-review` 2축(Standards·Spec) → 지적 반영
-- [x] 시맨틱 커밋 → `push worktree-feat-w-102:feat/102-og-image-proxy` → PR → CI green
+- [x] 인루프 게이트 — `dart format` · `flutter analyze` · `flutter test`
+- [x] E2E — `scripts/e2e.sh integration_test/core_loop_test.dart`
+- [x] `/code-review` 2축(Standards·Spec) → 지적 반영(계약 트립와이어·sweep 확장·매칭 재시도 실증·한국어 종결 콜론)
+- [x] 커밋

@@ -490,6 +490,54 @@ void main() {
         failsAsError(),
       );
     });
+
+    // 위 여섯 개는 오늘 아는 모양이다. 계약은 그보다 넓다 — 모델·서버가 바뀌면 내일은 다른
+    // 모양이 온다. 이 경계도 ProxyLlmGateway와 같은 계약을 지는지 통째로 확인한다(#142).
+    test('어떤 오형식 본문이든 LlmFailure 밖으로 새지 않는다 (#142)', () async {
+      const malformed = <Object>[
+        <Object>[],
+        'just a string',
+        42,
+        <String, Object?>{},
+        {'ingredients': 'not-a-list', 'usage': _usage},
+        {'ingredients': null, 'usage': 'not-a-map'},
+        {
+          'ingredients': [
+            {'name': '대파', 'confidence': 'high'},
+          ],
+          'usage': {'prompt_tokens': 'many'},
+        },
+        {
+          'ingredients': [null],
+          'usage': _usage,
+        },
+        {'suggestions': 'nope', 'usage': _usage},
+        {
+          'suggestions': [
+            {'menu': '김치찌개', 'source': 'generated', 'missing': 'not-a-list'},
+          ],
+          'usage': _usage,
+        },
+      ];
+
+      for (final body in malformed) {
+        final gateway = gatewayReturning(body);
+        for (final call in <(String, Future<Object?> Function())>[
+          ('recognize', () => gateway.recognize(_photo)),
+          ('extract', () => gateway.extractIngredients('김치찌개')),
+          (
+            'match',
+            () => gateway.match(ingredients: ['가지'], recipes: const []),
+          ),
+        ]) {
+          await expectLater(
+            call.$2(),
+            throwsA(isA<LlmFailure>()),
+            reason: '${call.$1}이 $body에서 LlmFailure가 아닌 것을 던졌다',
+          );
+        }
+      }
+    });
   });
 }
 
