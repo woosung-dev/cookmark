@@ -2,10 +2,15 @@
     <!-- INTERNET는 flutter create가 debug/profile 매니페스트에만 넣는다. release(파일럿) 빌드는
          여기 없으면 네트워크가 전멸한다 — LLM 프록시 도달 불가. 지도 #129 결정 #131. 삭제 금지. -->
     <uses-permission android:name="android.permission.INTERNET"/>
+    <!-- allowBackup=false — 기본값(true)이면 재설치 때 Android Auto Backup이 클라우드에서 옛 이벤트·
+         레시피를 되살려 D0 기록 초기화를 조용히 무효화한다. 첫 설치에는 안 나타나고 재설치에서만
+         발현한다. n=2 표본에서 오염 1건은 실험 전체를 버린다(ADR-0004 · #141). 삭제 금지.
+         핫픽스 흐름은 다치지 않는다 — 같은 서명 앱 업데이트의 데이터 보존은 이 값과 무관하다. -->
     <application
         android:label="cookmark"
         android:name="${applicationName}"
-        android:icon="@mipmap/ic_launcher">
+        android:icon="@mipmap/ic_launcher"
+        android:allowBackup="false">
         <activity
             android:name=".MainActivity"
             android:exported="true"
