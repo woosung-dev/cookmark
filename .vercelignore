@@ -18,6 +18,19 @@
 /apps/mobile/build/flutter_assets/
 /apps/mobile/build/native_assets/
 /apps/mobile/build/unit_test_assets/
+/apps/mobile/build/integration_test/
+/apps/mobile/build/reports/
+
+# Gradle/Android 빌드 트리 — android/ 랜딩(#141)으로 새로 생긴다. APK는 배포 대상이 아니다.
+# android/build.gradle.kts가 Gradle 빌드 디렉터리를 여기로 옮기고 서브프로젝트마다 형제를 하나씩
+# 만든다(app + Android 플러그인 1개당 1개). 옮긴 건 flutter_tools가 APK를 build/app/outputs/에서만
+# 찾기 때문이라 되돌릴 수 없다(project.dart의 buildDirectory는 하드코딩이다).
+# ⚠️ Android 플러그인을 추가하면 여기 한 줄이 는다 — 배포 전 `ls apps/mobile/build`로 대조한다.
+/apps/mobile/build/app/
+/apps/mobile/build/flutter_plugin_android_lifecycle/
+/apps/mobile/build/image_picker_android/
+/apps/mobile/build/shared_preferences_android/
+/apps/mobile/build/url_launcher_android/
 
 # 소스·테스트·문서 — 배포 대상이 아니다.
 /apps/mobile/lib/
