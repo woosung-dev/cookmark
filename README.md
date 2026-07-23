@@ -24,7 +24,7 @@ docs/         # ADR · 스펙 · 에이전트 규약 · 코딩 스탠다드
 ```bash
 cd apps/mobile
 flutter pub get
-flutter run -d chrome     # Web 빌드가 우선 타깃
+flutter run -d chrome     # Web 빌드 로컬 실행(개발·E2E 편의 — 파일럿 배포 타깃 아님)
 ```
 
-게이트·배포 절차는 `AGENTS.md`의 명령 절을 따른다. 배포는 수동 프리빌드만 — main 자동배포는 차단돼 있다(#57).
+**파일럿 배포 타깃 = 네이티브 Android APK**(ADR-0011이 ADR-0005의 "Web 빌드로 배포"를 역전). 웹 빌드는 개발·E2E용으로 살아 있다(네이티브 관통 증명 전 삭제 금지 — ADR-0011). 게이트·명령은 `AGENTS.md`의 명령 절, APK 빌드·서명·배포 절차는 `docs/pilot/native-apk-runbook.md`를 따른다. (웹 Vercel 자동배포 차단 #57은 웹이 파일럿 배포 경로가 아니게 되어 파일럿과 무관해졌다.)
