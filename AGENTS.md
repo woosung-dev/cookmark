@@ -19,9 +19,9 @@ This file provides guidance to AGENTS Code (AGENTS.ai/code) when working with co
 
 작업 전 항상 관련 상류 문서를 먼저 읽어라 — 스펙 본문만 읽으면 토큰 필드·단어·섹션 구조를 놓친다. 산출물이 ADR과 충돌하면 조용히 덮지 말고 명시적으로 표면화한다(`docs/agents/domain.md`).
 
-## 스택 · 아키텍처 (ADR-0005, docs/coding-standards.md)
+## 스택 · 아키텍처 (ADR-0005 → 배포 타깃은 ADR-0011로 역전, docs/coding-standards.md)
 
-- **Flutter(Dart) 단일 코드베이스**. 우선 타깃 = **Web 빌드**(모바일 브라우저·카톡 URL 공유·설치 0). 후순위 = Android 네이티브(파일럿 후, 같은 코드베이스).
+- **Flutter(Dart) 단일 코드베이스**. **파일럿 배포 타깃 = 네이티브 Android APK**(ADR-0011이 ADR-0005의 "Web 빌드로 배포"를 역전 — 웹 폴백 없음, 두 기기 모두 Android라 APK 직접 전달). **스택은 무변경 — 역전 대상은 배포 타깃이지 Flutter 단일 코드베이스가 아니다.** 웹 빌드는 **아직 살아 있다** — 로컬 개발(`flutter run -d chrome`)·E2E(Web 타깃) 실행 편의다. 남은 웹 코드(`web/`·조건부 임포트·배너)는 결함이나 미청소가 아니라 **의도된 잔존**이다 — 정본 목록·근거·정리 트리거는 ADR-0011 웹 폐기 시퀀싱이 쥔다(여기서 다시 열거하면 갈라진다).
 - **로그인·서버 DB 없음** — 클라이언트 로컬 영속(브라우저 스토리지, `shared_preferences`)이 유일한 영속층.
 - **LLM 프록시(재료 인식·재료 추출·매칭) 3개는 앱과 분리된 서버리스 함수** — API 키는 절대 클라이언트에 두지 않는다.
 
@@ -50,13 +50,16 @@ flutter analyze                 # 린트 (flutter_lints)
 flutter test                    # 순수 로직 유닛(라벨 결정·병합·산식·휴리스틱)
 flutter test test/models/ingredient_test.dart   # 단일 테스트 파일
 flutter test --name '<이름>'    # 이름으로 단일 테스트
-flutter run -d chrome           # Web 빌드 로컬 실행(우선 타깃)
-flutter build web               # 파일럿 배포 산출물
+flutter run -d chrome           # Web 빌드 로컬 실행(개발·E2E 편의 — 파일럿 배포 타깃 아님)
+flutter build web               # Web 산출물(로컬·E2E용, 파일럿 배포 아님)
+# 파일럿 배포 산출물 = 네이티브 릴리스 APK (ADR-0011). 런북 docs/pilot/native-apk-runbook.md.
+#   dart-define(COOKMARK_API_BASE) 누락 시 네트워크가 조용히 죽는다(#134). key.properties 없으면 릴리스만 시끄럽게 실패(#141).
+flutter build apk --release --dart-define=COOKMARK_API_BASE=https://cookmark-woosungdevs-projects.vercel.app
 ```
 
 이 게이트(format·analyze·test + E2E)는 `.github/workflows/mobile.yml`로 매 PR(`apps/mobile/**` paths 필터)·main push(무필터 백스톱)에서도 자동 실행된다(#59·#69).
 
-**E2E가 검증의 정본이고 유닛은 보완이다**(coding-standards). E2E는 `integration_test/`에서 Web 타깃으로 돌리며, LLM 경계에 결정적 페이크를 주입한다. 테스트는 외부 행동만 검증한다 — 화면에 보이는 것과 export JSON에 남는 것. 내부 구현 세부에 비의존.
+**E2E가 검증의 정본이고 유닛은 보완이다**(coding-standards). E2E는 `integration_test/`에서 **아직 Web 타깃으로** 돌리며, LLM 경계에 결정적 페이크를 주입한다 — 파일럿은 네이티브 APK로 배포하지만 CI/E2E의 네이티브 타깃 전환은 미결(파일럿 후 정리 트랙 — 지도 #129가 잔여 fog로 남김, 미착수). 그래서 웹 빌드가 살아 있어야 E2E가 돈다(ADR-0011 웹 폐기 시퀀싱과 정합). 실기기 전용 검증(카메라·실사진·카톡 설치)은 #65 D0 스모크 몫이다. 테스트는 외부 행동만 검증한다 — 화면에 보이는 것과 export JSON에 남는 것. 내부 구현 세부에 비의존.
 
 ## Agent skills
 
