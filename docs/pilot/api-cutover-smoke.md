@@ -2,6 +2,8 @@
 
 컷오버(#121)의 도착선은 배포가 아니라 **로컬 통합 + 스모크 관통**이다 — 앱(컷오버 빌드)이 apps/api FastAPI를 Bearer 세션으로 타고, 실 Gemini까지 한 번 뚫리는 것을 눈으로 확인한다. 이 문서는 그 절차의 정본이다. 실 Gemini 호출은 **~5회(≈$0.005)로 통제**한다 — 체크리스트의 실 호출 항목만 세면 된다.
 
+**여기는 전부 로컬이다**(`localhost` 서버 · 스파이크 Postgres · web 빌드). **배포된 Cloud Run + 실 Neon + 코호트 릴리스 APK**로 하는 관통 스모크는 [`flip-runbook.md`](flip-runbook.md) §3이 정본이다([#169](https://github.com/woosung-dev/cookmark/issues/169)) — 이 문서가 증명하지 못하는 것이 정확히 그 구간이다.
+
 ## 1. env 병합 (가장 흔한 실패 지점)
 
 **가장 흔한 실패 = env 미병합.** Settings 필수 필드(`DATABASE_URL`·`SESSION_SECRET`·`GEMINI_API_KEY`·`COOKMARK_REGISTER_KEY`) 중 하나라도 비면 **seed 단계부터 pydantic `ValidationError`로 죽는다**. 서버가 아니라 시드가 먼저 죽는 게 정상 신호다 — env부터 다시 본다. **IdP 4종은 이 목록에서 빠졌다**([#163](https://github.com/woosung-dev/cookmark/issues/163) Optional 강등) — 아래 §2 heredoc이 아직 export하는 건 무해한 잔존이다.

@@ -68,7 +68,7 @@ cd apps/mobile && flutter build apk --release --dart-define=COOKMARK_API_BASE=ht
 
 **`--dart-define`을 빠뜨리면 앱이 조용히 죽는다.** 웹은 same-origin이라 빈 기본값으로 돌았지만 **네이티브에는 same-origin이 없다** — [#134](https://github.com/woosung-dev/cookmark/issues/134)가 "핵심 함정"으로 기록했다. 상대 경로 요청이 전부 실패하고 화면에는 영원히 도는 시머만 남는다. 정본 도메인은 `cookmark-woosungdevs-projects.vercel.app`이다 — **`cookmark.vercel.app`은 남의 프로젝트다**(Vercel 전역 네임스페이스).
 
-**이 이름은 프록시 전용이다**(#164). `apps/api`를 싣는 빌드는 엔트리(`-t lib/main_api_cutover.dart`)도 변수(`COOKMARK_SERVER_BASE`)도 다르다 — 이 §3 한 줄은 **파일럿(프록시) 빌드 전용**이고, 여기에 `apps/api` 주소를 넣으면 프록시 경로가 404를 낸다. 컷오버 빌드 절차는 [`api-cutover-smoke.md`](api-cutover-smoke.md)가 정본이다.
+**이 이름은 프록시 전용이다**(#164). `apps/api`를 싣는 빌드는 엔트리(`-t lib/main_api_cutover.dart`)도 변수(`COOKMARK_SERVER_BASE`)도 다르다 — 이 §3 한 줄은 **파일럿(프록시) 빌드 전용**이고, 여기에 `apps/api` 주소를 넣으면 프록시 경로가 404를 낸다. 컷오버 빌드의 정본은 둘로 갈린다 — **로컬 web 스모크**는 [`api-cutover-smoke.md`](api-cutover-smoke.md), **코호트 릴리스 APK**는 [`flip-runbook.md`](flip-runbook.md)(#169)다.
 
 `--split-per-abi`는 쓰지 않는다 — 단일 fat APK 하나가 실기기(arm64)와 에뮬레이터를 함께 덮는다. 산출물은 `apps/mobile/$APK`다. 첫 빌드는 R8 내려받기와 NDK 초기화 때문에 5~10분 걸리고 두 번째부터 짧다.
 
