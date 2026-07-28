@@ -58,6 +58,9 @@ flutter build apk --release --dart-define=COOKMARK_API_BASE=https://cookmark-woo
 #   COOKMARK_API_BASE는 프록시 전용 이름이다 — apps/api를 싣는 컷오버·스파이크 엔트리는 COOKMARK_SERVER_BASE를 읽는다(#164).
 #   그 엔트리들은 COOKMARK_REGISTER_KEY도 함께 받는다 — 앱이 부팅 경로에서 익명 기기 등록을 하기 때문이다(#168·ADR-0012).
 #   세션 토큰을 빌드에 박던 COOKMARK_SESSION_TOKEN은 은퇴했다(1빌드=1계정이라 코호트에서 무너진다).
+# 코호트(flip) 배포 산출물 = apps/api를 싣는 릴리스 APK. 런북 docs/pilot/flip-runbook.md (#169).
+#   -t 를 빠뜨리면 프록시 엔트리가, COOKMARK_SERVER_BASE를 빠뜨리면 프록시 폴백이 빌드된다 — 둘 다 빌드는 성공하고 실패만 조용하다.
+flutter build apk --release -t lib/main_api_cutover.dart --dart-define=COOKMARK_SERVER_BASE=<Cloud Run URL> --dart-define=COOKMARK_REGISTER_KEY=<서버 시크릿과 같은 값>
 ```
 
 이 게이트(format·analyze·test + E2E)는 `.github/workflows/mobile.yml`로 매 PR(`apps/mobile/**` paths 필터)·main push(무필터 백스톱)에서도 자동 실행된다(#59·#69).

@@ -242,6 +242,52 @@ curl "$(gcloud run services describe cookmark-api --region="${REGION}" --format=
 
 `main`에 푸시하면 `api.yml`의 gate 통과 후 deploy job이 빌드 → 푸시 → 배포 → 스모크까지 돈다.
 
+## 8. 운영 — 리비전 롤백 (서버 실패의 되돌림)
+
+되돌림 설계 전체가 **"서버 실패는 리비전 롤백으로 공짜"** 에 의존한다([#158](https://github.com/woosung-dev/cookmark/issues/158) · flip 런북 [`docs/pilot/flip-runbook.md`](../docs/pilot/flip-runbook.md) §6). 그 명령이 여기다.
+
+```bash
+# 지금 어떤 리비전이 트래픽을 받고 있나
+gcloud run services describe cookmark-api --region="${REGION}" \
+  --format='table(status.traffic.revisionName, status.traffic.percent, status.traffic.latestRevision)'
+
+# 되돌아갈 후보 — 이미 떠 있는 리비전 목록
+gcloud run revisions list --service=cookmark-api --region="${REGION}" \
+  --format='table(metadata.name, metadata.creationTimestamp, spec.containers[0].image)'
+
+# 트래픽을 옛 리비전으로 100% 넘긴다 (이미지 재빌드 없음 — 그 리비전은 이미 만들어져 있다)
+gcloud run services update-traffic cookmark-api --region="${REGION}" \
+  --to-revisions="<REVISION>=100"
+
+# 확인 — §7의 health와 같은 줄
+curl "$(gcloud run services describe cookmark-api --region="${REGION}" --format='value(status.url)')/api/v1/health"
+# → {"status":"ok"}
+
+# 복구 — 최신 리비전으로 되돌린다
+gcloud run services update-traffic cookmark-api --region="${REGION}" --to-latest
+```
+
+**이게 공짜인 것은 우연이 아니라 설계다.** `api.yml`이 마이그레이션을 Docker entrypoint가 아니라 **배포 전 러너의 `docker run IMAGE alembic upgrade head`** 로 뺐고, 그 사유가 정확히 *"entrypoint는 Cloud Run에서 롤백을 무효화한다(옛 이미지가 새 `alembic_version`을 못 해석해 exit 255, 부팅 불가)"* 였다. uvicorn이 alembic을 부르지 않으므로 **옛 리비전은 그대로 다시 뜬다.**
+
+> ⚠️ **스키마 변경이 얽히면 롤백이 무효화된다.** 파이프라인이 `alembic upgrade head`를 배포 **전에** 돌리므로, 리비전만 되돌리면 **옛 코드 + 새 스키마**가 된다. 옛 이미지가 새 스키마를 해석하지 못하는 변경(컬럼 삭제·타입 변경·enum 변경)이었다면 롤백한 리비전이 부팅하지 못하거나 런타임에 깨진다. **"공짜"는 스키마 변경이 없는 배포에서만 참이다.**
+>
+> flip 시점엔 스키마 변경이 없으므로 게이트엔 **롤백 리허설만** 건다([#170](https://github.com/woosung-dev/cookmark/issues/170) E). 2단계 배포 규약(코드에서 사용 중단 → 다음 배포에서 삭제, `backend.md` §8)은 **실사용자 데이터가 서버에 생긴 뒤**로 넘긴다.
+
+> ⚠️ **옛 리비전은 자기 기동 시점의 시크릿 값을 쓴다.** 시크릿 env는 인스턴스 기동 시 1회 해석된다(§3). 그래서 키를 회전한 뒤에 그 이전 리비전으로 되돌리면 **옛 키로 도는 서버**가 된다 — 등록 키라면 코호트 APK와 값이 어긋나 등록이 통째로 막힌다.
+
+> ⚠️ **롤백은 다음 배포에 자동으로 풀린다.** `api.yml`의 `gcloud run deploy`에 `--no-traffic`이 없으므로 **새 리비전이 100%를 가져간다.** 즉 `main`에 아무 커밋이나 들어가면 핀이 풀린다. 롤백은 "고친 커밋이 들어갈 때까지의 임시 상태"이지 잠금이 아니다.
+
+**리허설 1회가 게이트다** — 배포 → 이전 리비전으로 전환 → health 200 → `--to-latest` 복구. 실행하고 결과를 #170에 남긴다. 검증된 적 없는 믿음 위에 되돌림 경로를 세우지 않는다.
+
+## 9. 킬 스위치 — Vercel 프록시 무력화 (만든 게 아니라 이미 있는 것)
+
+**Vercel env에서 `GEMINI_API_KEY`를 빼면 프록시 함수가 산 채로 500을 낸다**(`GEMINI_API_KEY가 없습니다`). 코드도 호스트도 그대로다. **되돌리기는 값 재주입 = 즉시.** 새로 만들 것이 없어 여기 기록만 한다([#160](https://github.com/woosung-dev/cookmark/issues/160)).
+
+- **기각된 *앱↔백엔드 전환* 킬 스위치와 다른 물건이다**(#158 결정 3). 그건 런타임에 앱이 가리키는 백엔드를 바꾸는 장치라 기각한 런타임 폴백 배선 그 자체였다. 이건 **프록시 한쪽을 무력화**할 뿐이고 앱은 아무것도 모른다.
+- **`apps/api`는 무영향이다.** 같은 키 *값*을 쓰더라도 저장소가 다르다 — 프록시는 Vercel env, `apps/api`는 Secret Manager(`cookmark-gemini-api-key`)다. 한쪽을 지워도 다른 쪽은 안 바뀐다. 다만 **무료 티어 쿼터는 공유**되므로 소진은 양쪽에 함께 온다.
+- **발동하면 파일럿 2대가 즉시 깨진다.** 합류 전까지 그 2대의 코어 루프는 전량 이 함수를 탄다. 그래서 이건 **남용 대응용 최후 수단**이지 일상 운영 도구가 아니다.
+- 프록시 4표면(소스 · 배포된 함수 · Vercel 프로젝트 · 키)을 실제로 은퇴시키는 것은 **합류 단일 사건**이고 [#171](https://github.com/woosung-dev/cookmark/issues/171)이 정본이다. 부활 레시피(삭제 커밋 좌표 + 절차)도 그 티켓이 이 파일에 추가한다.
+
 ## 함정
 
 - **`--port=8000`은 생략 불가.** Cloud Run 기본은 8080이라 빠뜨리면 프로브가 8080을 두드리는데 컨테이너는 8000을 듣고 있어 *"failed to start and listen on the port defined by the PORT environment variable"* 로 죽는다 — 앱을 의심하게 만드는 메시지지만 원인은 플래그다. 이 플래그가 `$PORT=8000`도 함께 세팅해서 컨테이너 고정값과 구조적으로 일치시킨다.
