@@ -19,6 +19,49 @@ paths:
                   type: string
                 type: object
                 title: Response Health Api V1 Health Get
+  /api/v1/auth/device:
+    post:
+      tags:
+      - auth
+      summary: Register Device
+      description: '익명 기기 등록 — 로그인 화면 0, 사용자 탭 0 (#167 · ADR-0012).
+
+
+        응답은 **로그인 콜백과 같은 세션 스키마**를 재사용한다. 세션 쿠키는 붙이지 않는다 — 선언된
+
+        소비자는 네이티브 Bearer 하나뿐이고, 공유 쿠키 jar를 쓰는 소비자에서 계정이 조용히 섞인다.
+
+
+        **expires_at은 참고값이다** — 슬라이딩 갱신(authenticate)이 인증된 요청마다 이 값을 뒤로
+
+        밀므로 발급 시점의 값은 첫 요청 이후 낡는다. 클라이언트는 이 타임스탬프로 타이머를 짜지 말고
+
+        **401을 신호로** 재등록한다(#168).'
+      operationId: register_device_api_v1_auth_device_post
+      parameters:
+      - name: authorization
+        in: header
+        required: false
+        schema:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Authorization
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SessionResponse'
+        '403':
+          description: 등록 키가 없거나 유효하지 않다
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
   /api/v1/auth/{provider}/login:
     get:
       tags:

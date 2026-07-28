@@ -79,6 +79,7 @@ def test_app_imports_without_idp_credentials(tmp_path: Path) -> None:
     env["DATABASE_URL"] = "postgresql+asyncpg://boot-check/placeholder"
     env["SESSION_SECRET"] = "boot-check-session-secret"
     env["GEMINI_API_KEY"] = "boot-check-gemini-key"
+    env["COOKMARK_REGISTER_KEY"] = "boot-check-register-key"
 
     result = subprocess.run(
         [sys.executable, "-c", "import src.main"],

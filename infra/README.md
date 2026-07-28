@@ -17,12 +17,21 @@
 | 0.5 | 리포 하드닝 (private 전환 또는 branch protection+SHA 핀) | 1 (선결) |
 | 1 | Cloud Run 서비스 (`cookmark-api`) + `allUsers` invoker 바인딩 | 1 |
 | 2 | Artifact Registry 저장소 (docker, 서울) | 1 |
-| 3 | Secret Manager 시크릿 (런타임·배포자 SA 둘 다 읽음) | **1** (아래 주 참조) |
+| 3 | Secret Manager 시크릿 (런타임·배포자 SA 둘 다 읽음) | **4** (아래 주 참조) |
 | 4 | 서비스 계정 (배포자 1 · 런타임 1) | 2 |
 | 5 | Workload Identity 풀 1 + OIDC provider 1 | 2 |
 | 6 | GitHub 리포 변수 | 4 |
 
-> **시크릿이 "5개"가 아니라 1개인 이유.** 티켓 #98과 ADR-0009는 1기 비밀 5개(`GEMINI_API_KEY`·`DATABASE_URL`·카카오/구글 client secret·세션 키)를 적었는데, 그건 **1기 전체**의 목록이지 #98 시점의 목록이 아니다. 지금 `src/core/config.py`의 `Settings`가 읽는 비밀은 `DATABASE_URL` **하나뿐**이다. 나머지 4개는 값이 존재하지도 않는다 — 카카오/구글 client secret은 OIDC 앱 등록([#100](https://github.com/woosung-dev/cookmark/issues/100))이 있어야 나오고, 세션 키도 #100, `GEMINI_API_KEY`는 프록시 승계 티켓의 몫이다. **없는 값으로 시크릿을 만들 수는 없고, 만들어봐야 `--set-secrets`가 읽지도 않는 env를 주입할 뿐이다.** 각 티켓이 자기 비밀을 추가할 때 아래 §3을 한 번 더 돌리고 워크플로의 `--set-secrets`에 한 줄 더한다.
+> **시크릿이 "5개"가 아니라 4개인 이유.** 티켓 #98과 ADR-0009는 1기 비밀 5개(`GEMINI_API_KEY`·`DATABASE_URL`·카카오/구글 client secret·세션 키)를 적었다. 그중 **카카오/구글 client secret 둘이 목록에서 빠졌고**([#163](https://github.com/woosung-dev/cookmark/issues/163)이 Optional로 강등 — 없어도 앱이 뜨고 OIDC 라우트만 503), **등록 키 하나가 합류했다**([#167](https://github.com/woosung-dev/cookmark/issues/167) 익명 기기 등록). 지금 `src/core/config.py`의 `Settings`가 **부팅에 요구하는 비밀은 넷**이다.
+>
+> | Secret Manager 이름 | env | 무엇 |
+> | --- | --- | --- |
+> | `cookmark-database-url` | `DATABASE_URL` | Neon pooled 연결 문자열 (§3) |
+> | `cookmark-session-secret` | `SESSION_SECRET` | OAuth state·nonce 서명 키 (#100) |
+> | `cookmark-gemini-api-key` | `GEMINI_API_KEY` | Gemini 키 (#101·#103) — 루트 `.env.local`의 파일럿 키 재사용 |
+> | `cookmark-register-key` | `COOKMARK_REGISTER_KEY` | 익명 기기 등록의 문지기 (#167) — **같은 값을 APK에도 박는다** |
+>
+> **각 티켓이 자기 비밀을 추가할 때** 아래 §3을 한 번 더 돌리고(생성 + 두 SA에 `secretAccessor`) 워크플로의 `--set-secrets`·마이그레이션 `docker run` env·이 표에 한 줄씩 더한다.
 
 ## 0.5 선결 조건 — 리포 하드닝 (배포 방식의 전제)
 
@@ -110,7 +119,7 @@ gcloud iam service-accounts add-iam-policy-binding "${RUNTIME_SA}" \
 
 > **배포자 SA도 `DATABASE_URL`을 읽는다 — 이건 배포 방식(마이그레이션을 러너의 `docker run`으로 실행)의 대가다.** §3에서 배포자 SA에 `secretAccessor`를 붙인다. 마이그레이션이 러너에서 도므로 자격증명이 러너 env에 실체화되는데, **이 리포가 public이면 그 러너가 공급망 위험 표면**이 된다. 그래서 §0.5 하드닝이 이 방식의 **선결 조건**이다 — Cloud Run Job(배포 대안) 대신 이 방식을 고른 이유와 그 대가는 `context-notes.md`에 있다.
 
-## 3. Secret Manager — `DATABASE_URL`
+## 3. Secret Manager — `DATABASE_URL` (나머지 셋도 이 절차를 그대로 반복한다)
 
 Neon 콘솔에서 **pooled** 연결 문자열을 받아 `postgresql+asyncpg://` 스킴으로 바꾼다(`asyncpg` 드라이버 + PgBouncer 경유 — `statement_cache_size=0`은 앱 코드가 강제한다).
 
@@ -133,15 +142,21 @@ gcloud secrets add-iam-policy-binding cookmark-database-url \
 
 **비-비밀은 Secret Manager에 넣지 않는다**(§9.1). `CORS_ALLOWED_ORIGINS`는 평문 env고 **1기 배포 값은 빈 목록**이다 — 허용 origin이 로컬 개발 origin뿐이라 배포된 API를 소비하는 웹이 없다(ADR-0009 접속 절). 그래서 워크플로가 아예 설정하지 않고 앱 기본값(빈 목록)에 맡긴다.
 
-> ⚠️ **트립와이어 — #100 인증·#101 LLM이 #98보다 먼저 랜딩해 배포 시크릿이 늘었다.** 이 티켓(#98)이 쓰일 땐 앱이 읽는 비밀이 `DATABASE_URL` 하나였는데, 그 사이 [#100](https://github.com/woosung-dev/cookmark/issues/100)·[#101](https://github.com/woosung-dev/cookmark/issues/101)이 머지돼 서빙 컨테이너가 부팅하려면 **`SESSION_SECRET`·`KAKAO_CLIENT_SECRET`·`GOOGLE_CLIENT_SECRET`·`GEMINI_API_KEY`(비밀 4)** 와 **`KAKAO_CLIENT_ID`·`GOOGLE_CLIENT_ID`(비-비밀 env 2)** 도 필요하다(`src/core/config.py`의 `Settings` 필수 필드 — 없으면 import 시점에 `ValidationError`). **첫 실 배포 전에** 세 가지를 함께 해야 한다.
+> ⚠️ **트립와이어 — 배포 시크릿은 위 표의 넷이고, 워크플로 배선은 [#167](https://github.com/woosung-dev/cookmark/issues/167)이 이미 끝냈다. 남은 것은 파운더의 콘솔 작업뿐이다.**
 >
-> 1. 위 §3 절차를 비밀 4개(`cookmark-session-secret`·`cookmark-kakao-client-secret`·`cookmark-google-client-secret`·`cookmark-gemini-api-key`)에 대해 반복하고 두 SA에 `secretAccessor` 부여. IdP 값은 #100 README의 콘솔 등록에서, Gemini 키는 기존 Vercel 프록시와 같은 값(루트 `.env.local`)에서 나온다.
-> 2. `api.yml` deploy job의 `--set-secrets`에 네 비밀을, 마이그레이션 `docker run` env에 일곱 필드 전부를 추가한다(마이그레이션도 `get_settings()`를 거쳐 전 필드를 검증한다). client id 2개는 비-비밀이므로 `--set-env-vars` 또는 리포 변수로 넣는다.
-> 3. 인벤토리(위 표)의 시크릿 수를 1 → 5로 갱신.
+> 한때 이 자리에는 *"비밀 4개 = 세션 키·카카오/구글 client secret·Gemini 키"* 가 적혀 있었다. **그 목록은 지금 거짓이다** — [#163](https://github.com/woosung-dev/cookmark/issues/163)이 IdP 4필드를 Optional로 강등해 **카카오/구글 자격증명은 부팅을 막지 않고**(호출 시 503, `src/auth/oidc.py`), 대신 #167이 `COOKMARK_REGISTER_KEY`를 필수로 들여왔다. 비-비밀 env였던 `KAKAO_CLIENT_ID`·`GOOGLE_CLIENT_ID`도 마찬가지로 배포에 불필요해졌다.
 >
-> **미룰 수 있는 이유** — deploy job은 리포 변수가 없으면 skip이라 그전엔 발화하지 않는다. 하지만 파운더가 프로비저닝을 마치고 첫 배포를 돌리는 순간 발현하므로, IdP 등록(#100)과 **한 세션에서** 처리하는 게 자연스럽다.
+> **첫 실 배포 전에 파운더가 할 일 — 위 §3 절차를 나머지 세 비밀(`cookmark-session-secret`·`cookmark-gemini-api-key`·`cookmark-register-key`)에 대해 반복한다.** 각각 **두 SA 모두**에 `secretAccessor`를 준다 — 런타임 SA만 주면 서빙은 뜨지만 CI가 마이그레이션 전 조회에서 403으로 죽는다(이미지 push 뒤라 가장 성가신 자리다).
 >
-> `GEMINI_API_KEY`는 [#103](https://github.com/woosung-dev/cookmark/issues/103) 레시피 북(저장 시 재료 추출)도 소비한다 — ADR-0009 "1기 비밀 5개"의 마지막 조각이 이로써 전부 실체화됐다. `GEMINI_MODEL`·단가 2종은 기본값 있는 비-비밀이라 시크릿도 env도 불요 — 바꿀 때만 `--set-env-vars`로 넣는다.
+> - `SESSION_SECRET` — 아무 고엔트로피 난수(`openssl rand -base64 32`). OAuth state·nonce 서명 전용이라 값의 출처가 없다.
+> - `GEMINI_API_KEY` — 기존 Vercel 프록시와 같은 값(루트 `.env.local`).
+> - `COOKMARK_REGISTER_KEY` — 새 난수, **ASCII로 만든다**(`openssl rand -base64 32`). 서버가 헤더를 latin-1로, env를 UTF-8로 읽어 비-ASCII 키는 두 코덱이 갈릴 여지가 있다. **같은 값을 코호트 APK 빌드의 dart-define에도 박는다**(런북은 [#169](https://github.com/woosung-dev/cookmark/issues/169)). 회전은 `versions add` → **새 리비전 배포** → 새 APK 배포가 한 묶음이다.
+>
+> **미룰 수 있는 이유** — deploy job은 리포 변수가 없으면 skip이라 그전엔 발화하지 않는다. 하지만 파운더가 프로비저닝을 마치고 첫 배포를 돌리는 순간 발현한다.
+>
+> ⚠️ **§0.5 하드닝의 근거가 이 변경으로 커졌다.** 마이그레이션이 러너의 `docker run`으로 돌아 이제 **비밀 넷 전부**가 GitHub 러너 env에 실체화된다(마이그레이션도 `get_settings()`를 거쳐 전 필수 필드를 검증한다). §0.5가 비밀 1개 기준으로 쓰였을 때도 선결 조건이었고, 지금은 표면이 넷이다.
+>
+> `GEMINI_MODEL`·단가 2종은 기본값 있는 비-비밀이라 시크릿도 env도 불요 — 바꿀 때만 `--set-env-vars`로 넣는다.
 
 ## 4. Workload Identity Federation — 키 파일 없는 인증
 
@@ -217,7 +232,7 @@ gh variable set GCP_WIF_PROVIDER --repo "${GITHUB_REPO}" \
 
 ```bash
 gcloud run services describe cookmark-api --region="${REGION}" --format='value(status.url)'
-gcloud secrets list --filter="name:cookmark-database-url"
+gcloud secrets list --filter="name:cookmark-"   # 넷 다 있어야 한다 (위 표)
 gcloud iam workload-identity-pools providers describe cookmark \
   --location=global --workload-identity-pool=github --format='value(attributeCondition)'
 

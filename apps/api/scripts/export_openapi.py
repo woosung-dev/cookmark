@@ -29,6 +29,7 @@ def render() -> str:
         "DATABASE_URL": "postgresql+asyncpg://contract-export/placeholder",
         "SESSION_SECRET": "placeholder",
         "GEMINI_API_KEY": "placeholder",
+        "COOKMARK_REGISTER_KEY": "placeholder",
     }.items():
         os.environ.setdefault(key, placeholder)
     from src.main import app

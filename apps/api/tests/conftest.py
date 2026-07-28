@@ -18,6 +18,9 @@ from tests.llm import FakeLLMService
 # 테스트 전용 허용 origin — 앱 코드가 아니라 env로 주입된다 (하드코딩 금지 AC의 검증 데이터)
 ALLOWED_ORIGIN = "http://localhost:5566"
 
+# 익명 기기 등록의 키 (#167) — 테스트 전용 값이고 앱 코드가 아니라 env로 주입된다.
+REGISTER_KEY = "test-register-key-0123456789"
+
 API_ROOT = Path(__file__).resolve().parent.parent
 
 # main.py는 **import 시점에** 허용 목록을 CORS 미들웨어에 바인딩한다 — 그래서 이 값은 어떤 테스트가
@@ -41,6 +44,8 @@ def database_url() -> Iterator[str]:
         os.environ["SESSION_SECRET"] = "test-session-secret-0123456789abcdef"
         # LLM 키는 페이크 seam(dependency_overrides) 뒤라 실제로 쓰이지 않는다 — 부팅 필수 필드일 뿐이다.
         os.environ["GEMINI_API_KEY"] = "test-gemini-key"
+        # 등록 키는 페이크가 없다 — 테스트가 이 값을 그대로 헤더에 실어 진짜 비교를 관통한다 (#167).
+        os.environ["COOKMARK_REGISTER_KEY"] = REGISTER_KEY
 
         from src.auth.oidc import get_oauth
         from src.common.database import get_engine, get_sessionmaker

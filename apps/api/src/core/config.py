@@ -2,7 +2,7 @@
 from functools import lru_cache
 from typing import Annotated
 
-from pydantic import SecretStr, field_validator
+from pydantic import Field, SecretStr, field_validator
 from pydantic_settings import BaseSettings, NoDecode, SettingsConfigDict
 
 
@@ -28,12 +28,33 @@ class Settings(BaseSettings):
     # SessionMiddleware 서명 키 — OAuth state·nonce 운반 전용이고 우리 인증 세션과 무관하다(§9).
     session_secret: SecretStr
 
+    # 익명 기기 등록의 문지기 (#167 · ADR-0012). LLM 라우트의 세션 필수(무세션 401)가 공개 URL의
+    # 비용 표면을 닫고 있었는데 익명 등록이 그 장치를 무효화한다 — 이 키가 다시 닫는다.
+    # **필드명과 env명이 갈리므로 alias로 못박는다** — 같은 값이 APK의 dart-define으로도 살아서
+    # 이름을 앱과 공유해야 한다(`COOKMARK_SERVER_BASE`와 같은 접두사 관례, #164).
+    # 위협 모델은 "URL을 찍어보는 스캐너"이지 "APK를 리버싱하는 공격자"가 아니다 — 그래서 레이트
+    # 리밋도 계정당 쿼터도 없다(ADR-0012). 회전은 등록에만 영향하고 기존 세션은 불변이다.
+    register_key: SecretStr = Field(validation_alias="COOKMARK_REGISTER_KEY")
+
     # LLM 승계 (#101). 모델명은 환경설정 주입(스펙 #96) — 파일럿 중에는 바꾸지 않는다.
     # 단가는 USD per 1M 토큰 — 모델을 바꾸면 단가도 함께 바꿔야 원가 로그가 맞는다(_gemini.mjs 이식).
     gemini_api_key: SecretStr
     gemini_model: str = "gemini-3.1-flash-lite"
     gemini_price_input_per_m: float = 0.25
     gemini_price_output_per_m: float = 1.5
+
+    @field_validator("register_key", mode="after")
+    @classmethod
+    def _reject_blank_register_key(cls, value: SecretStr) -> SecretStr:
+        # **빈 값도 부재다** (#163의 함정, src/auth/oidc.py의 _is_blank와 같은 판정).
+        # `COOKMARK_REGISTER_KEY=`를 주면 pydantic이 ''로 채우는데, 그러면 등록 키 비교가 빈
+        # 문자열끼리 성립해 **등록이 통째로 열린다**. 시크릿 바인딩 실패의 실제 모양이 이것이라
+        # 조용히 열리는 대신 부팅에서 시끄럽게 죽인다.
+        if not value.get_secret_value().strip():
+            raise ValueError(
+                "COOKMARK_REGISTER_KEY가 비어 있다 — 익명 등록이 통째로 열린다"
+            )
+        return value
 
     @field_validator("cors_allowed_origins", mode="before")
     @classmethod

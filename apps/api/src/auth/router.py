@@ -7,11 +7,13 @@ from starlette.responses import RedirectResponse
 
 from src.auth import oidc
 from src.auth.dependencies import (
+    REGISTRATION_REFUSED,
     SESSION_COOKIE,
     UNAUTHORIZED,
     CurrentAccount,
     extract_session_token,
     get_auth_service,
+    require_register_key,
 )
 from src.auth.exceptions import IdentityUnavailable, ProviderNotConfigured
 from src.auth.oidc import Provider
@@ -68,6 +70,31 @@ def _set_session_cookie(response: Response, token: str) -> None:
 def _clear_session_cookie(response: Response) -> None:
     response.delete_cookie(
         SESSION_COOKIE, path="/", httponly=True, secure=True, samesite="lax"
+    )
+
+
+@router.post(
+    "/device",
+    # 라우트 레벨 의존성이라 세션 조립보다 **먼저** 돈다 — "DB를 만지기 전에 거부한다"가 관례가
+    # 아니라 구조가 된다(계약 fuzzing은 자리표시자 DATABASE_URL로 도는 실 서버다).
+    dependencies=[Depends(require_register_key)],
+    responses=REGISTRATION_REFUSED,
+)
+async def register_device(service: Service) -> SessionResponse:
+    """익명 기기 등록 — 로그인 화면 0, 사용자 탭 0 (#167 · ADR-0012).
+
+    응답은 **로그인 콜백과 같은 세션 스키마**를 재사용한다. 세션 쿠키는 붙이지 않는다 — 선언된
+    소비자는 네이티브 Bearer 하나뿐이고, 공유 쿠키 jar를 쓰는 소비자에서 계정이 조용히 섞인다.
+
+    **expires_at은 참고값이다** — 슬라이딩 갱신(authenticate)이 인증된 요청마다 이 값을 뒤로
+    밀므로 발급 시점의 값은 첫 요청 이후 낡는다. 클라이언트는 이 타임스탬프로 타이머를 짜지 말고
+    **401을 신호로** 재등록한다(#168).
+    """
+    issued = await service.register_device()
+    return SessionResponse(
+        token=issued.token,
+        expires_at=issued.expires_at,
+        account=AccountResponse.model_validate(issued.account),
     )
 
 

@@ -1,13 +1,16 @@
 # Settings 순수 로직 유닛 — CORS 콤마 파싱·기본 빈 목록 (backend.md §10 함정 회귀 방지) · IdP 강등 (#163)
+# · 등록 키 (#167)
 import pytest
+from pydantic import ValidationError
 
 from src.core.config import Settings
 
-# 강등 후에도 필수로 남는 필드 (#163: 강등 대상은 IdP 4개뿐이다)
+# 강등 후에도 필수로 남는 필드 (#163: 강등 대상은 IdP 4개뿐이다) + 등록 키 (#167)
 REQUIRED_ENV = {
     "DATABASE_URL": "postgresql+asyncpg://unit-test",
     "SESSION_SECRET": "unit-test-session-secret",
     "GEMINI_API_KEY": "unit-test-gemini-key",
+    "COOKMARK_REGISTER_KEY": "unit-test-register-key",
 }
 
 IDP_ENV = (
@@ -40,6 +43,30 @@ def test_idp_credentials_are_optional() -> None:
     assert settings.kakao_client_secret is None
     assert settings.google_client_id is None
     assert settings.google_client_secret is None
+
+
+@pytest.mark.usefixtures("isolated_env")
+def test_register_key_is_read_from_the_prefixed_env_name() -> None:
+    """AC: 등록 키의 env 이름은 `COOKMARK_REGISTER_KEY`다 — 같은 값이 APK의 dart-define으로도 산다."""
+    settings = Settings(_env_file=None)
+
+    assert settings.register_key.get_secret_value() == "unit-test-register-key"
+
+
+@pytest.mark.usefixtures("isolated_env")
+@pytest.mark.parametrize("blank", ["", "   "])
+def test_blank_register_key_fails_boot(
+    monkeypatch: pytest.MonkeyPatch, blank: str
+) -> None:
+    """AC: 빈 등록 키는 부팅을 막는다 — 조용히 등록이 열리는 것보다 시끄럽게 죽는 편이 낫다.
+
+    시크릿 바인딩 실패의 실제 모양이 빈 문자열이고(#163), 그걸 키로 인정하면 헤더 없는 요청이
+    빈 문자열끼리 매치돼 **아무나 등록**하게 된다.
+    """
+    monkeypatch.setenv("COOKMARK_REGISTER_KEY", blank)
+
+    with pytest.raises(ValidationError):
+        Settings(_env_file=None)
 
 
 @pytest.mark.usefixtures("isolated_env")

@@ -65,6 +65,10 @@ jobs:
           SESSION_SECRET: placeholder
           # LLM·recipes 라우트는 전부 세션 필수(401 선차단)라 fuzzing이 Gemini에 도달하지 않는다 — 자리표시자로 족하다.
           GEMINI_API_KEY: placeholder
+          # 등록 키(#167)는 부팅 필수 필드다 — 없으면 아래 기동 대기가 timeout으로 죽는다.
+          # 값이 남달라야 하는 이유: fuzzing이 우연히 맞히면 POST /auth/device가 자리표시자 DSN의
+          # 죽은 DB를 때려 500이 나고, 그건 라우트가 아니라 이 env의 결함이다.
+          COOKMARK_REGISTER_KEY: schemathesis-placeholder-not-a-real-key
         run: |
           # 출력을 파일로 뺀다 — 백그라운드 서버가 스텝의 stdout을 붙들면 러너가 스텝 종료를 기다린다.
           uv run uvicorn src.main:app --port 8000 > /tmp/uvicorn.log 2>&1 &
@@ -108,7 +112,16 @@ jobs:
       REGION: asia-northeast3 # 서울 — ADR-0009(무료 US 등급 의식적 포기)
       SERVICE: cookmark-api
       AR_REPO: cookmark
-      DB_SECRET: cookmark-database-url # Secret Manager 시크릿 이름 — 상수라 변수로 뽑지 않는다(infra/README §3)
+      # Secret Manager 시크릿 이름 — 상수라 리포 변수로 뽑지 않는다(infra/README §3).
+      # 넷 전부가 **부팅 필수**다(src/core/config.py의 Settings) — 하나만 빠져도 서빙도 마이그레이션도
+      # ValidationError로 죽는다. IdP 4개는 여기 없다: #163이 Optional로 강등했다.
+      DB_SECRET: cookmark-database-url
+      # 이 하나만 `_NAME`이 붙는다 — 아래 마이그레이션 스텝이 **값**을 SESSION_SECRET으로 넣기 때문이다.
+      # 같은 이름을 쓰면 job env(이름)와 step env(값)가 겹쳐 --set-secrets가 시크릿 이름 자리에
+      # 시크릿 값을 흘린다. 통일해 보이려고 고치지 말 것.
+      SESSION_SECRET_NAME: cookmark-session-secret
+      GEMINI_SECRET: cookmark-gemini-api-key
+      REGISTER_SECRET: cookmark-register-key # 익명 기기 등록의 문지기 (#167)
     steps:
       - uses: actions/checkout@v4
 
@@ -147,18 +160,33 @@ jobs:
       #   - 프로덕션과 바이트 동일한 이미지다(Dockerfile은 CMD라 인자 override로 alembic이 그대로 돈다 — 실측).
       #   - 플랫폼 결합이 얕다(이미지·GitHub Actions·Docker는 AWS 이동 시 상수, 시크릿 조회 스텝만 교체).
       # docker run --rm은 컨테이너 종료 코드를 전파하므로 마이그레이션 실패가 배포 스텝을 막는다(실측: rc=255 전파).
-      - name: DB URL 조회 (WIF — Secret Manager에서 직접, GitHub Secret 경유 안 함)
-        id: dbsecret
+      # 마이그레이션도 get_settings()를 거쳐 **전 필수 필드를 검증**하므로(alembic/env.py → common/database.py)
+      # DATABASE_URL만으로는 alembic이 뜨지도 않는다 — 그래서 서빙과 같은 넷을 여기서도 조회한다.
+      - name: 배포 시크릿 조회 (WIF — Secret Manager에서 직접, GitHub Secret 경유 안 함)
+        id: secrets
         uses: google-github-actions/get-secretmanager-secrets@v3
         with:
           secrets: |-
             database_url:${{ vars.GCP_PROJECT_ID }}/${{ env.DB_SECRET }}
+            session_secret:${{ vars.GCP_PROJECT_ID }}/${{ env.SESSION_SECRET_NAME }}
+            gemini_api_key:${{ vars.GCP_PROJECT_ID }}/${{ env.GEMINI_SECRET }}
+            register_key:${{ vars.GCP_PROJECT_ID }}/${{ env.REGISTER_SECRET }}
       # ${{ }}를 run 스크립트에 직접 박지 않고 env로 넘긴다 — 직접 박으면 bash 파싱 전에 텍스트로 치환돼
       # 값에 든 따옴표·백틱·$(...)가 인용을 탈출한다(GitHub Actions 스크립트 인젝션 안티패턴). env 경유는 리터럴로 도착한다.
+      # `docker run -e NAME`(값 없는 형태)은 러너 env에서 그대로 실어 나른다 — 여기서도 값이 노출되지 않는다.
       - name: DB 마이그레이션 (프로덕션 이미지 그대로)
         env:
-          DATABASE_URL: ${{ steps.dbsecret.outputs.database_url }}
-        run: docker run --rm -e DATABASE_URL "$IMAGE" alembic upgrade head
+          DATABASE_URL: ${{ steps.secrets.outputs.database_url }}
+          SESSION_SECRET: ${{ steps.secrets.outputs.session_secret }}
+          GEMINI_API_KEY: ${{ steps.secrets.outputs.gemini_api_key }}
+          COOKMARK_REGISTER_KEY: ${{ steps.secrets.outputs.register_key }}
+        run: |
+          docker run --rm \
+            -e DATABASE_URL \
+            -e SESSION_SECRET \
+            -e GEMINI_API_KEY \
+            -e COOKMARK_REGISTER_KEY \
+            "$IMAGE" alembic upgrade head
 
       # 서비스·allUsers invoker 바인딩은 파운더가 프로비저닝에서 1회 만든다(infra/README) —
       # 그래서 여기엔 --allow-unauthenticated가 없고, 배포자 SA는 run.admin이 아니라 run.developer로 족하다
@@ -171,6 +199,11 @@ jobs:
       # --set-secrets 는 env 주입이라 앱 코드 변경 0이다(#88). 값은 인스턴스 기동 시점에 1회 해석된다 —
       # 즉 :latest 로 회전해도 도는 인스턴스는 안 바뀐다. 1기엔 회전이 없어 감수하고, 회전이 실요구가 되면
       # 숫자 버전 핀으로 바꿔 회전을 리뷰 가능한 PR로 만든다.
+      #
+      # **등록 키(#167)는 "회전이 없다"의 예외 후보다** — 유출 확인이 ADR-0012의 트리거 중 하나이고
+      # 대응이 곧 회전이다. 다만 회전만으로는 안 끝난다: 새 버전을 add한 뒤 **새 리비전을 배포**해야
+      # 서버가 새 키를 읽고, 코호트에는 그 키를 박은 APK를 다시 뿌려야 한다. 셋을 한 묶음으로 하지
+      # 않으면 옛 키가 계속 먹거나 코호트가 통째로 등록 불가가 된다.
       - name: Cloud Run 배포
         run: |
           gcloud run deploy "$SERVICE" \
@@ -178,7 +211,7 @@ jobs:
             --region "$REGION" \
             --port 8000 \
             --service-account "${{ vars.GCP_RUNTIME_SA }}" \
-            --set-secrets "DATABASE_URL=${DB_SECRET}:latest" \
+            --set-secrets "DATABASE_URL=${DB_SECRET}:latest,SESSION_SECRET=${SESSION_SECRET_NAME}:latest,GEMINI_API_KEY=${GEMINI_SECRET}:latest,COOKMARK_REGISTER_KEY=${REGISTER_SECRET}:latest" \
             --min 0 \
             --max-instances 3 \
             --quiet
