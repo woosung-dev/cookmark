@@ -33,9 +33,12 @@ uv run python scripts/export_openapi.py --check   # 드리프트 검사 (CI 가�
 `schemathesis`는 발행된 계약을 **실 서버**에 물려 구현이 계약을 지키는지 fuzzing한다 — CI 게이트이고, 로컬 재현은 아래처럼 한다. 실 서버인 이유는 v4가 CLI의 인프로세스 ASGI를 제거했고 남은 인프로세스 경로가 sync `TestClient`(§10 금지)이기 때문이다.
 
 ```bash
-uv run uvicorn src.main:app --port 8090 &        # health는 DB 미접촉 — DATABASE_URL은 자리표시자로 족하다
-uv run st run ../../contracts/openapi.yaml --url http://localhost:8090
+# 부팅 필수 env 4종이 있어야 뜬다(아래 설정 절). health는 DB 미접촉이라 DATABASE_URL은 자리표시자로 족하다.
+uv run uvicorn src.main:app --port 8090 &
+uv run st run ../../contracts/openapi.yaml --url http://localhost:8090 --exclude-path-regex 'login$'
 ```
+
+`login`을 제외하는 것은 CI와 같다 — 실 서버로 fuzzing하면 schemathesis가 302를 좇아 외부 IdP로 나간다. `POST /auth/device`는 제외하지 않는다: 등록 키가 DB 접근 **전에** 403으로 막아 자리표시자 DSN에 닿지 않는다.
 
 CI는 `.github/workflows/api.yml`이 매 PR(`apps/api/**` paths 필터)·main push(무필터 백스톱)에서 위 게이트를 강제한다.
 
@@ -50,11 +53,12 @@ CI는 `.github/workflows/api.yml`이 매 PR(`apps/api/**` paths 필터)·main pu
 | `GOOGLE_CLIENT_ID` | **선택**(아래 주). GCP OAuth 클라이언트 ID (`….apps.googleusercontent.com`) |
 | `GOOGLE_CLIENT_SECRET` | **선택**(아래 주). GCP OAuth 클라이언트 시크릿 |
 | `SESSION_SECRET` | OAuth state·nonce 서명 키(SessionMiddleware 전용). 우리 인증 세션과 무관하다 — 그건 DB 세션 테이블이다 |
+| `COOKMARK_REGISTER_KEY` | 익명 기기 등록(`POST /auth/device`)의 문지기 — SecretStr, 필수([#167](https://github.com/woosung-dev/cookmark/issues/167)). **빈 값은 부팅 실패**다(빈 키를 인정하면 등록이 통째로 열린다). 이름에 접두사가 붙는 유일한 변수인데, 같은 값이 APK의 dart-define으로도 살아 앱과 이름을 공유하기 때문이다 |
 | `GEMINI_API_KEY` | Gemini API 키 — SecretStr, 필수(#101·#103). 서버에만 산다 — 클라이언트는 절대 Gemini를 직접 부르지 않는다. 값은 루트 `.env.local`의 파일럿 키 재사용 |
 | `GEMINI_MODEL` | 기본 `gemini-3.1-flash-lite`. 파일럿 중에는 바꾸지 않는다 — 바꾸면 단가도 함께 |
 | `GEMINI_PRICE_INPUT_PER_M` / `GEMINI_PRICE_OUTPUT_PER_M` | USD per 1M 토큰, 기본 0.25 / 1.5. 원가 로그(T1 #6)의 입력이다 |
 
-**IdP 4개는 Optional이다 ([#163](https://github.com/woosung-dev/cookmark/issues/163) · ADR-0012는 [#162](https://github.com/woosung-dev/cookmark/issues/162)가 발행한다).** 값 없이도 앱이 뜬다 — 익명 기기 등록이 "로그인이 코어"라는 전제를 연기했고, 그래서 IdP 콘솔 등록이 배포의 차단자가 아니다. **대가는 사라지지 않고 자리를 옮겼다** — 자격증명 없는 provider의 OIDC 라우트(`/auth/{provider}/login`·`/callback`)를 부르면 **503**이 나고, 누락된 변수 이름이 서버 ERROR 로그에 남는다. 한쪽 provider만 설정해도 다른 쪽은 정상 동작한다. 승격 트리거(둘째 기기 요구 · 재설치 상실 · 코호트 20명 초과 · 공개 배포)가 발화하면 다시 필수로 올린다. 부팅에 여전히 필요한 건 `DATABASE_URL`·`SESSION_SECRET`·`GEMINI_API_KEY` 셋이다.
+**IdP 4개는 Optional이다 ([#163](https://github.com/woosung-dev/cookmark/issues/163) · ADR-0012는 [#162](https://github.com/woosung-dev/cookmark/issues/162)가 발행한다).** 값 없이도 앱이 뜬다 — 익명 기기 등록이 "로그인이 코어"라는 전제를 연기했고, 그래서 IdP 콘솔 등록이 배포의 차단자가 아니다. **대가는 사라지지 않고 자리를 옮겼다** — 자격증명 없는 provider의 OIDC 라우트(`/auth/{provider}/login`·`/callback`)를 부르면 **503**이 나고, 누락된 변수 이름이 서버 ERROR 로그에 남는다. 한쪽 provider만 설정해도 다른 쪽은 정상 동작한다. 승격 트리거(둘째 기기 요구 · 재설치 상실 · 코호트 20명 초과 · 공개 배포)가 발화하면 다시 필수로 올린다. 부팅에 필요한 건 `DATABASE_URL`·`SESSION_SECRET`·`GEMINI_API_KEY`·`COOKMARK_REGISTER_KEY` **넷**이다 — 하나라도 없으면 import 시점에 `ValidationError`이고, 서버뿐 아니라 `alembic`·`scripts/*`도 같이 죽는다(전부 `get_settings()`를 거친다).
 
 로컬 웹 개발과 연결할 땐 클라이언트 포트를 고정하고(`flutter run -d chrome --web-port <포트>`) 그 origin을 `CORS_ALLOWED_ORIGINS`에 넣는다 — 포트가 랜덤이면 허용 목록이 성립하지 않는다 (§10).
 
@@ -62,18 +66,21 @@ CI는 `.github/workflows/api.yml`이 매 PR(`apps/api/**` paths 필터)·main pu
 
 | 라우트 | 행동 |
 | --- | --- |
+| `POST /api/v1/auth/device` | 익명 기기 등록 — `Authorization: Bearer <등록 키>`(본문 없음) → 익명 계정 `(iss="device", sub=<서버 발급 uuid>)` + 세션. 키가 없거나 틀리면 **403**([#167](https://github.com/woosung-dev/cookmark/issues/167)) |
 | `GET /api/v1/auth/{kakao\|google}/login` | IdP 인가 화면으로 302 |
 | `GET /api/v1/auth/{kakao\|google}/callback` | ID 토큰 1회 검증 → 계정 upsert → 세션 발급(쿠키 + JSON) |
 | `GET /api/v1/auth/me` | 현재 계정 — 세션 검증 표면 |
 | `POST /api/v1/auth/logout` | 세션 행 삭제 (멱등) → 204 |
 | `DELETE /api/v1/auth/account` | 탈퇴 — 계정 하드 삭제, 세션은 FK CASCADE → 204 |
 
-세션 토큰은 쿠키(`cookmark_session`, HttpOnly·Secure·SameSite=Lax)와 `Authorization: Bearer` 양쪽으로 받는다 — 저장은 하나, 운반만 플랫폼별이다(§9). 계정은 `(id, iss, sub, created_at)`이 전부다(§12.1).
+세션 토큰은 쿠키(`cookmark_session`, HttpOnly·Secure·SameSite=Lax)와 `Authorization: Bearer` 양쪽으로 받는다 — 저장은 하나, 운반만 플랫폼별이다(§9). 계정은 `(id, iss, sub, created_at)`이 전부다(§12.1). 기기 등록 응답만 **쿠키를 붙이지 않는다** — 선언된 소비자가 네이티브 Bearer 하나뿐이다(ADR-0012).
+
+**세션은 슬라이딩 30일이다** ([#167](https://github.com/woosung-dev/cookmark/issues/167)) — 검증에 성공한 요청마다 `expires_at`이 30일 뒤로 다시 밀린다. 활성 사용자는 실질 무만료이고, 30일+ 비활성 계정은 **도달 불가**가 된다(행은 남는다 — reaper 없음, ADR-0012 §12 예외). 그래서 응답의 `expires_at`은 발급 시점 값일 뿐 **참고값**이다: 클라이언트는 그 타임스탬프로 타이머를 짜지 말고 401을 신호로 재등록한다.
 
 ### 로컬 시드 — 파일럿 세션 토큰 ([#121](https://github.com/woosung-dev/cookmark/issues/121) · CI 밖)
 
 ```bash
-uv run python scripts/seed_sessions.py   # local-seed/pilot-1·pilot-2에 토큰 발급 — Settings 필수 env 7종 필요
+uv run python scripts/seed_sessions.py   # local-seed/pilot-1·pilot-2에 토큰 발급 — Settings 필수 env 4종 필요
 ```
 
 토큰 원문은 **stdout에만** 나온다(DB엔 해시만) — 파일로 남기지 말고 셸 변수로 받아 쓴다. 재실행은 멱등(계정 재사용 + 새 토큰, 구 토큰도 TTL 30일까지 유효). env 병합·전체 스모크 절차는 [`docs/pilot/api-cutover-smoke.md`](../../docs/pilot/api-cutover-smoke.md).
@@ -153,4 +160,4 @@ uv run python scripts/smoke_llm.py --image 사진.jpg  # + 인식 1건 — 총 �
 - **컨테이너** — `Dockerfile`(uv 멀티스테이지 · 내부 8000 고정 · non-root). 로컬 빌드는 반드시 이 디렉토리를 컨텍스트로: `docker build -f Dockerfile .`.
 - **마이그레이션** — entrypoint가 아니라 **배포 전 러너의 `docker run IMAGE alembic upgrade head`**다. §8의 의도("배포 전 자동 실행")는 지키되 괄호 "(Docker entrypoint)"는 따르지 않는다 — Cloud Run에서 entrypoint는 롤백을 무효화한다(옛 이미지가 새 `alembic_version`을 못 해석해 exit 255). 근거·실측·대안 비교는 `context-notes.md`.
 - **프로비저닝**(GCP 프로젝트·시크릿·WIF·리포 하드닝)은 **파운더가 1회** 한다 — 절차는 [`infra/README.md`](../../infra/README.md). 리포 변수 4개가 들어가기 전까지 deploy job은 skip이라 main은 green을 유지한다.
-- ⚠️ **#101 LLM이 먼저 랜딩해 배포 시크릿이 늘었다** — 서빙 컨테이너가 부팅하려면 `SESSION_SECRET`과 `GEMINI_API_KEY`(#101·#103)도 있어야 한다(`Settings` 필수 필드). **IdP 4개는 여기서 빠졌다 — #163이 Optional로 강등해 부팅을 막지 않는다**(위 설정 절). deploy job은 아직 `DATABASE_URL` 하나만 주입하므로, **첫 실 배포 전** `--set-secrets`·마이그레이션 env·`infra/README` 시크릿 인벤토리를 이 둘로 확장해야 한다(파운더 프로비저닝과 한 묶음). 상세는 `infra/README.md` §3 주.
+- **시크릿 넷** — 워크플로가 `DATABASE_URL`·`SESSION_SECRET`·`GEMINI_API_KEY`·`COOKMARK_REGISTER_KEY`를 Secret Manager에서 직접 조회해 **서빙(`--set-secrets`)과 마이그레이션(`docker run -e`) 양쪽에** 주입한다([#167](https://github.com/woosung-dev/cookmark/issues/167)). 마이그레이션도 `get_settings()`를 거쳐 전 필수 필드를 검증하므로 `DATABASE_URL`만으로는 `alembic`이 뜨지 않는다. **IdP 4개는 여기 없다** — #163이 Optional로 강등했다(위 설정 절). **남은 것은 파운더의 콘솔 작업뿐이다** — 시크릿 3개 생성 + 두 SA에 `secretAccessor`, 절차는 `infra/README.md` §3 주.

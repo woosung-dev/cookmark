@@ -4,7 +4,7 @@
 
 ## 1. env 병합 (가장 흔한 실패 지점)
 
-**가장 흔한 실패 = env 미병합.** Settings 필수 필드(`DATABASE_URL`·IdP 4종·`SESSION_SECRET`·`GEMINI_API_KEY`) 중 하나라도 비면 **seed 단계부터 pydantic `ValidationError`로 죽는다**. 서버가 아니라 시드가 먼저 죽는 게 정상 신호다 — env부터 다시 본다.
+**가장 흔한 실패 = env 미병합.** Settings 필수 필드(`DATABASE_URL`·`SESSION_SECRET`·`GEMINI_API_KEY`·`COOKMARK_REGISTER_KEY`) 중 하나라도 비면 **seed 단계부터 pydantic `ValidationError`로 죽는다**. 서버가 아니라 시드가 먼저 죽는 게 정상 신호다 — env부터 다시 본다. **IdP 4종은 이 목록에서 빠졌다**([#163](https://github.com/woosung-dev/cookmark/issues/163) Optional 강등) — 아래 §2 heredoc이 아직 export하는 건 무해한 잔존이다.
 
 ```bash
 cd apps/api
@@ -17,7 +17,7 @@ export CORS_ALLOWED_ORIGINS="http://localhost:8777"   # 컷오버 빌드 서빙 
 
 ## 2. /tmp env 휘발 대비 — 재작성 절차
 
-`/tmp/cookmark_spike_env.sh`는 재부팅에 휘발한다. 없으면 아래로 재작성한다 (IdP 4종·SESSION_SECRET은 더미로 충분 — 이 스모크는 OIDC 로그인을 타지 않는다).
+`/tmp/cookmark_spike_env.sh`는 재부팅에 휘발한다. 없으면 아래로 재작성한다 (IdP 4종·`SESSION_SECRET`·등록 키는 더미로 충분 — 이 스모크는 OIDC 로그인도 기기 등록도 타지 않고, 세션은 아래 §4 시드가 직접 만든다).
 
 ```bash
 cat > /tmp/cookmark_spike_env.sh <<'EOF'
@@ -28,6 +28,7 @@ export KAKAO_CLIENT_SECRET="spike-dummy"
 export GOOGLE_CLIENT_ID="spike-dummy"
 export GOOGLE_CLIENT_SECRET="spike-dummy"
 export SESSION_SECRET="spike-dummy-session-secret-not-real"
+export COOKMARK_REGISTER_KEY="spike-dummy-register-key-not-real"
 EOF
 ```
 

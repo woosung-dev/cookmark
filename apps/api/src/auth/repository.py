@@ -1,7 +1,7 @@
 # auth DB 접근 전담 — AsyncSession의 유일 보유자다. commit은 서비스 요청으로만 (backend.md §3)
 from datetime import datetime
 
-from sqlalchemy import delete, select
+from sqlalchemy import delete, select, update
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlmodel import col
 
@@ -56,6 +56,23 @@ class SessionRepository:
             )
         )
         return result.scalar_one_or_none()
+
+    async def extend_expiry(
+        self, token_hash: str, now: datetime, expires_at: datetime
+    ) -> None:
+        """슬라이딩 갱신 — 제시된 토큰의 행 **하나만** 민다. 다른 기기의 세션은 불변이다.
+
+        만료 조건을 WHERE에 그대로 들고 있는다 — 호출 순서(조회 성공 뒤에만 부른다)에 기대지 않고
+        **문장 하나만 봐도 죽은 세션이 못 되살아난다**가 참이게 하려는 것이다.
+        """
+        await self._session.execute(
+            update(AuthSession)
+            .where(
+                col(AuthSession.token_hash) == token_hash,
+                col(AuthSession.expires_at) > now,
+            )
+            .values(expires_at=expires_at)
+        )
 
     async def delete_by_token_hash(self, token_hash: str) -> None:
         await self._session.execute(
