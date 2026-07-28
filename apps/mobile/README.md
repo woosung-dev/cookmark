@@ -8,6 +8,7 @@ dart format .
 flutter analyze --fatal-infos
 flutter test                    # 유닛·위젯
 bash scripts/e2e.sh             # E2E (검증의 정본) — chromedriver 필요
+CHROMEDRIVER_PORT=4455 bash scripts/e2e.sh   # 병렬 워크트리에서 동시 실행할 때 (기본 4444)
 flutter run -d chrome           # 로컬 실행 (Web 우선 타깃)
 flutter build web               # 배포 산출물 → build/web (vercel.json outputDirectory)
 flutter build apk --release --dart-define=COOKMARK_API_BASE=https://cookmark-woosungdevs-projects.vercel.app   # 파일럿 APK
