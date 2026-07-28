@@ -36,7 +36,7 @@ This file provides guidance to AGENTS Code (AGENTS.ai/code) when working with co
 - **뭉뚱그림 항목**("반찬통"·"소스류" 등)은 구체 재료로 치환하기 전 매칭에 전송하지 않는다(ADR-0002).
 - **수동 수정**(체크리스트 조작 각 1회)은 P2 킬 기준의 계측 단위 — 로그에 유형·경로를 남긴다(ADR-0003).
 
-**현재** `apps/mobile/lib/` 레이아웃(랜딩된 arm — `mobile.md` 3버킷이 **아니다**, 위 부채 참조): `data/`(영속 — `storage.dart`) · `domain/`(ingredient·app_event·suggestion·recipe·backup·vague_heuristic 등) · `llm/`(LLM seam — `llm_gateway.dart` 인터페이스 + `proxy_llm_gateway`·`fake_llm_gateway`) · `ui/`(main_controller·main_page·recipe_book_* + `widgets/`) · `image/`(768px 리사이즈) · `platform/`(인앱 브라우저 판별) · `theme/`.
+**현재** `apps/mobile/lib/` 레이아웃(랜딩된 arm — `mobile.md` 3버킷이 **아니다**, 위 부채 참조): `data/`(영속 — `storage.dart`) · `domain/`(ingredient·app_event·suggestion·recipe·backup·vague_heuristic 등) · `llm/`(LLM seam — `llm_gateway.dart` 인터페이스 + `proxy_llm_gateway`·`fake_llm_gateway`) · `auth/`(기기 세션 seam — `device_session.dart` 인터페이스 + `api_v1_device_session`·`fake_device_session`, #168) · `ui/`(main_controller·main_page·recipe_book_* + `widgets/`) · `image/`(768px 리사이즈) · `platform/`(인앱 브라우저 판별) · `theme/`.
 
 **목표** 레이아웃은 `mobile.md` §1(`features/`·`shared/`·`core/`). 단 단일 스토리지 모듈·단일 LLM seam을 3버킷 어디에 두는지는 **미결**이다 — 둘 다 도메인을 알아서 `core/`의 "도메인을 모르는 인프라" 정의와 어긋난다. 리팩터 트랙([#38](https://github.com/woosung-dev/cookmark/issues/38))의 첫 결정이다.
 
@@ -56,6 +56,8 @@ flutter build web               # Web 산출물(로컬·E2E용, 파일럿 배포
 #   dart-define(COOKMARK_API_BASE) 누락 시 네트워크가 조용히 죽는다(#134). key.properties 없으면 릴리스만 시끄럽게 실패(#141).
 flutter build apk --release --dart-define=COOKMARK_API_BASE=https://cookmark-woosungdevs-projects.vercel.app
 #   COOKMARK_API_BASE는 프록시 전용 이름이다 — apps/api를 싣는 컷오버·스파이크 엔트리는 COOKMARK_SERVER_BASE를 읽는다(#164).
+#   그 엔트리들은 COOKMARK_REGISTER_KEY도 함께 받는다 — 앱이 부팅 경로에서 익명 기기 등록을 하기 때문이다(#168·ADR-0012).
+#   세션 토큰을 빌드에 박던 COOKMARK_SESSION_TOKEN은 은퇴했다(1빌드=1계정이라 코호트에서 무너진다).
 ```
 
 이 게이트(format·analyze·test + E2E)는 `.github/workflows/mobile.yml`로 매 PR(`apps/mobile/**` paths 필터)·main push(무필터 백스톱)에서도 자동 실행된다(#59·#69).

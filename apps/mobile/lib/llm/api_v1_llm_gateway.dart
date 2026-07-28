@@ -1,7 +1,8 @@
 // 운영 컷오버 LLM 경계 — apps/api FastAPI(/api/v1/llm/*)에 Bearer 세션으로 붙는다.
 //
 // ProxyLlmGateway(루트 .mjs 프록시)와 다른 점 세 가지 — (1) 경로가 /api/v1/llm/*, (2) 세션 필수라
-// Authorization: Bearer 를 싣는다, (3) FastAPI 응답이 snake_case(low_quality·prompt_tokens)다.
+// 기기 세션 경계가 준 토큰을 Authorization: Bearer 로 싣는다(#168), (3) FastAPI 응답이
+// snake_case(low_quality·prompt_tokens)다.
 // main_api_cutover.dart 가 조립하는 apps/api 경계다 — 파일럿 프록시 빌드(main.dart)에는 들어가지 않는다.
 import 'dart:async';
 import 'dart:convert';
@@ -9,6 +10,7 @@ import 'dart:typed_data';
 
 import 'package:http/http.dart' as http;
 
+import '../auth/device_session.dart';
 import '../domain/ingredient.dart';
 import '../domain/recipe.dart';
 import '../domain/suggestion.dart';
@@ -20,12 +22,12 @@ const _timeout = Duration(seconds: 30);
 class ApiV1LlmGateway implements LlmGateway {
   ApiV1LlmGateway({
     required this._baseUrl,
-    required this._sessionToken,
+    required this._session,
     http.Client? client,
   }) : _client = client ?? http.Client();
 
   final String _baseUrl;
-  final String _sessionToken;
+  final DeviceSession _session;
   final http.Client _client;
 
   // 세 호출 모두 normalizeLlmFailures로 감싼다 — 200인데 형식이 다른 본문에서 나는 실패가
@@ -165,16 +167,22 @@ class ApiV1LlmGateway implements LlmGateway {
   ) async {
     final http.Response response;
     try {
-      response = await _client
-          .post(
-            Uri.parse('$_baseUrl$path'),
-            headers: {
-              'content-type': 'application/json',
-              'authorization': 'Bearer $_sessionToken',
-            },
-            body: jsonEncode(payload),
-          )
-          .timeout(_timeout);
+      // 토큰을 싣고 401이면 재등록 후 1회 재전송한다(#168) — 401이 여기서 흡수되므로
+      // LlmFailureKind에 unauthorized가 생기지 않는다. 재등록마저 실패하면 아래 error로 접힌다:
+      // 그건 사용자 입력 실패가 아니라 서버 도달 실패이고, #166의 문구 구분이 그대로 맞는다.
+      response = await sendWithDeviceSession(
+        _session,
+        (token) => _client
+            .post(
+              Uri.parse('$_baseUrl$path'),
+              headers: {
+                'content-type': 'application/json',
+                'authorization': 'Bearer $token',
+              },
+              body: jsonEncode(payload),
+            )
+            .timeout(_timeout),
+      );
     } on TimeoutException catch (e) {
       throw LlmFailure(LlmFailureKind.timeout, e.toString());
     } on Exception catch (e) {

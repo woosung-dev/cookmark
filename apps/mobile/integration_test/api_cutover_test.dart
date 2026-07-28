@@ -1,11 +1,14 @@
 // 컷오버(#121) E2E — 서버 레시피 북 미러가 브라우저에서 보이는 것과 export에 남는 것을 검증한다.
 // 실행: scripts/e2e.sh integration_test/api_cutover_test.dart  (chromedriver + flutter drive, core_loop와 동형)
 //
-// 서버는 FakeServerRecipeRepository, LLM은 FakeLlmGateway — 결정적 페이크 2개를 seam에 주입한다.
+// 서버는 FakeServerRecipeRepository, LLM은 FakeLlmGateway, 기기 세션은 FakeDeviceSession —
+// 결정적 페이크 3개를 seam에 주입한다(#168로 2개 → 3개).
 import 'dart:async';
 import 'dart:convert';
 
 import 'package:cookmark/app.dart';
+import 'package:cookmark/auth/api_v1_device_session.dart';
+import 'package:cookmark/auth/fake_device_session.dart';
 import 'package:cookmark/data/server_recipe_repository.dart';
 import 'package:cookmark/data/storage.dart';
 import 'package:cookmark/domain/app_event.dart';
@@ -17,6 +20,8 @@ import 'package:cookmark/ui/main_controller.dart';
 import 'package:cookmark/ui/recipe_book_controller.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:http/http.dart' as http;
+import 'package:http/testing.dart';
 import 'package:image/image.dart' as img;
 import 'package:image_picker/image_picker.dart';
 import 'package:integration_test/integration_test.dart';
@@ -91,9 +96,13 @@ void main() {
   });
 
   /// 컷오버 엔트리(main_api_cutover)와 동형 조립 — 서버 repository 주입 + 부팅 하이드레이트 킥.
+  ///
+  /// [server]가 `ServerRecipeRepository` 타입인 이유(#168) — 대부분의 케이스는 페이크를 꽂지만
+  /// 401 재등록만은 **실 구현 + 가짜 전송**으로 태워야 한다. 401 복구가 전송 초크에 살아서
+  /// 경계 페이크로는 도달할 수 없기 때문이다.
   Future<void> pumpApp(
     WidgetTester tester, {
-    required FakeServerRecipeRepository server,
+    required ServerRecipeRepository server,
     FakeLlmGateway? gateway,
     bool skipOnboarding = true,
   }) async {
@@ -781,6 +790,166 @@ void main() {
       'https://youtu.be/a',
     ]);
     expect(gateway.lastMatchedRecipes!.single.ingredients, ['김치', '돼지고기']);
+  });
+
+  // ⑯·⑰만 서버 레시피 북 자리에 **실 구현 + 가짜 전송**을 꽂는다(#168).
+  // 등록·재등록은 전송 초크에 살아서 경계 페이크로는 도달할 수 없다 — 페이크 repository는
+  // sendWithDeviceSession을 통째로 건너뛴다. 대신 이 둘이 등록 → 하이드레이트 가드 → 미러
+  // 보존 → 코어 루프의 사슬을 실코드로 관통시킨다.
+
+  /// 서버 RecipeResponse 모양 — 실 repository가 이걸 파싱한다.
+  Map<String, Object?> wireRecipe(Recipe r, String id) => {
+    'id': id,
+    'url': r.url,
+    'title': r.title,
+    'ingredients': r.ingredients,
+    'created_at': '2026-07-29T00:00:00Z',
+  };
+
+  http.Response jsonOk(Object body) => http.Response(
+    jsonEncode(body),
+    200,
+    headers: const {'content-type': 'application/json; charset=utf-8'},
+  );
+
+  testWidgets('⑯ 첫 실행에 로그인 화면이 없다 — 등록이 실 보안 저장소를 관통한다 (#168)', (tester) async {
+    // 이 케이스만 기기 세션 경계도 **실 구현**이다. 목적이 둘이라서다 — ① 로그인 화면 0을 찍고
+    // ② **등록 토큰이 Web 타깃의 보안 저장소에 실제로 써지고 다시 읽히는지**를 찍는다. 티켓이
+    // 착수 전에 확인하라고 명시한 리스크가 후자이고, 페이크를 꽂으면 그 경로가 안 돈다.
+    // (삭제만으로는 부족하다 — flutter_secure_storage_web의 delete는 removeItem 한 줄이라
+    //  암복호를 안 탄다. 쓰기·읽기가 WebCrypto를 타는 쪽이다.)
+    final devicePosts = <String?>[];
+    final sentAuth = <String?>[];
+    final client = MockClient((request) async {
+      if (request.url.path == '/api/v1/auth/device') {
+        devicePosts.add(request.headers['authorization']);
+        return jsonOk({
+          'token': 'sess-issued',
+          'expires_at': '2026-08-28T00:00:00Z',
+          'account': {
+            'id': '5b9f1f1e-0000-4000-8000-000000000001',
+            'iss': 'device',
+            'sub': '9b1c0a5e-0000-4000-8000-000000000002',
+            'created_at': '2026-07-29T00:00:00Z',
+          },
+        });
+      }
+      sentAuth.add(request.headers['authorization']);
+      return jsonOk([
+        for (final (i, r) in seedThree.indexed) wireRecipe(r, 'r$i'),
+      ]);
+    });
+    // 갓 설치한 기기 — setUp의 clear()가 토큰까지 지웠다.
+    expect(await storage.readDeviceToken(), isNull);
+
+    final session = ApiV1DeviceSession(
+      baseUrl: 'https://api.test',
+      registerKey: 'e2e-register-key',
+      storage: storage,
+      client: client,
+    );
+    final server = ServerRecipeRepository(
+      baseUrl: 'https://api.test',
+      session: session,
+      client: client,
+    );
+
+    await pumpApp(tester, server: server, skipOnboarding: false);
+
+    // 코어 루프 진입점이 그냥 뜬다 — 앞을 막는 게이트가 없다.
+    await waitForVisible(
+      tester,
+      () => _visible(find.byKey(const Key('upload-photo'))),
+    );
+
+    // 등록이 실제로 일어났고, 등록 키가 실렸고, 발급 토큰이 다음 요청에 붙었다.
+    expect(devicePosts, ['Bearer e2e-register-key']);
+    expect(sentAuth, ['Bearer sess-issued']);
+
+    // ★ 웹 타깃 보안 저장소 왕복 — 쓰기가 살아 있고, 새로 연 스토리지가 그 값을 읽는다.
+    expect(await storage.readDeviceToken(), 'sess-issued');
+    expect(await (await Storage.open()).readDeviceToken(), 'sess-issued');
+
+    // 등록이 일어났다는 사실이 화면에 드러나지 않는다. 로그인·계정 표면이 0이라는 것이
+    // ADR-0012가 사용자에게 약속한 전부다.
+    for (final word in ['로그인', '계정', '세션', '등록', '가입', '로그아웃']) {
+      expect(
+        find.textContaining(word),
+        findsNothing,
+        reason: '"$word"가 화면에 보인다 — 익명 등록은 사용자에게 보이지 않아야 한다',
+      );
+    }
+
+    // 서버 목록이 미러로 내려왔다 = 토큰이 실제로 통했다는 뜻이다.
+    await openRecipeBook(tester);
+    expect(find.text('저장한 레시피 · 3'), findsOneWidget);
+  });
+
+  testWidgets('⑰ 401 → 재등록 — 로컬 레시피가 살아남고 세션 만료 문구가 없다 (#168)', (tester) async {
+    // 30일+ 비활성 뒤의 부팅. 미러엔 레시피가 있고 서버 세션은 죽어 있다.
+    // 여긴 기기 세션 경계를 **페이크**로 꽂는다(스펙이 예고한 세 번째 E2E 페이크) — 재등록이
+    // 몇 번 일어났는지가 이 케이스의 관측 대상이고, 실 등록 왕복은 ⑯이 이미 관통시켰다.
+    await storage.writeRecipes(seedThree);
+    final session = FakeDeviceSession(storedToken: 'tok-dead');
+    final sentAuth = <String?>[];
+    final server = ServerRecipeRepository(
+      baseUrl: 'https://api.test',
+      session: session,
+      client: MockClient((request) async {
+        sentAuth.add(request.headers['authorization']);
+        // 죽은 토큰엔 401, 재등록해 온 토큰엔 **빈 새 계정**의 목록.
+        if (request.headers['authorization'] == 'Bearer tok-dead') {
+          return http.Response(jsonEncode({'detail': 'unauthorized'}), 401);
+        }
+        return jsonOk(const <Object>[]);
+      }),
+    );
+    final gateway = FakeLlmGateway();
+
+    await pumpApp(tester, server: server, gateway: gateway);
+    await waitForVisible(
+      tester,
+      () => _visible(find.byKey(const Key('upload-photo'))),
+    );
+
+    expect(session.registerCount, 1, reason: '재등록이 정확히 한 번');
+    expect(sentAuth, ['Bearer tok-dead', 'Bearer ${session.currentToken}']);
+
+    // 세션 만료를 사용자에게 설명하지 않는다 — 로그인이 없는 사람에게 성립하지 않는 개념이다.
+    for (final word in ['만료', '로그인', '세션']) {
+      expect(
+        find.textContaining(word),
+        findsNothing,
+        reason: '"$word"가 메인 화면에 보인다 — 재등록은 조용해야 한다',
+      );
+    }
+
+    // 루프가 이어진다 — 지켜낸 미러가 그대로 매칭 입력이다.
+    await uploadAndWait(tester);
+    await tapRequestSuggestions(tester);
+    expect(find.text('오늘 할 3개'), findsOneWidget);
+    expect(gateway.lastMatchedRecipes!.map((r) => r.url), [
+      'https://youtu.be/1',
+      'https://youtu.be/2',
+      'https://youtu.be/3',
+    ]);
+
+    // 새 계정은 비어 있지만 하이드레이트 가드가 미러를 지킨다(#165) — 목록이 그대로 산다.
+    await openRecipeBook(tester);
+    expect(find.text('저장한 레시피 · 3'), findsOneWidget);
+    expect(
+      find.byKey(const Key('recipe-tile-https://youtu.be/1')),
+      findsOneWidget,
+    );
+    // 반쯤 죽은 상태가 아니다 — 인라인 에러 카드도 없다.
+    expect(find.byKey(const Key('recipe-list-error')), findsNothing);
+    for (final word in ['만료', '로그인', '세션']) {
+      expect(
+        find.textContaining(word),
+        findsNothing,
+        reason: '"$word"가 레시피 북에 보인다 — 재등록은 조용해야 한다',
+      );
+    }
   });
 }
 

@@ -2,17 +2,24 @@
 import 'dart:async';
 import 'dart:convert';
 
+import 'package:cookmark/auth/device_session.dart';
+import 'package:cookmark/auth/fake_device_session.dart';
 import 'package:cookmark/data/server_recipe_repository.dart';
 import 'package:cookmark/domain/recipe.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:http/http.dart' as http;
 import 'package:http/testing.dart';
 
-ServerRecipeRepository repoWith(MockClient client) => ServerRecipeRepository(
-  baseUrl: 'https://api.test',
-  sessionToken: 'tok-123',
-  client: client,
-);
+/// 기존 테스트가 기대하는 고정 토큰 — 세션이 이미 등록돼 있는 상태다.
+FakeDeviceSession sessionWithToken() =>
+    FakeDeviceSession(storedToken: 'tok-123');
+
+ServerRecipeRepository repoWith(MockClient client, {DeviceSession? session}) =>
+    ServerRecipeRepository(
+      baseUrl: 'https://api.test',
+      session: session ?? sessionWithToken(),
+      client: client,
+    );
 
 ServerRecipeRepository repoReturning(Object body, {int status = 200}) =>
     repoWith(
@@ -135,7 +142,9 @@ void main() {
       );
     });
 
-    test('401은 unauthorized', () async {
+    test('재등록 뒤에도 401이면 unauthorized — 무한 재등록하지 않는다', () async {
+      // 이 페이크는 **모든** 요청에 401을 준다. 재등록이 붙은 뒤(#168) 여기 도달한다는 것은
+      // 갓 발급받은 토큰으로도 401이었다는 뜻이고, 그건 세션 만료가 아니라 서버 쪽 사건이다.
       await expectLater(
         repoReturning({
           'detail': 'unauthorized',
@@ -344,6 +353,114 @@ void main() {
         }, status: 500).importBulk(localRecipes),
         failsWith(RecipeApiFailureKind.unavailable),
       );
+    });
+  });
+
+  group('401 → 재등록 (#168)', () {
+    /// 첫 요청만 401을 주고 그다음부터 [ok]를 준다 — 세션이 죽어 있던 상황.
+    MockClient expiredOnce(Object ok, {int status = 200}) {
+      var calls = 0;
+      return MockClient((request) async {
+        calls++;
+        if (calls == 1) {
+          return http.Response(jsonEncode({'detail': 'unauthorized'}), 401);
+        }
+        return http.Response(
+          jsonEncode(ok),
+          status,
+          headers: {'content-type': 'application/json; charset=utf-8'},
+        );
+      });
+    }
+
+    test('401이면 재등록 후 1회 재전송하고, 사용자에겐 실패가 아니다', () async {
+      final session = sessionWithToken();
+      final repo = repoWith(
+        expiredOnce([
+          serverRecipe(id: 'r1', url: 'https://r.test/1', title: '김치찌개'),
+        ]),
+        session: session,
+      );
+
+      expect(await repo.fetchAll(), hasLength(1));
+      expect(session.registerCount, 1, reason: '재등록이 정확히 한 번 일어난다');
+    });
+
+    test('재전송은 **새 토큰**을 싣는다 — 죽은 토큰을 다시 보내지 않는다', () async {
+      final sent = <String?>[];
+      var calls = 0;
+      final session = sessionWithToken();
+      final repo = repoWith(
+        MockClient((request) async {
+          sent.add(request.headers['authorization']);
+          calls++;
+          if (calls == 1) return http.Response('{}', 401);
+          return http.Response(
+            jsonEncode(<Object>[]),
+            200,
+            headers: {'content-type': 'application/json; charset=utf-8'},
+          );
+        }),
+        session: session,
+      );
+
+      await repo.fetchAll();
+      expect(sent.first, 'Bearer tok-123');
+      expect(sent.last, 'Bearer ${session.currentToken}');
+      expect(sent.last, isNot(sent.first));
+      expect(calls, 2, reason: '재전송은 딱 1회다');
+    });
+
+    test('등록 자체가 실패하면 unavailable — 자격증명 문제로 오인시키지 않는다', () async {
+      // DeviceSessionFailure 한 값이 403·네트워크·타임아웃·형식 불일치를 다 덮는다. 앱이 그 넷을
+      // 못 가르므로, 서버에 못 닿은 것을 "접속 정보가 유효하지 않아요"로 내보내면 안 된다(#166 · §G).
+      final session = FakeDeviceSession(
+        storedToken: 'tok-123',
+        failure: const DeviceSessionFailure('HTTP 403'),
+      );
+      final repo = repoWith(
+        MockClient((_) async => http.Response('{}', 401)),
+        session: session,
+      );
+
+      await expectLater(
+        repo.fetchAll(),
+        failsWith(RecipeApiFailureKind.unavailable),
+      );
+    });
+
+    test('토큰이 아예 없으면 첫 요청 전에 등록한다 — 401을 기다리지 않는다', () async {
+      final session = FakeDeviceSession();
+      String? sentAuth;
+      final repo = repoWith(
+        MockClient((request) async {
+          sentAuth = request.headers['authorization'];
+          return http.Response(
+            jsonEncode(<Object>[]),
+            200,
+            headers: {'content-type': 'application/json; charset=utf-8'},
+          );
+        }),
+        session: session,
+      );
+
+      await repo.fetchAll();
+      expect(session.registerCount, 1);
+      expect(sentAuth, 'Bearer ${session.currentToken}');
+    });
+
+    test('401이 아닌 실패에는 재등록하지 않는다 — 502는 세션 문제가 아니다', () async {
+      final session = sessionWithToken();
+      final repo = repoWith(
+        MockClient((_) async => http.Response('{}', 502)),
+        session: session,
+      );
+
+      await expectLater(
+        repo.create(url: 'https://r.test/1', title: '김치찌개'),
+        failsWith(RecipeApiFailureKind.extractionFailed),
+      );
+      expect(session.registerCount, 0);
     });
   });
 

@@ -2,6 +2,8 @@
 import 'dart:convert';
 import 'dart:typed_data';
 
+import 'package:cookmark/auth/device_session.dart';
+import 'package:cookmark/auth/fake_device_session.dart';
 import 'package:cookmark/domain/ingredient.dart';
 import 'package:cookmark/domain/recipe.dart';
 import 'package:cookmark/domain/suggestion.dart';
@@ -15,8 +17,15 @@ const _baseUrl = 'http://localhost:8099';
 const _token = 'test-session-token';
 const _jsonHeaders = {'content-type': 'application/json; charset=utf-8'};
 
-ApiV1LlmGateway gatewayWith(MockClient client) =>
-    ApiV1LlmGateway(baseUrl: _baseUrl, sessionToken: _token, client: client);
+/// 세션이 이미 등록돼 있는 상태 — 기존 테스트가 기대하는 고정 토큰을 준다.
+FakeDeviceSession sessionWithToken() => FakeDeviceSession(storedToken: _token);
+
+ApiV1LlmGateway gatewayWith(MockClient client, {DeviceSession? session}) =>
+    ApiV1LlmGateway(
+      baseUrl: _baseUrl,
+      session: session ?? sessionWithToken(),
+      client: client,
+    );
 
 ApiV1LlmGateway gatewayReturning(Object body, {int status = 200}) =>
     gatewayWith(
@@ -181,7 +190,9 @@ void main() {
       );
     });
 
-    test('HTTP 오류는 error — 401(세션 거부)도 마찬가지다', () async {
+    test('HTTP 오류는 error — 재등록 뒤에도 401이면 마찬가지다', () async {
+      // 401은 #168 이후 재등록 + 1회 재전송을 거친다. 이 페이크는 **모든** 요청에 같은 코드를
+      // 주므로 여기 도달했다는 것은 갓 발급받은 토큰으로도 401이었다는 뜻이다.
       for (final status in [401, 500]) {
         final gateway = gatewayReturning({'detail': 'boom'}, status: status);
         await expectLater(
@@ -537,6 +548,116 @@ void main() {
           );
         }
       }
+    });
+  });
+
+  group('401 → 재등록 (#168)', () {
+    test('401이면 재등록 후 1회 재전송한다 — 사용자에겐 실패가 아니다', () async {
+      var calls = 0;
+      final session = sessionWithToken();
+      final gateway = gatewayWith(
+        MockClient((_) async {
+          calls++;
+          if (calls == 1) {
+            return http.Response('{"detail":"unauthorized"}', 401);
+          }
+          return http.Response(
+            jsonEncode({
+              'ingredients': [
+                {'name': '대파', 'confidence': 'high'},
+              ],
+              'usage': _usage,
+            }),
+            200,
+            headers: _jsonHeaders,
+          );
+        }),
+        session: session,
+      );
+
+      final result = await gateway.recognize(_photo);
+      expect(result.ingredients.single.name, '대파');
+      expect(session.registerCount, 1);
+      expect(calls, 2, reason: '재전송은 딱 1회다');
+    });
+
+    test('재전송은 새 토큰을 싣는다 — 죽은 토큰을 다시 보내지 않는다', () async {
+      final sent = <String?>[];
+      final session = sessionWithToken();
+      final gateway = gatewayWith(
+        MockClient((request) async {
+          sent.add(request.headers['authorization']);
+          if (sent.length == 1) return http.Response('{}', 401);
+          return http.Response(
+            jsonEncode({
+              'ingredients': [
+                {'name': '대파', 'confidence': 'high'},
+              ],
+              'usage': _usage,
+            }),
+            200,
+            headers: _jsonHeaders,
+          );
+        }),
+        session: session,
+      );
+
+      await gateway.recognize(_photo);
+      expect(sent.first, 'Bearer $_token');
+      expect(sent.last, 'Bearer ${session.currentToken}');
+      expect(sent.last, isNot(sent.first));
+    });
+
+    test('재등록 뒤에도 401이면 error — 무한 재등록하지 않는다', () async {
+      var calls = 0;
+      final session = sessionWithToken();
+      final gateway = gatewayWith(
+        MockClient((_) async {
+          calls++;
+          return http.Response('{"detail":"unauthorized"}', 401);
+        }),
+        session: session,
+      );
+
+      await expectLater(
+        gateway.recognize(_photo),
+        throwsA(
+          isA<LlmFailure>().having((e) => e.kind, 'kind', LlmFailureKind.error),
+        ),
+      );
+      expect(calls, 2);
+      expect(session.registerCount, 1);
+    });
+
+    test('등록 자체가 실패하면 error — 서버 도달 실패 계열이다(#166 문구 유지)', () async {
+      final gateway = gatewayWith(
+        MockClient((_) async => http.Response('{}', 401)),
+        session: FakeDeviceSession(
+          storedToken: _token,
+          failure: const DeviceSessionFailure('HTTP 403'),
+        ),
+      );
+
+      await expectLater(
+        gateway.recognize(_photo),
+        throwsA(
+          isA<LlmFailure>()
+              .having((e) => e.kind, 'kind', LlmFailureKind.error)
+              // 실패 카드는 "사진 문제가 아니에요"로 간다 — 서버 귀책이 유지된다.
+              .having((e) => e.kind.isServerSide, 'isServerSide', isTrue),
+        ),
+      );
+    });
+
+    test('401이 아닌 실패에는 재등록하지 않는다 — 500은 세션 문제가 아니다', () async {
+      final session = sessionWithToken();
+      final gateway = gatewayWith(
+        MockClient((_) async => http.Response('{}', 500)),
+        session: session,
+      );
+
+      await expectLater(gateway.recognize(_photo), throwsA(isA<LlmFailure>()));
+      expect(session.registerCount, 0);
     });
   });
 }

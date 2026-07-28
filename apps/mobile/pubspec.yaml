@@ -24,6 +24,8 @@ dependencies:
   url_launcher: ^6.3.2
   # 카톡 인앱 브라우저 감지 (웹 타깃 전용, 조건부 임포트로 격리)
   web: ^1.1.1
+  # 익명 기기 등록 토큰의 백킹 — Keychain/Keystore. 경계는 data/storage.dart가 쥔다 (#168)
+  flutter_secure_storage: ^10.3.1
 
 dev_dependencies:
   flutter_test:

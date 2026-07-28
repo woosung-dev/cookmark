@@ -7,6 +7,7 @@ import 'package:cookmark/domain/ingredient.dart';
 import 'package:cookmark/domain/recipe.dart';
 import 'package:cookmark/domain/session_state.dart';
 import 'package:cookmark/llm/llm_gateway.dart';
+import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:shared_preferences_platform_interface/in_memory_shared_preferences_async.dart';
 import 'package:shared_preferences_platform_interface/shared_preferences_async_platform_interface.dart';
@@ -28,6 +29,8 @@ void main() {
   setUp(() {
     SharedPreferencesAsyncPlatform.instance =
         InMemorySharedPreferencesAsync.empty();
+    // 등록 토큰의 보안 저장소도 인메모리로 갈아끼운다 — 유닛 테스트엔 플러그인 채널이 없다(#168).
+    FlutterSecureStorage.setMockInitialValues({});
   });
 
   test('빈 스토리지의 이벤트 로그는 빈 목록이다', () async {
@@ -349,11 +352,47 @@ void main() {
     });
   });
 
+  group('등록 토큰 — 보안 저장소가 백킹이고 경계는 이 모듈이다 (#168)', () {
+    test('아직 등록한 적 없으면 null이다', () async {
+      final storage = await Storage.open();
+      expect(await storage.readDeviceToken(), isNull);
+    });
+
+    test('쓰고 다시 열면 읽힌다', () async {
+      final storage = await Storage.open();
+      await storage.writeDeviceToken('sess-abc');
+
+      final reopened = await Storage.open();
+      expect(await reopened.readDeviceToken(), 'sess-abc');
+    });
+
+    test('덮어쓰면 마지막 값만 남는다 — 재등록이 옛 토큰을 안 남긴다', () async {
+      final storage = await Storage.open();
+      await storage.writeDeviceToken('sess-old');
+      await storage.writeDeviceToken('sess-new');
+
+      expect(await storage.readDeviceToken(), 'sess-new');
+    });
+
+    test('토큰은 prefs 키로 새지 않는다 — 백킹 스토어가 갈려 있다', () async {
+      final storage = await Storage.open();
+      await storage.writeDeviceToken('sess-abc');
+
+      final keys =
+          (await SharedPreferencesAsyncPlatform.instance!.getPreferences(
+            const GetPreferencesParameters(filter: PreferencesFilters()),
+            const SharedPreferencesOptions(),
+          )).keys;
+      expect(keys, isEmpty);
+    });
+  });
+
   group('기록 초기화 — 보존 경계는 "레시피 빼고 다" (#144)', () {
-    /// 5개 키 전부에 값을 채운다 — 초기화가 무엇을 지우고 무엇을 남기는지 재려면
-    /// 시작 상태에 그 다섯이 **모두** 있어야 한다. 하나라도 비면 그 키의 단언이 공허해진다.
+    /// 5개 키 + 등록 토큰 전부에 값을 채운다 — 초기화가 무엇을 지우고 무엇을 남기는지 재려면
+    /// 시작 상태에 그 여섯이 **모두** 있어야 한다. 하나라도 비면 그 키의 단언이 공허해진다.
     Future<Storage> seedEveryKey() async {
       final storage = await Storage.open();
+      await storage.writeDeviceToken('device-token-1');
       await storage.appendEvent(
         AppEvent.photoUpload(
           at: DateTime.utc(2026, 7, 20),
@@ -400,7 +439,35 @@ void main() {
 
       // 여기가 문서가 약속하는 "레시피 빼고 다"의 기계적 정본이다. 키가 추가되면
       // 이 단언이 깨지고, 다음 세션은 그 키를 어느 쪽에 둘지 **결정하도록 강제된다**.
+      //
+      // 등록 토큰은 여기 안 나온다 — prefs가 아니라 보안 저장소에 살기 때문이다(#168).
+      // 그쪽 보존은 바로 아래 테스트가 잰다. 스토어가 갈려도 판정은 한 모듈이 한다.
       expect(await storedKeys(), {'recipes'});
+    });
+
+    test('등록 토큰은 살아남는다 — 갈아치우면 서버 레시피 북이 고아가 된다 (#168)', () async {
+      final storage = await seedEveryKey();
+      expect(
+        await storage.readDeviceToken(),
+        'device-token-1',
+        reason: '초기화 전에 토큰이 있어야 이 테스트가 공허하지 않다',
+      );
+
+      await storage.clearPilotRecord();
+
+      expect(await storage.readDeviceToken(), 'device-token-1');
+      // 다시 열어도 그대로다 — 캐시가 아니라 백킹 스토어에 남아 있다.
+      final reopened = await Storage.open();
+      expect(await reopened.readDeviceToken(), 'device-token-1');
+    });
+
+    test('clear는 등록 토큰까지 지운다 — E2E가 갓 설치한 기기에서 시작한다', () async {
+      final storage = await seedEveryKey();
+
+      await storage.clear();
+
+      expect(await storage.readDeviceToken(), isNull);
+      expect(await storedKeys(), isEmpty);
     });
 
     test('레시피는 내용까지 그대로다 — 지우고 되살리는 게 아니다', () async {

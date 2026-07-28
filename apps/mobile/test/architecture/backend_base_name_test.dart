@@ -57,4 +57,26 @@ void main() {
           '두 이름을 다시 합치려면 프록시 삭제와 같은 PR이어야 한다(폴백이 그 순간 유해로 바뀐다).',
     );
   });
+
+  test('등록 키는 COOKMARK_REGISTER_KEY로만 읽힌다 (#168)', () {
+    expect(
+      _filesReading('COOKMARK_REGISTER_KEY'),
+      {'lib/main_api_cutover.dart', 'lib/main_api_spike.dart'},
+      reason:
+          'COOKMARK_REGISTER_KEY는 apps/api를 싣는 엔트리 전용이다 — 값은 서버의 같은 이름 '
+          '시크릿과 같아야 하고, 경계 구현은 엔트리가 준 값을 받기만 한다(#167 · ADR-0012). '
+          '경계가 직접 읽으면 조립 지점이 둘로 갈려 테스트가 등록 키를 갈아끼울 수 없다.',
+    );
+  });
+
+  test('사전프로비저닝 토큰 이름은 은퇴했다 — 읽는 곳이 0개다 (#168)', () {
+    expect(
+      _filesReading('COOKMARK_SESSION_TOKEN'),
+      isEmpty,
+      reason:
+          '세션 토큰을 빌드에 박는 방식은 1빌드=1계정이라 코호트 배포에서 무너진다(ADR-0012). '
+          '이 이름이 되살아나면 인증 모드가 둘로 갈리고, 어느 쪽이 도는지가 다시 조용해진다 — '
+          '#164가 백엔드 주소에서 고친 것과 같은 병이다. 토큰은 앱이 부팅 경로에서 등록해 얻는다.',
+    );
+  });
 }

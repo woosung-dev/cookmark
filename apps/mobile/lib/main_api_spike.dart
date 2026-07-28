@@ -4,8 +4,9 @@
 // 파일럿 빌드(main.dart)에는 포함되지 않는다. 실행:
 //   flutter build web -t lib/main_api_spike.dart \
 //     --dart-define=COOKMARK_SERVER_BASE=http://localhost:8099 \
-//     --dart-define=COOKMARK_SESSION_TOKEN=<세션 토큰>
+//     --dart-define=COOKMARK_REGISTER_KEY=<서버의 COOKMARK_REGISTER_KEY와 같은 값>
 // 프록시(main.dart)가 쓰는 COOKMARK_API_BASE와 이름이 갈려 있다 — 여긴 apps/api 주소다(#164).
+// 세션 토큰을 빌드에 박던 시절(COOKMARK_SESSION_TOKEN)은 끝났다 — 앱이 부팅 때 스스로 등록한다(#168).
 import 'dart:async';
 import 'dart:convert';
 
@@ -13,6 +14,7 @@ import 'package:flutter/material.dart';
 
 import '_spike_photo.dart';
 import 'app.dart';
+import 'auth/api_v1_device_session.dart';
 import 'data/storage.dart';
 import 'domain/recipe.dart';
 import 'llm/api_v1_llm_gateway.dart';
@@ -21,7 +23,7 @@ import 'ui/main_controller.dart';
 import 'ui/recipe_book_controller.dart';
 
 const _serverBase = String.fromEnvironment('COOKMARK_SERVER_BASE');
-const _token = String.fromEnvironment('COOKMARK_SESSION_TOKEN');
+const _registerKey = String.fromEnvironment('COOKMARK_REGISTER_KEY');
 
 /// 매칭 카드가 "내 레시피 북" 출처로 뜨고 og:image 썸네일이 붙도록, 인식될 채소와 겹치는
 /// 실제 요리 유튜브 레시피를 심는다.
@@ -48,7 +50,12 @@ Future<void> main() async {
   final storage = await Storage.open();
   await storage.writeRecipes(_seedRecipes);
 
-  final gateway = ApiV1LlmGateway(baseUrl: _serverBase, sessionToken: _token);
+  final session = ApiV1DeviceSession(
+    baseUrl: _serverBase,
+    registerKey: _registerKey,
+    storage: storage,
+  );
+  final gateway = ApiV1LlmGateway(baseUrl: _serverBase, session: session);
   final controller = MainController(gateway, storage);
 
   // 부팅 즉시 실제 FastAPI를 관통한다 — recognize(사진→재료) 후 곧바로 match(→제안 3개)까지.

@@ -17,7 +17,7 @@ export CORS_ALLOWED_ORIGINS="http://localhost:8777"   # 컷오버 빌드 서빙 
 
 ## 2. /tmp env 휘발 대비 — 재작성 절차
 
-`/tmp/cookmark_spike_env.sh`는 재부팅에 휘발한다. 없으면 아래로 재작성한다 (IdP 4종·`SESSION_SECRET`·등록 키는 더미로 충분 — 이 스모크는 OIDC 로그인도 기기 등록도 타지 않고, 세션은 아래 §4 시드가 직접 만든다).
+`/tmp/cookmark_spike_env.sh`는 재부팅에 휘발한다. 없으면 아래로 재작성한다 (IdP 4종·`SESSION_SECRET`은 더미로 충분 — 이 스모크는 OIDC 로그인을 타지 않는다). **등록 키는 더미여도 되지만 앱 빌드와 같은 값이어야 한다**([#168](https://github.com/woosung-dev/cookmark/issues/168) 이후 브라우저 구간이 실제로 기기 등록을 탄다) — 아래 값을 셸에 export한 채로 §4의 `flutter build web`을 돌리면 자동으로 맞는다.
 
 ```bash
 cat > /tmp/cookmark_spike_env.sh <<'EOF'
@@ -68,9 +68,11 @@ curl 구간 (서버 :8099 · 실 Gemini 호출 수를 항목에 표기).
 cd apps/mobile
 flutter build web -t lib/main_api_cutover.dart \
   --dart-define=COOKMARK_SERVER_BASE=http://localhost:8099 \
-  --dart-define=COOKMARK_SESSION_TOKEN=$TOKEN
+  --dart-define=COOKMARK_REGISTER_KEY="$COOKMARK_REGISTER_KEY"
 (cd build/web && python3 -m http.server 8777)     # CORS 허용 오리진과 일치해야 한다
 ```
+
+> **앱은 이제 세션 토큰을 빌드에 안 받는다**([#168](https://github.com/woosung-dev/cookmark/issues/168)) — 부팅 경로에서 `POST /api/v1/auth/device`로 **스스로 등록**한다(ADR-0012). 그래서 브라우저 구간이 쓰는 계정은 위 §3의 시드 토큰(`$TOKEN`)과 **다른 계정**이다 — curl 구간에서 넣은 레시피가 브라우저에 안 보이는 것이 정상이고, 같은 계정으로 보려면 브라우저에서 넣고 브라우저에서 확인한다. 등록 키는 §2 heredoc이 서버에 export한 그 값과 **같아야** 한다(다르면 서버가 403을 내고 인라인 실패 카드가 뜬다).
 
 > **`COOKMARK_SERVER_BASE`는 `apps/api` 전용 이름이다**(#164). 프록시(파일럿 `main.dart` 빌드)가 쓰는 `COOKMARK_API_BASE`와 갈려 있다 — 여기에 프록시 주소를 주면 계약이 어긋나고(snake_case·Bearer), 반대로 이 이름을 비우면 컷오버 엔트리가 **프록시 조립으로 폴백**해 `apps/api`를 아예 타지 않는다(레시피 북이 로컬 모드로 보인다).
 
