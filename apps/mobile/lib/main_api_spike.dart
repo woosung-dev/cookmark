@@ -3,8 +3,9 @@
 // 부팅 즉시 번들 사진으로 recognize를 태워 "브라우저 → FastAPI → Gemini" 관통을 화면으로 보인다.
 // 파일럿 빌드(main.dart)에는 포함되지 않는다. 실행:
 //   flutter build web -t lib/main_api_spike.dart \
-//     --dart-define=COOKMARK_API_BASE=http://localhost:8099 \
+//     --dart-define=COOKMARK_SERVER_BASE=http://localhost:8099 \
 //     --dart-define=COOKMARK_SESSION_TOKEN=<세션 토큰>
+// 프록시(main.dart)가 쓰는 COOKMARK_API_BASE와 이름이 갈려 있다 — 여긴 apps/api 주소다(#164).
 import 'dart:async';
 import 'dart:convert';
 
@@ -19,7 +20,7 @@ import 'ui/backup_controller.dart';
 import 'ui/main_controller.dart';
 import 'ui/recipe_book_controller.dart';
 
-const _base = String.fromEnvironment('COOKMARK_API_BASE');
+const _serverBase = String.fromEnvironment('COOKMARK_SERVER_BASE');
 const _token = String.fromEnvironment('COOKMARK_SESSION_TOKEN');
 
 /// 매칭 카드가 "내 레시피 북" 출처로 뜨고 og:image 썸네일이 붙도록, 인식될 채소와 겹치는
@@ -47,7 +48,7 @@ Future<void> main() async {
   final storage = await Storage.open();
   await storage.writeRecipes(_seedRecipes);
 
-  final gateway = ApiV1LlmGateway(baseUrl: _base, sessionToken: _token);
+  final gateway = ApiV1LlmGateway(baseUrl: _serverBase, sessionToken: _token);
   final controller = MainController(gateway, storage);
 
   // 부팅 즉시 실제 FastAPI를 관통한다 — recognize(사진→재료) 후 곧바로 match(→제안 3개)까지.

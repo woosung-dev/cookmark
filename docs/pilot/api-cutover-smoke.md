@@ -66,10 +66,12 @@ curl 구간 (서버 :8099 · 실 Gemini 호출 수를 항목에 표기).
 ```bash
 cd apps/mobile
 flutter build web -t lib/main_api_cutover.dart \
-  --dart-define=COOKMARK_API_BASE=http://localhost:8099 \
+  --dart-define=COOKMARK_SERVER_BASE=http://localhost:8099 \
   --dart-define=COOKMARK_SESSION_TOKEN=$TOKEN
 (cd build/web && python3 -m http.server 8777)     # CORS 허용 오리진과 일치해야 한다
 ```
+
+> **`COOKMARK_SERVER_BASE`는 `apps/api` 전용 이름이다**(#164). 프록시(파일럿 `main.dart` 빌드)가 쓰는 `COOKMARK_API_BASE`와 갈려 있다 — 여기에 프록시 주소를 주면 계약이 어긋나고(snake_case·Bearer), 반대로 이 이름을 비우면 컷오버 엔트리가 **프록시 조립으로 폴백**해 `apps/api`를 아예 타지 않는다(레시피 북이 로컬 모드로 보인다).
 
 - [ ] **레시피 add 실추출 (실 Gemini 1회)** — 레시피 북에서 URL+제목 추가 → 재료가 실추출로 붙는다.
 - [ ] **리스트 = 서버** — 방금 add한 항목이 `GET /api/v1/recipes`(curl)에도 보인다 — 로컬 스토리지가 아니라 서버가 진실원.

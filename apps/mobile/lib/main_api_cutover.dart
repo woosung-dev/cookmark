@@ -1,10 +1,11 @@
-// 컷오버 엔트리 — COOKMARK_API_BASE가 있으면 apps/api FastAPI, 없으면 main.dart와 동일한 프록시 조립.
+// 컷오버 엔트리 — COOKMARK_SERVER_BASE가 있으면 apps/api FastAPI, 없으면 main.dart와 동일한 프록시 조립.
 //
 // 실행 (컷오버 빌드).
 //   flutter build web -t lib/main_api_cutover.dart \
-//     --dart-define=COOKMARK_API_BASE=http://localhost:8099 \
+//     --dart-define=COOKMARK_SERVER_BASE=http://localhost:8099 \
 //     --dart-define=COOKMARK_SESSION_TOKEN=<scripts/seed_sessions.py 토큰>
 // dart-define 없이 빌드하면 ProxyLlmGateway 폴백 = 파일럿 빌드와 동일 동작이다.
+// 이름은 백엔드마다 갈려 있다 — 폴백이 타는 프록시 주소는 COOKMARK_API_BASE다(#164).
 // 토큰이 비어도 부팅은 한다 — 401이 화면 인라인 실패로 가시화되는 편이 조용한 중단보다 낫다.
 // 스파이크 자동발화(_spike_photo)는 싣지 않는다 — 여긴 사용자 조작으로만 관통한다.
 import 'dart:async';
@@ -21,18 +22,18 @@ import 'ui/backup_controller.dart';
 import 'ui/main_controller.dart';
 import 'ui/recipe_book_controller.dart';
 
-const _base = String.fromEnvironment('COOKMARK_API_BASE');
+const _serverBase = String.fromEnvironment('COOKMARK_SERVER_BASE');
 const _token = String.fromEnvironment('COOKMARK_SESSION_TOKEN');
 
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
   final storage = await Storage.open();
-  final LlmGateway gateway = _base.isEmpty
+  final LlmGateway gateway = _serverBase.isEmpty
       ? ProxyLlmGateway()
-      : ApiV1LlmGateway(baseUrl: _base, sessionToken: _token);
-  final server = _base.isEmpty
+      : ApiV1LlmGateway(baseUrl: _serverBase, sessionToken: _token);
+  final server = _serverBase.isEmpty
       ? null
-      : ServerRecipeRepository(baseUrl: _base, sessionToken: _token);
+      : ServerRecipeRepository(baseUrl: _serverBase, sessionToken: _token);
   final controller = MainController(gateway, storage)
     // 냉장고 앞에서 브라우저를 닫았다 열어도 하던 데서 이어간다(#15).
     ..restoreSession();
