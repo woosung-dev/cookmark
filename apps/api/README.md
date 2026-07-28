@@ -45,14 +45,16 @@ CI는 `.github/workflows/api.yml`이 매 PR(`apps/api/**` paths 필터)·main pu
 | --- | --- |
 | `DATABASE_URL` | `postgresql+asyncpg://…` — SecretStr. Neon PgBouncer 대비 `statement_cache_size=0`은 코드가 강제 |
 | `CORS_ALLOWED_ORIGINS` | 콤마 구분 허용 origin. **기본 빈 목록** — 필요한 환경에서만 켠다. 와일드카드·regex·하드코딩 금지 (§9.1) |
-| `KAKAO_CLIENT_ID` | 카카오 콘솔의 **REST API 키**. `client_id`이자 id_token의 `aud`로 돌아오는 값 |
-| `KAKAO_CLIENT_SECRET` | 카카오 콘솔 Client secret. **신규 앱은 기본 ON**이라 필수다(미전송 시 `KOE010`) |
-| `GOOGLE_CLIENT_ID` | GCP OAuth 클라이언트 ID (`….apps.googleusercontent.com`) |
-| `GOOGLE_CLIENT_SECRET` | GCP OAuth 클라이언트 시크릿 |
+| `KAKAO_CLIENT_ID` | **선택**(아래 주). 카카오 콘솔의 **REST API 키**. `client_id`이자 id_token의 `aud`로 돌아오는 값 |
+| `KAKAO_CLIENT_SECRET` | **선택**(아래 주). 카카오 콘솔 Client secret. **신규 앱은 기본 ON**이라 로그인을 쓰면 필수다(미전송 시 `KOE010`) |
+| `GOOGLE_CLIENT_ID` | **선택**(아래 주). GCP OAuth 클라이언트 ID (`….apps.googleusercontent.com`) |
+| `GOOGLE_CLIENT_SECRET` | **선택**(아래 주). GCP OAuth 클라이언트 시크릿 |
 | `SESSION_SECRET` | OAuth state·nonce 서명 키(SessionMiddleware 전용). 우리 인증 세션과 무관하다 — 그건 DB 세션 테이블이다 |
 | `GEMINI_API_KEY` | Gemini API 키 — SecretStr, 필수(#101·#103). 서버에만 산다 — 클라이언트는 절대 Gemini를 직접 부르지 않는다. 값은 루트 `.env.local`의 파일럿 키 재사용 |
 | `GEMINI_MODEL` | 기본 `gemini-3.1-flash-lite`. 파일럿 중에는 바꾸지 않는다 — 바꾸면 단가도 함께 |
 | `GEMINI_PRICE_INPUT_PER_M` / `GEMINI_PRICE_OUTPUT_PER_M` | USD per 1M 토큰, 기본 0.25 / 1.5. 원가 로그(T1 #6)의 입력이다 |
+
+**IdP 4개는 Optional이다 ([#163](https://github.com/woosung-dev/cookmark/issues/163) · ADR-0012는 [#162](https://github.com/woosung-dev/cookmark/issues/162)가 발행한다).** 값 없이도 앱이 뜬다 — 익명 기기 등록이 "로그인이 코어"라는 전제를 연기했고, 그래서 IdP 콘솔 등록이 배포의 차단자가 아니다. **대가는 사라지지 않고 자리를 옮겼다** — 자격증명 없는 provider의 OIDC 라우트(`/auth/{provider}/login`·`/callback`)를 부르면 **503**이 나고, 누락된 변수 이름이 서버 ERROR 로그에 남는다. 한쪽 provider만 설정해도 다른 쪽은 정상 동작한다. 승격 트리거(둘째 기기 요구 · 재설치 상실 · 코호트 20명 초과 · 공개 배포)가 발화하면 다시 필수로 올린다. 부팅에 여전히 필요한 건 `DATABASE_URL`·`SESSION_SECRET`·`GEMINI_API_KEY` 셋이다.
 
 로컬 웹 개발과 연결할 땐 클라이언트 포트를 고정하고(`flutter run -d chrome --web-port <포트>`) 그 origin을 `CORS_ALLOWED_ORIGINS`에 넣는다 — 포트가 랜덤이면 허용 목록이 성립하지 않는다 (§10).
 
@@ -151,4 +153,4 @@ uv run python scripts/smoke_llm.py --image 사진.jpg  # + 인식 1건 — 총 �
 - **컨테이너** — `Dockerfile`(uv 멀티스테이지 · 내부 8000 고정 · non-root). 로컬 빌드는 반드시 이 디렉토리를 컨텍스트로: `docker build -f Dockerfile .`.
 - **마이그레이션** — entrypoint가 아니라 **배포 전 러너의 `docker run IMAGE alembic upgrade head`**다. §8의 의도("배포 전 자동 실행")는 지키되 괄호 "(Docker entrypoint)"는 따르지 않는다 — Cloud Run에서 entrypoint는 롤백을 무효화한다(옛 이미지가 새 `alembic_version`을 못 해석해 exit 255). 근거·실측·대안 비교는 `context-notes.md`.
 - **프로비저닝**(GCP 프로젝트·시크릿·WIF·리포 하드닝)은 **파운더가 1회** 한다 — 절차는 [`infra/README.md`](../../infra/README.md). 리포 변수 4개가 들어가기 전까지 deploy job은 skip이라 main은 green을 유지한다.
-- ⚠️ **#100 인증·#101 LLM이 먼저 랜딩해 배포 시크릿이 늘었다** — 서빙 컨테이너가 부팅하려면 `SESSION_SECRET`·카카오/구글 client secret과 client id, 그리고 `GEMINI_API_KEY`(#101·#103)도 있어야 한다(`Settings` 필수 필드). deploy job은 아직 `DATABASE_URL` 하나만 주입하므로, **첫 실 배포 전** `--set-secrets`·마이그레이션 env·`infra/README` 시크릿 인벤토리를 이들로 확장해야 한다(파운더 프로비저닝과 한 묶음). 상세는 `infra/README.md` §3 주.
+- ⚠️ **#101 LLM이 먼저 랜딩해 배포 시크릿이 늘었다** — 서빙 컨테이너가 부팅하려면 `SESSION_SECRET`과 `GEMINI_API_KEY`(#101·#103)도 있어야 한다(`Settings` 필수 필드). **IdP 4개는 여기서 빠졌다 — #163이 Optional로 강등해 부팅을 막지 않는다**(위 설정 절). deploy job은 아직 `DATABASE_URL` 하나만 주입하므로, **첫 실 배포 전** `--set-secrets`·마이그레이션 env·`infra/README` 시크릿 인벤토리를 이 둘로 확장해야 한다(파운더 프로비저닝과 한 묶음). 상세는 `infra/README.md` §3 주.
