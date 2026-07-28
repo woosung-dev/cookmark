@@ -96,6 +96,18 @@ ProxyLlmGateway proxyReturning(
   );
 }
 
+/// 서버에 아예 닿지 못하는 게이트웨이 — 죽은 백엔드·끊긴 회선의 모양이다(#166).
+///
+/// 페이크에 kind를 손으로 꽂지 않고 실 게이트웨이의 `on Exception` 경로를 태운다. 사용자가 보는
+/// 문구가 "도달 실패로부터" 나오는지가 이 티켓의 질문이므로, 그 경로를 건너뛰면 검증이 아니다.
+ProxyLlmGateway proxyUnreachable() {
+  return ProxyLlmGateway(
+    client: MockClient((request) async {
+      throw http.ClientException('서버에 닿지 못했다', request.url);
+    }),
+  );
+}
+
 /// 인식만 정상으로 돌려줄 때 쓰는 본문 — 매칭 단계까지 가야 그 단계의 고착을 볼 수 있다.
 /// T1 #6 실측표의 flash-lite 기본·768px 행 그대로다(지어낸 숫자를 쓰지 않는다).
 const _validRecognitionBody = {
@@ -341,6 +353,9 @@ void main() {
     expect(find.byKey(const Key('failure-card')), findsOneWidget);
     expect(find.text('재료를 하나도 찾지 못했어요.'), findsOneWidget);
 
+    // 사용자 입력 실패에는 신고 유도가 붙지 않는다 — 붙이면 진짜 장애 신고가 소음에 묻힌다(#166).
+    expect(find.byKey(const Key('failure-report-hint')), findsNothing);
+
     // 레시피 북 링크가 그대로 있다 — 막다른 화면이 아니라 같은 페이지의 한 섹션이다.
     expect(find.byKey(const Key('recipe-book-link')), findsOneWidget);
 
@@ -355,6 +370,36 @@ void main() {
       (e) => e.type == AppEventType.errorShown,
     );
     expect(errors.single.data['kind'], 'empty');
+  });
+
+  testWidgets('서버에 도달하지 못하면 사용자 입력 실패와 다른 문구가 뜬다 (#166)', (tester) async {
+    // 코호트 5~20명 원격에서 파운더가 장애를 아는 유일한 경로다. 같은 문구면 사용자는
+    // "내 사진이 별로였나"로 읽고 조용히 이탈하며, 신고가 없으면 roll-forward가 발동하지 않는다.
+    await pumpApp(tester, gateway: proxyUnreachable());
+    await uploadAndWait(tester);
+
+    expect(find.byKey(const Key('failure-card')), findsOneWidget);
+    expect(find.text('지금 연결에 문제가 있어요.'), findsOneWidget);
+    expect(find.byKey(const Key('failure-report-hint')), findsOneWidget);
+
+    // 사진 탓으로 읽히는 문구가 하나도 안 뜬다 — 위 empty 테스트의 문구와 대조된다.
+    expect(find.text('인식에 실패했어요.'), findsNothing);
+    expect(find.text('재료를 하나도 찾지 못했어요.'), findsNothing);
+
+    // 여전히 섹션 안의 인라인 카드다 — 막다른 에러 화면이 아니다(G1 #8).
+    expect(find.byKey(const Key('recipe-book-link')), findsOneWidget);
+
+    // 폴백으로 루프가 이어진다 — 서버가 죽어도 직접 입력 경로는 살아 있다.
+    await tapVisible(tester, find.byKey(const Key('failure-manual')));
+    expect(find.text('냉장고에 있는 것'), findsOneWidget);
+    expect(find.byKey(const Key('failure-card')), findsNothing);
+
+    // 도달 실패도 정규화된 실패로 로그에 남는다 — 계약은 무변경이다(#142).
+    final errors = (await Storage.open()).readEvents().where(
+      (e) => e.type == AppEventType.errorShown,
+    );
+    expect(errors.single.data['kind'], 'error');
+    expect(errors.single.data['stage'], 'recognition');
   });
 
   testWidgets('인식이 오형식 200을 받아도 로딩에 고착하지 않는다 (#142)', (tester) async {
@@ -372,7 +417,9 @@ void main() {
     // 고착의 부재를 화면으로 확인한다 — 로딩이 아니라 실패 카드다.
     expect(find.byKey(const Key('loading-message')), findsNothing);
     expect(find.byKey(const Key('failure-card')), findsOneWidget);
-    expect(find.text('인식에 실패했어요.'), findsOneWidget);
+    // 오형식 200도 서버 쪽 실패다 — 사용자가 사진을 바꿔서 벗어날 수 있는 일이 아니다(#166).
+    expect(find.text('지금 연결에 문제가 있어요.'), findsOneWidget);
+    expect(find.byKey(const Key('failure-report-hint')), findsOneWidget);
 
     // 재시도 경로가 살아 있다. 같은 오형식이 또 와도 두 번째 실패까지 화면에 도달한다 —
     // 실패가 로그에 두 번 남는 것이 "이번에도 고착하지 않았다"의 증거다.
@@ -421,7 +468,9 @@ void main() {
 
     expect(find.byKey(const Key('matching-message')), findsNothing);
     expect(find.byKey(const Key('failure-card')), findsOneWidget);
-    expect(find.text('메뉴를 고르지 못했어요.'), findsOneWidget);
+    // 매칭에서도 같은 뜻이라 같은 문구다 — 어느 섹션에서 났는지는 카드의 자리가 말한다(#166).
+    expect(find.text('지금 연결에 문제가 있어요.'), findsOneWidget);
+    expect(find.byKey(const Key('failure-report-hint')), findsOneWidget);
 
     // 재시도가 실제로 매칭을 다시 부른다 — 버튼이 있기만 하고 아무것도 안 하면
     // 사용자에게는 고착과 구별되지 않는다.
@@ -1063,6 +1112,9 @@ void main() {
 
     expect(find.byKey(const Key('failure-card')), findsOneWidget);
     expect(find.text('메뉴를 고르는 데 시간이 너무 걸렸어요.'), findsOneWidget);
+    // 30초 타임아웃은 죽거나 콜드스타트에 걸린 서버의 가장 흔한 모양이라 신고 계열이다(#166) —
+    // 빼면 정작 잡아야 할 장애가 "좀 느렸나 보다"로 새어나간다.
+    expect(find.byKey(const Key('failure-report-hint')), findsOneWidget);
     // 재료 섹션이 위에 그대로, 펼쳐진 채로 있다 — 접힘은 매칭이 성공했을 때만이고,
     // 실패했으면 손봐야 할 대상이 바로 그 재료다. 막다른 화면이 아니다.
     expect(find.text('냉장고에 있는 것'), findsOneWidget);
