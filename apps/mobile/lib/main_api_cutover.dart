@@ -3,16 +3,19 @@
 // 실행 (컷오버 빌드).
 //   flutter build web -t lib/main_api_cutover.dart \
 //     --dart-define=COOKMARK_SERVER_BASE=http://localhost:8099 \
-//     --dart-define=COOKMARK_SESSION_TOKEN=<scripts/seed_sessions.py 토큰>
+//     --dart-define=COOKMARK_REGISTER_KEY=<서버의 COOKMARK_REGISTER_KEY와 같은 값>
 // dart-define 없이 빌드하면 ProxyLlmGateway 폴백 = 파일럿 빌드와 동일 동작이다.
 // 이름은 백엔드마다 갈려 있다 — 폴백이 타는 프록시 주소는 COOKMARK_API_BASE다(#164).
-// 토큰이 비어도 부팅은 한다 — 401이 화면 인라인 실패로 가시화되는 편이 조용한 중단보다 낫다.
+// 세션 토큰을 빌드에 박던 시절(COOKMARK_SESSION_TOKEN·1빌드=1계정)은 끝났다 — 앱이 부팅 경로에서
+// 스스로 등록한다(#168 · ADR-0012). 등록 키가 비거나 틀리면 서버가 403을 내고, 그건 재시도로
+// 고쳐지지 않아 인라인 실패 카드로 뜬다 — 조용한 중단보다 낫다는 판단은 그대로다.
 // 스파이크 자동발화(_spike_photo)는 싣지 않는다 — 여긴 사용자 조작으로만 관통한다.
 import 'dart:async';
 
 import 'package:flutter/material.dart';
 
 import 'app.dart';
+import 'auth/api_v1_device_session.dart';
 import 'data/server_recipe_repository.dart';
 import 'data/storage.dart';
 import 'llm/api_v1_llm_gateway.dart';
@@ -23,17 +26,26 @@ import 'ui/main_controller.dart';
 import 'ui/recipe_book_controller.dart';
 
 const _serverBase = String.fromEnvironment('COOKMARK_SERVER_BASE');
-const _token = String.fromEnvironment('COOKMARK_SESSION_TOKEN');
+const _registerKey = String.fromEnvironment('COOKMARK_REGISTER_KEY');
 
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
   final storage = await Storage.open();
-  final LlmGateway gateway = _serverBase.isEmpty
-      ? ProxyLlmGateway()
-      : ApiV1LlmGateway(baseUrl: _serverBase, sessionToken: _token);
-  final server = _serverBase.isEmpty
+  // 기기 세션 경계 — 저장된 토큰이 없으면 첫 인증 요청이 등록을 발화시킨다(#168).
+  // **runApp 앞에서 await하지 않는다**: 등록은 부팅을 막지 않고, 로그인 화면도 만들지 않는다.
+  final session = _serverBase.isEmpty
       ? null
-      : ServerRecipeRepository(baseUrl: _serverBase, sessionToken: _token);
+      : ApiV1DeviceSession(
+          baseUrl: _serverBase,
+          registerKey: _registerKey,
+          storage: storage,
+        );
+  final LlmGateway gateway = session == null
+      ? ProxyLlmGateway()
+      : ApiV1LlmGateway(baseUrl: _serverBase, session: session);
+  final server = session == null
+      ? null
+      : ServerRecipeRepository(baseUrl: _serverBase, session: session);
   final controller = MainController(gateway, storage)
     // 냉장고 앞에서 브라우저를 닫았다 열어도 하던 데서 이어간다(#15).
     ..restoreSession();

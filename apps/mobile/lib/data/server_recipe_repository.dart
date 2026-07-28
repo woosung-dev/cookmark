@@ -6,6 +6,7 @@ import 'dart:convert';
 
 import 'package:http/http.dart' as http;
 
+import '../auth/device_session.dart';
 import '../domain/recipe.dart';
 
 /// 상한 30초 — 서버 create가 내부에서 LLM extract를 1회 돌므로 G1 #8의 인식 상한을 그대로 쓴다.
@@ -42,12 +43,12 @@ class RecipeApiFailure implements Exception {
 class ServerRecipeRepository {
   ServerRecipeRepository({
     required this._baseUrl,
-    required this._sessionToken,
+    required this._session,
     http.Client? client,
   }) : _client = client ?? http.Client();
 
   final String _baseUrl;
-  final String _sessionToken;
+  final DeviceSession _session;
   final http.Client _client;
 
   /// GET /api/v1/recipes — 서버가 삽입순으로 준 순서를 그대로 유지한다.
@@ -124,14 +125,28 @@ class ServerRecipeRepository {
   }
 
   /// 전송 실패(타임아웃·네트워크)를 unavailable로 정규화한다 — 상태 코드 매핑은 [_ensureStatus]가 한다.
+  ///
+  /// 토큰을 싣고 401이면 재등록 후 1회 재전송하는 것은 [sendWithDeviceSession]이 한다(#168) —
+  /// 그래서 [_ensureStatus]의 401은 **재등록마저 실패한 401**만 뜻하고, 그때 화면에 뜨는
+  /// "접속 정보가 유효하지 않아요"가 정확한 문구가 된다.
   Future<http.Response> _send(
     Future<http.Response> Function(Map<String, String> headers) request,
   ) async {
     try {
-      return await request({
-        'content-type': 'application/json',
-        'authorization': 'Bearer $_sessionToken',
-      }).timeout(_timeout);
+      return await sendWithDeviceSession(
+        _session,
+        (token) => request({
+          'content-type': 'application/json',
+          'authorization': 'Bearer $token',
+        }).timeout(_timeout),
+      );
+    } on DeviceSessionFailure catch (e) {
+      // 등록 자체가 안 된다. **unauthorized가 아니라 unavailable이다** — 이 한 값이 등록 키 거부
+      // (403)뿐 아니라 네트워크·타임아웃·응답 형식 불일치까지 덮는데, 앱은 그 넷을 못 가른다.
+      // unauthorized 문구("접속 정보가 유효하지 않아요")로 내보내면 서버에 못 닿은 것을 자격증명
+      // 문제로 오인시킨다 — 스펙 #161 §G가 가르라고 한 그 두 가지를 도로 뭉치는 셈이다(#166).
+      // 진짜 401(재등록한 토큰으로도 거부)은 아래 _ensureStatus가 여전히 unauthorized로 낸다.
+      throw RecipeApiFailure(RecipeApiFailureKind.unavailable, e.toString());
     } on Exception catch (e) {
       // TimeoutException도 Exception이다 — 타임아웃·네트워크 모두 같은 unavailable로 간다.
       throw RecipeApiFailure(RecipeApiFailureKind.unavailable, e.toString());
