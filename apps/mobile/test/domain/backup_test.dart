@@ -168,6 +168,54 @@ void main() {
     });
   });
 
+  // 하이드레이트 가드(#165)가 지킨 미러는 서버에 없는 항목이다 — 그 이전 경로가 여기서 열린다.
+  group('미이전 항목 (서버 모드)', () {
+    test('로컬 모드는 미이전 항목을 세지 않는다 — id가 원래 전부 null이다', () {
+      final merge = previewMerge(
+        current: backupOf(recipes: [recipeAt('a')]),
+        incoming: backupOf(recipes: [recipeAt('a')]),
+      );
+
+      expect(merge.unmigratedRecipes, isEmpty);
+      expect(merge.changesNothing, isTrue, reason: '로컬 가져오기 동작은 무변화');
+      expect(merge.toSummary().containsKey('unmigratedRecipes'), isFalse);
+    });
+
+    test('서버 모드에선 id 없는 미러 항목이 이전 대상이다 — 자기 export를 다시 넣어도', () {
+      final merge = previewMerge(
+        current: backupOf(recipes: [recipeAt('a')]),
+        incoming: backupOf(recipes: [recipeAt('a')]),
+        serverMode: true,
+      );
+
+      expect(merge.newRecipes, isEmpty, reason: '미러 기준 dedup은 그대로다');
+      expect(merge.unmigratedRecipes.map((r) => r.url), ['https://youtu.be/a']);
+      // 확정 버튼이 열려야 합류 절차 ④(가져오기 → bulk 이전)가 실행된다.
+      expect(merge.changesNothing, isFalse);
+      expect(merge.toSummary()['unmigratedRecipes'], 1);
+    });
+
+    test('서버가 발급한 id가 있는 항목은 이전 대상이 아니다', () {
+      final merge = previewMerge(
+        current: backupOf(
+          recipes: const [
+            Recipe(
+              id: 'srv-1',
+              url: 'https://youtu.be/a',
+              title: '요리a',
+              ingredients: ['재료a'],
+            ),
+          ],
+        ),
+        incoming: backupOf(recipes: [recipeAt('a')]),
+        serverMode: true,
+      );
+
+      expect(merge.unmigratedRecipes, isEmpty);
+      expect(merge.changesNothing, isTrue);
+    });
+  });
+
   group('주간 성적표 (ADR-0004 단일맹검)', () {
     final now = DateTime.utc(2026, 7, 15, 20);
 

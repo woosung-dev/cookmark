@@ -78,7 +78,26 @@ class RecipeBookController extends ChangeNotifier {
     notifyListeners();
 
     try {
-      await _storage.writeRecipes(await server.fetchAll());
+      final fetched = await server.fetchAll();
+      // 하이드레이트 가드(#165) — 빈 서버 목록은 비어 있지 않은 미러를 덮지 않는다.
+      // 1계정 1기기 전제에서 이 조합은 "아직 이전 안 됨"만 의미할 수 있어 위양성이 구조적으로 없다
+      // (다른 기기가 같은 계정의 서버 북을 비울 길이 없다). 401 재등록도 같은 자리로 들어온다 —
+      // 새 빈 계정으로 하이드레이트하는데 미러를 지키는 게 이 가드다.
+      //
+      // 범위는 미러 보존 + 이벤트 1건까지다. UI 안내는 만들지 않는다(안내는 런북이 한다).
+      // 상태는 반드시 ready다 — error로 두면 폼 잠금·서버 저장 게이트·가져오기 게이트가 전부 닫혀
+      // 이전 경로(가져오기 → bulk)까지 함께 막힌다.
+      if (fetched.isEmpty && recipes.isNotEmpty) {
+        await _storage.appendEvent(
+          AppEvent.errorShown(
+            at: _now(),
+            kind: 'emptyServerBook',
+            stage: 'hydrate',
+          ),
+        );
+      } else {
+        await _storage.writeRecipes(fetched);
+      }
       _syncState = RecipeSyncState.ready;
     } on RecipeApiFailure catch (e) {
       _syncState = RecipeSyncState.error;
@@ -203,7 +222,10 @@ class RecipeBookController extends ChangeNotifier {
     final target = recipes.where((r) => r.url == url).firstOrNull;
     if (target == null || _retryingUrl != null) return;
 
-    if (_server != null) {
+    // 서버에 있는 항목만 서버 분기로 간다. 하이드레이트 가드(#165)가 지킨 미이전 항목은
+    // 서버에 없어 PATCH할 곳이 없으므로 아래 로컬 경로가 맡는다 — 미러가 그 항목의 유일한 집이고,
+    // 고친 재료는 이전(bulk) 때 그대로 서버로 실려간다. 여기서 막으면 "다시 시도"가 죽은 버튼이 된다.
+    if (_server != null && target.id != null) {
       await _retryExtractionOnServer(_server, target);
       return;
     }
@@ -253,7 +275,7 @@ class RecipeBookController extends ChangeNotifier {
     ServerRecipeRepository server,
     Recipe target,
   ) async {
-    // 서버 미반영 항목(id 없음)은 PATCH할 곳이 없다 — 서버 모드 미러엔 생기지 않는다(방어).
+    // id 없는 항목은 [retryExtraction]이 로컬 경로로 보낸다(#165) — 여기 오면 계약 위반이다.
     final id = target.id;
     if (id == null) return;
 
@@ -324,10 +346,11 @@ class RecipeBookController extends ChangeNotifier {
 
     _removeFailure = null;
 
-    if (_server != null) {
-      // 서버 미반영 항목(id 없음)은 지울 곳이 없다 — 서버 모드 미러엔 생기지 않는다(방어).
-      final id = target.id;
-      if (id == null) return;
+    // 서버 미반영 항목(id 없음)은 DELETE할 곳이 없다 — 하이드레이트 가드(#165)가 지킨 미이전
+    // 항목이 여기 해당한다. 404를 성공으로 보는 것과 같은 판정이다: 삭제의 목표 상태(서버에 없음)가
+    // 이미 참이므로 미러에서만 지운다. 여기서 return하면 X를 눌러도 아무 일이 없는 죽은 버튼이 된다.
+    final id = target.id;
+    if (_server != null && id != null) {
       try {
         await _server.delete(id);
       } on RecipeApiFailure catch (e) {

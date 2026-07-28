@@ -49,10 +49,18 @@ class MergePreview {
     required this.duplicateRecipeCount,
     required this.ignoredEventCount,
     required this.mergedRecipes,
+    this.unmigratedRecipes = const [],
   });
 
   /// 새로 들어올 레시피들 — 미리보기에 이름을 보여준다.
   final List<Recipe> newRecipes;
+
+  /// 이미 화면에 있지만 **서버엔 아직 없는** 레시피들 — 서버 모드에서만 채워진다(#165).
+  ///
+  /// 하이드레이트 가드가 빈 서버 목록으로부터 지켜낸 파일럿 레시피가 정확히 이것이다.
+  /// 이게 없으면 미러 기준 dedup 때문에 자기 export 파일을 가져와도 `newRecipes`가 0이라
+  /// 확정 버튼이 열리지 않고, 이전(합류 절차 ④)이 영원히 실행되지 않는다.
+  final List<Recipe> unmigratedRecipes;
 
   /// URL이 겹쳐 건너뛴 수.
   final int duplicateRecipeCount;
@@ -62,13 +70,17 @@ class MergePreview {
 
   final List<Recipe> mergedRecipes;
 
-  bool get changesNothing => newRecipes.isEmpty;
+  bool get changesNothing => newRecipes.isEmpty && unmigratedRecipes.isEmpty;
 
   /// 이벤트에 남길 병합 요약.
+  ///
+  /// 미이전 항목은 **있을 때만** 싣는다 — 로컬 모드의 요약 모양을 건드리지 않기 위해서다.
   Map<String, Object?> toSummary() => {
     'newRecipes': newRecipes.length,
     'duplicateRecipes': duplicateRecipeCount,
     'ignoredEvents': ignoredEventCount,
+    if (unmigratedRecipes.isNotEmpty)
+      'unmigratedRecipes': unmigratedRecipes.length,
   };
 }
 
@@ -86,6 +98,10 @@ class MergePreview {
 MergePreview previewMerge({
   required BackupData current,
   required BackupData incoming,
+
+  /// 서버 모드에서만 참 — id 없는 현재 레시피가 "아직 서버에 없다"를 뜻하는 건 서버 모드뿐이다(#165).
+  /// 로컬 모드는 id가 원래 전부 null이라, 켜면 가져오기가 매번 "올릴 게 있다"가 된다.
+  bool serverMode = false,
 }) {
   final existingUrls = {for (final r in current.recipes) r.url};
   final newRecipes = <Recipe>[];
@@ -104,6 +120,12 @@ MergePreview previewMerge({
     duplicateRecipeCount: duplicateRecipeCount,
     ignoredEventCount: incoming.events.length,
     mergedRecipes: [...current.recipes, ...newRecipes],
+    unmigratedRecipes: serverMode
+        ? [
+            for (final r in current.recipes)
+              if (r.id == null) r,
+          ]
+        : const [],
   );
 }
 

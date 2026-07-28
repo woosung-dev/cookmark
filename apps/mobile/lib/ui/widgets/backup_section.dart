@@ -120,11 +120,22 @@ class _BackupSectionState extends State<BackupSection> {
                 crossAxisAlignment: CrossAxisAlignment.stretch,
                 children: [
                   Text(
-                    merge.changesNothing
+                    merge.newRecipes.isEmpty
                         ? '새로 들어올 레시피가 없어요 — 이미 다 있어요.'
                         : '레시피 ${merge.newRecipes.length}개가 새로 들어와요.',
                     style: AppTypography.subhead,
                   ),
+                  // 서버에 아직 없는 미러 항목이 함께 올라간다(#165) — 확정 버튼이 열리는 이유를
+                  // 화면이 말해주지 않으면, "새로 들어올 게 없다"는데 버튼만 켜져 보인다.
+                  if (merge.unmigratedRecipes.isNotEmpty) ...[
+                    const SizedBox(height: Space.xs),
+                    Text(
+                      '아직 서버에 없는 레시피 ${merge.unmigratedRecipes.length}개도 함께 올립니다.',
+                      style: AppTypography.footnote.copyWith(
+                        color: AppColors.muted,
+                      ),
+                    ),
+                  ],
                   if (merge.duplicateRecipeCount > 0) ...[
                     const SizedBox(height: Space.xs),
                     Text(
