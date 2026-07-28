@@ -1,6 +1,6 @@
 # migration 도메인 예외 — 원자적 등록이 실패했다 (티켓 #104)
 #
-# ⚠️ 시한부 모듈. 제거 트리거는 src/migration/ docstring 참조.
+# 영구 모듈이다 — 근거와 개명 시점은 src/migration/ __init__.py 참조.
 
 
 class RecipeImportFailed(Exception):

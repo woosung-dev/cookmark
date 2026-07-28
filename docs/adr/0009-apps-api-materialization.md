@@ -2,6 +2,8 @@
 
 2026-07-17 사용자 결정으로 `apps/api`(FastAPI + SQLModel)를 실체화하고, ADR-0005가 고정한 MVP 범위 중 **"로그인·서버 DB 없음"을 부분 역전한다.** ADR-0008이 이 역전을 "미래 wayfinder 지도에서 나올 자기 ADR"로 예약해 뒀고, 지도 [#74](https://github.com/woosung-dev/cookmark/issues/74)가 그 지도다. 이 ADR은 그 지도의 결정 8개(범위 [#75](https://github.com/woosung-dev/cookmark/issues/75) · 스택·배포 [#76](https://github.com/woosung-dev/cookmark/issues/76) · 인증 [#77](https://github.com/woosung-dev/cookmark/issues/77) · 계약 [#81](https://github.com/woosung-dev/cookmark/issues/81) · 데이터 이전 [#86](https://github.com/woosung-dev/cookmark/issues/86) · 데이터 보호 [#87](https://github.com/woosung-dev/cookmark/issues/87) · 인프라 [#88](https://github.com/woosung-dev/cookmark/issues/88) · 접속 [#94](https://github.com/woosung-dev/cookmark/issues/94))를 **1회로 접어 기록**하며, 각 티켓의 해소 코멘트가 그 결정의 정본이다.
 
+> **정정 (2026-07-28, 스펙 [#161](https://github.com/woosung-dev/cookmark/issues/161) · 지도 [#153](https://github.com/woosung-dev/cookmark/issues/153))** — 이 ADR의 네 줄이 정정된다(각 줄에 중첩 정정 주석이 달려 있다 — **행 번호로 가리키지 않는다**. 이 파일은 합류 때 또 밀린다). ① 「데이터 경계·보호」의 **"레시피 북 = 서버 정본 + 로컬 캐시 없음"** → **로컬 렌더 미러**(1계정 1기기 전제). 랜딩된 코드가 이미 영속 미러이고 계약의 정본은 [ADR-0012](0012-anonymous-device-registration.md)다. ② 「1기 범위」의 **프록시 폐기 트리거 "승계 완료 + 파일럿 종료 후"** → **"합류 후"**. flip이 코호트 사건으로 재정의된 뒤 8/5는 마지막 소비자가 사라지는 시점이 아니다. ③ 「접속」의 **`COOKMARK_API_BASE` 재사용** → **`COOKMARK_SERVER_BASE` 분리**. ④ 「데이터 경계·보호」의 **"이 이전 코드는 시한부다"** → **영구**. 서버 모드의 "가져오기"가 그 엔드포인트를 부른다. 넷 다 **결정이 아니라 발화 조건·사실이 낡은 것**이라 새 ADR을 내지 않는다(같은 결정이 두 곳에 살면 다음 독자가 정본을 판정해야 한다). **한편 이 ADR의 "코어 = 로그인"은 죽지 않았다 — [ADR-0012](0012-anonymous-device-registration.md)가 역전이 아니라 연기한다.** 아래 본문은 정정된 줄에만 중첩 주석을 달고, 나머지 서술은 결정 시점 기록으로 둔다.
+
 **동기를 정직하게 — 제품 수요가 아니라 표준 검증이 주목적이다.** 지도 Destination이 *"회사 표준 설계가 주목적이고 냉파는 첫 적용 사례다"*라 적었고, #75가 로그인+레시피 북을 고른 이유도 *"user-scoped CRUD로 DB·인증·마이그레이션 표면을 전부 밟는 유일한 냉파 도메인"*이기 때문이다. 파일럿 판정(~8/5)을 기다리지 않고 착수한다.
 
 **부분 역전임에 주의** — ADR-0005의 나머지는 살아 있다. 제품 정본은 여전히 Flutter 단일 코드베이스이고([#78](https://github.com/woosung-dev/cookmark/issues/78)이 `apps/web`을 기각하며 재확인), Web 빌드는 파일럿 임시이며 네이티브로 전환한다. "API 키는 클라이언트에 두지 않는다"도 그대로다 — 프록시가 서버리스 함수에서 `apps/api`로 옮겨갈 뿐이다.
@@ -11,6 +13,7 @@
 - **코어 = 로그인 + 서버 레시피 북.** `idea.md` SaaS 구상의 최소 코어만 부활한다 — 과금·제휴·영양은 부활하지 않는다.
 - **이월 2건 포함** — 매칭 % 실산출(매치 점수 반환 + `Suggestion` 스키마 변경 수반) · 음식사진 og:image 프록시(웹 CORS 우회).
 - **기존 프록시 3개(recognize·extract·match) 전량 승계.** LLM 호출 표면이 Vercel(`.mjs`)과 FastAPI로 갈라지면 `backend.md` §4(`ai_processing.py` 집중)가 깨지고 운영이 이중화된다. 루트 `api/`는 **승계 완료 + 파일럿 종료 후 단순 삭제**한다([#83](https://github.com/woosung-dev/cookmark/issues/83)) — Vercel rewrite로 조기 컷오버하는 안은 기각됐다(웹 prod가 파일럿 전용이라 갈아끼울 트래픽이 없다).
+  - **정정 (2026-07-28, 스펙 [#161](https://github.com/woosung-dev/cookmark/issues/161))** — 삭제 트리거는 *"파일럿 종료 후"*가 아니라 **"합류 후"**다(= 8/5 파일럿 판정 + 코호트 2주 무사고). flip이 **새 코호트 APK가 처음부터 `apps/api`를 싣는 사건**으로 재정의되면서([#157](https://github.com/woosung-dev/cookmark/issues/157)) 8/5는 마지막 소비자가 사라지는 시점이 아니게 됐다 — **문자 그대로 실행하면 프록시 빌드를 든 파일럿 2대가 조용히 깨진다.** 하한이 합류인 이유와 네 표면(소스 · 배포된 함수 · Vercel 프로젝트 · Gemini 키)을 같은 사건에 묶는 근거는 [#160](https://github.com/woosung-dev/cookmark/issues/160)이 정본이다. **결정은 살아 있고 발화 조건만 교정된다.**
 - **서버 보관 경계 = 레시피 북(+계정)만.** 사진은 무저장 패스스루(현행 유지), **이벤트 로그는 클라이언트 로컬 정본**(ADR-0003 · P2 킬 산식), 인식 결과 기록은 2기 후보.
 
 ## 스택·배포 (#76 · #88)
@@ -28,6 +31,7 @@
 ## 접속 (#94)
 
 - **`apps/mobile` → `apps/api`는 절대 URL 직접 호출**이다. `COOKMARK_API_BASE`(이미 `apps/mobile/lib/llm/proxy_llm_gateway.dart`에 `String.fromEnvironment`로 존재)에 Cloud Run URL을 주입하고, 로컬·네이티브·웹이 **단일 네트워킹 경로**를 쓴다.
+  - **정정 (2026-07-28, 스펙 [#161](https://github.com/woosung-dev/cookmark/issues/161))** — `apps/api` 주소는 **신규 `COOKMARK_SERVER_BASE`로만 주입**하고 `COOKMARK_API_BASE`는 **프록시 전용**으로 남긴다. 이 이름을 재사용한 결과가 실재 지뢰였다 — 같은 변수가 프록시 엔트리에선 Vercel 주소, 컷오버 엔트리에선 `apps/api` 주소로 읽혀 **값을 잘못 짚어도 빌드는 둘 다 성공하고 실패만 조용했다.** 이름을 가르면 잘못 짚어도 폴백으로 간다. **합류 시 `COOKMARK_SERVER_BASE`로 단일화하되 이름을 재사용하지 않는다** — 같은 이름이 두 의미를 가졌던 이력이 있어, 재사용하면 구 이슈·구 런북 독자가 어느 의미인지 못 가른다. "절대 URL 직접 호출 · 단일 네트워킹 경로"라는 **결론은 살아남았고 이름만 갈렸다.**
 - **Vercel external-origin rewrite 경유는 채택되지 않는다.** #76이 잠시 그렇게 정했으나 #94가 역전했다 — rewrite가 봉사할 소비자가 없다(네이티브는 origin 자체가 없고 · 로컬 개발은 이미 cross-origin이며 · 파일럿 웹은 `apps/api`를 소비하지 않는다). `vercel.json`은 **수정하지 않는다**(그 rewrite는 배선된 적이 없다).
 - **경로 = `/api/v1` 프리픽스 유지.** 네이티브 앱은 앱스토어 구버전 클라이언트가 강제 업데이트 없이 몇 달 살아남으므로 버저닝이 실질 값을 한다.
 - **CORS는 필요하다** — #76이 적은 "CORS 없음"은 달성 불가능한 목표였다. #83이 첫 소비를 로컬로 확정한 순간 `flutter run -d chrome`(localhost 임의 포트) → 로컬 FastAPI(8000)가 cross-origin이 된다. **1기 허용 origin = 로컬 개발 origin뿐**이다.
@@ -49,9 +53,11 @@
 
 - **서버에 보관하는 것** — 계정(`내부 id, iss, sub, created_at`)과 레시피 북. 그게 전부다. **사진은 무저장 패스스루**이고 **이벤트 로그는 클라이언트 로컬 정본**이다.
 - **레시피 북 = 서버 정본 + 로컬 캐시 없음**(#86). 근거는 **이 앱이 오프라인에서 코어 루프가 죽는다**는 것이다 — 재료 인식·매칭이 전부 LLM 호출이라 네트워크 없이는 사진을 올려도 재료가 안 나온다. 레시피 북만 오프라인 정본으로 남겨도 **살릴 루프가 없다.** 캐시는 오프라인 열람이 실요구로 발현하면 그때 얹는다.
+  - **정정 (2026-07-28, 스펙 [#161](https://github.com/woosung-dev/cookmark/issues/161) · [#159](https://github.com/woosung-dev/cookmark/issues/159))** — "로컬 캐시 없음"은 **랜딩된 코드와 다르다.** 컷오버([#121](https://github.com/woosung-dev/cookmark/issues/121))가 이미 **영속 미러**를 배선했고, 그것을 걷어내는 대신 **비준한다** — 레시피 북 = **서버 정본 + 로컬 렌더 미러**(1계정 1기기 전제). **계약과 안전 근거의 정본은 [ADR-0012](0012-anonymous-device-registration.md) 데이터 경계 절**이다(여기 복사하면 갈라진다). **조용히 덮지 않고 정정으로 남긴다** — 안 그러면 다음 독자가 이 줄을 믿고 미러를 걷어내고, 그 순간 동기 read 소비자 셋이 async로 뒤집히며 export 원본이 사라진다. 위 "오프라인에 살릴 루프가 없다"는 근거는 **여전히 참**이고, 미러가 하는 일은 오프라인 정본이 아니라 **"목록이 보인다"뿐**이다.
   - **로컬 스토리지 모듈(`apps/mobile/lib/data/storage.dart`)은 그대로 산다** — 이벤트 로그가 로컬 정본이므로. "로컬 영속은 단일 스토리지 모듈로만"(ADR·`coding-standards.md`) 불변식은 **무변경**이다.
 - **로컬 레시피 북의 이전 = 명시적 가져오기**(#86). 로그인 후 로컬에 레시피가 있으면 1회 안내 → 확인 → bulk POST → **업로드 성공 확인 후** 로컬 삭제(실패 시 유지). 자동 병합은 기각했다 — 한 기기에 다른 계정이 로그인하면 남의 로컬 레시피가 조용히 그 계정으로 올라간다.
   - **이 이전 코드는 시한부다.** 대상은 파일럿 가구 2명이고 서버 정본 체제에선 사용자당 평생 1회 발화한다. **두 계정 이전 완료 시 제거한다.**
+    - **정정 (2026-07-28, 스펙 [#161](https://github.com/woosung-dev/cookmark/issues/161) I절)** — **시한부가 아니라 영구다.** 서버 모드의 "가져오기"가 이 bulk 엔드포인트를 부르고, 일반 레시피 생성으로 **대체할 수 없다** — 재료 필드를 못 받아 제목에서 재추출하므로 **재료가 바뀌고 · LLM이 N회 과금되며 · 부분 성공이 남는다.** 그래서 `apps/api/src/migration/`의 제거 절차 문구는 **삭제됐다**(리포에 "지워도 되는 모듈"이라 적힌 채 두면 누군가 실행한다). **개명은 합류 시** 엔트리 통합과 묶어 계약 스냅샷 왕복을 1회로 접는다. 아래 "이전은 판정 후에 일어난다"는 순서 서술도 익명 등록이 로그인 트리거를 없애 낡았다 — 실제 순서는 스펙 #161 I절의 파일럿 2대 이전 절차가 정본이다.
 - **파일럿 판정 원본(export JSON 2개)은 서버에 가지 않는다** — 파운더 로컬 폴더가 보관처다(`CONTEXT.md` 주간 백업 정의). 이전은 판정 후에 일어나므로(파일럿 종료 → 판정 → #38 → BE 소비) 판정을 훼손할 수 없다.
 - **개인정보처리방침 트리거** — 로그인을 붙이면 `sub`도 식별자라 PIPA상 처리방침 공개 **의무**가 생긴다. **1기 공개 전에 필요하며, 사내 스터디·파일럿 단계에선 미발화**다. 결정이 아니라 의무·실행이라 지도 Out of scope였고, 잊히지 않도록 여기 트리거로 남긴다.
 
