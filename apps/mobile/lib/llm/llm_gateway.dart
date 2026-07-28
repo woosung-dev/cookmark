@@ -86,6 +86,27 @@ enum LlmFailureKind {
   timeout,
 }
 
+/// 실패의 귀책 — 사용자가 사진·재료를 고쳐서 벗어날 수 있는 실패인가, 아닌가(#166).
+///
+/// 왜 화면이 아니라 경계 옆에 두나 — [LlmFailureKind.error]가 무엇을 뭉친 값인지 아는 곳이 여기다.
+/// 위젯에서 판정하면 kind가 늘어날 때 화면 쪽 기본값으로 조용히 흡수된다. exhaustive switch라
+/// 새 kind는 컴파일을 깨고 "어느 쪽인가"를 강제로 답하게 한다.
+extension LlmFailureBlame on LlmFailureKind {
+  /// 서버 쪽 실패인가. 참이면 실패 카드가 사진 탓으로 읽히지 않는 문구를 쓰고 신고를 유도한다 —
+  /// 코호트 원격 배포에서 파운더가 장애를 아는 유일한 경로다(스펙 #161 G절).
+  ///
+  /// 세션 만료(401)도 지금은 [LlmFailureKind.error]로 여기 온다. 재등록(#167·#168)이 붙으면
+  /// 사용자에게 도달하기 전에 흡수되므로 그때 이 계열에서 갈릴 수 있다 — #127 "에러 택소노미"가
+  /// 401 분리를 제안하고 있고, 이 티켓(#166)은 그걸 **의도적으로 하지 않는다**.
+  bool get isServerSide => switch (this) {
+    // 네트워크·서버·파싱을 뭉친 값이고, 그중 사용자 입력이 원인인 것은 하나도 없다.
+    // 타임아웃은 죽거나 콜드스타트에 걸린 서버의 가장 흔한 모양이다 — 빼면 정작 잡아야 할
+    // 장애가 "좀 느렸나 보다"로 새어나간다.
+    LlmFailureKind.error || LlmFailureKind.timeout => true,
+    LlmFailureKind.empty || LlmFailureKind.lowQuality => false,
+  };
+}
+
 class LlmFailure implements Exception {
   const LlmFailure(this.kind, [this.detail]);
 
