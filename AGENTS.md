@@ -55,6 +55,7 @@ flutter build web               # Web 산출물(로컬·E2E용, 파일럿 배포
 # 파일럿 배포 산출물 = 네이티브 릴리스 APK (ADR-0011). 런북 docs/pilot/native-apk-runbook.md.
 #   dart-define(COOKMARK_API_BASE) 누락 시 네트워크가 조용히 죽는다(#134). key.properties 없으면 릴리스만 시끄럽게 실패(#141).
 flutter build apk --release --dart-define=COOKMARK_API_BASE=https://cookmark-woosungdevs-projects.vercel.app
+#   COOKMARK_API_BASE는 프록시 전용 이름이다 — apps/api를 싣는 컷오버·스파이크 엔트리는 COOKMARK_SERVER_BASE를 읽는다(#164).
 ```
 
 이 게이트(format·analyze·test + E2E)는 `.github/workflows/mobile.yml`로 매 PR(`apps/mobile/**` paths 필터)·main push(무필터 백스톱)에서도 자동 실행된다(#59·#69).

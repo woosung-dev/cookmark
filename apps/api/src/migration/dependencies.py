@@ -1,6 +1,6 @@
 # Depends() 조립 — 검증된 세션에서 owner를 꺼내 스코프드 repo로 이전 서비스를 만든다 (backend.md §12.2)
 #
-# ⚠️ 시한부 모듈. 제거 트리거는 src/migration/ __init__.py 참조.
+# 영구 모듈이다 — 근거와 개명 시점은 src/migration/ __init__.py 참조.
 from typing import Annotated
 
 from fastapi import Depends

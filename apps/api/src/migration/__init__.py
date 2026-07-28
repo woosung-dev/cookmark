@@ -1,13 +1,15 @@
-"""로컬→계정 데이터 이전 (bulk 가져오기) — 시한부 모듈 (티켓 #104 · ADR-0009 데이터 이전 절).
+"""로컬→계정 데이터 이전 (bulk 가져오기) — 영구 모듈 (티켓 #104 · 영구 승격은 스펙 #161 I절).
 
-⚠️ 이 모듈 전체가 시한부다. 대상은 파일럿 가구 2명이고, 서버 정본 체제에선 사용자당 평생 1회
-발화한다. **두 계정의 이전이 모두 완료되면 이 모듈을 제거한다.**
+이 모듈은 한때 "시한부"였고 제거 절차가 여기 적혀 있었다. **둘 다 거짓이 됐다** — 앱의 서버 모드
+"가져오기"(`apps/mobile/lib/ui/backup_controller.dart` → `data/server_recipe_repository.dart`)가
+`POST /api/v1/migration/recipes`를 부른다. 파일럿 2계정 이전이 끝나도 이 호출자는 남는다.
 
-제거 절차:
-  1. `rm -rf apps/api/src/migration/`
-  2. `apps/api/src/main.py`에서 migration_router include 1줄 삭제
-  3. `apps/api/tests/test_recipes_import.py` 삭제
-  4. `cd apps/api && uv run python scripts/export_openapi.py` (스냅샷 재생성) 후 커밋
+**일반 레시피 생성으로 대체할 수 없다** — 그쪽은 재료 필드를 받지 않아 제목에서 재추출하므로
+재료가 바뀌고 · LLM이 N회 과금되며 · 부분 성공 상태가 남는다. 이 엔드포인트의 계약(재추출 없는
+원자적 등록 — 전량 성공 또는 전량 실패)이 정확히 그 셋을 막는 것이다.
 
-recipes 도메인(영구 코드)은 이 모듈에 의존하지 않는다(단방향 의존) — 제거해도 무영향이다.
+이름이 "migration"인 것은 첫 소비자가 이전이었기 때문이다. **개명은 합류 시점**(엔트리 통합과 묶어
+계약 스냅샷 왕복을 1회로 접는다 — 스펙 #161 I절). 그때까지 경로·operationId는 무변경이다.
+
+recipes 도메인은 이 모듈에 의존하지 않는다(단방향 의존).
 """

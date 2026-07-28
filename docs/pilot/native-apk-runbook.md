@@ -68,6 +68,8 @@ cd apps/mobile && flutter build apk --release --dart-define=COOKMARK_API_BASE=ht
 
 **`--dart-define`을 빠뜨리면 앱이 조용히 죽는다.** 웹은 same-origin이라 빈 기본값으로 돌았지만 **네이티브에는 same-origin이 없다** — [#134](https://github.com/woosung-dev/cookmark/issues/134)가 "핵심 함정"으로 기록했다. 상대 경로 요청이 전부 실패하고 화면에는 영원히 도는 시머만 남는다. 정본 도메인은 `cookmark-woosungdevs-projects.vercel.app`이다 — **`cookmark.vercel.app`은 남의 프로젝트다**(Vercel 전역 네임스페이스).
 
+**이 이름은 프록시 전용이다**(#164). `apps/api`를 싣는 빌드는 엔트리(`-t lib/main_api_cutover.dart`)도 변수(`COOKMARK_SERVER_BASE`)도 다르다 — 이 §3 한 줄은 **파일럿(프록시) 빌드 전용**이고, 여기에 `apps/api` 주소를 넣으면 프록시 경로가 404를 낸다. 컷오버 빌드 절차는 [`api-cutover-smoke.md`](api-cutover-smoke.md)가 정본이다.
+
 `--split-per-abi`는 쓰지 않는다 — 단일 fat APK 하나가 실기기(arm64)와 에뮬레이터를 함께 덮는다. 산출물은 `apps/mobile/$APK`다. 첫 빌드는 R8 내려받기와 NDK 초기화 때문에 5~10분 걸리고 두 번째부터 짧다.
 
 `android/key.properties`가 없으면 **여기서 즉시 죽는 게 정상이다**. 그때는 §1로 돌아간다.
@@ -135,7 +137,7 @@ cd apps/mobile && flutter build apk --release --dart-define=COOKMARK_API_BASE=ht
 
 - **`릴리스 서명 키가 없다`로 빌드가 즉시 죽는다** — `apps/mobile/android/key.properties`가 없다 → §1을 1회 실행한다. 그 파일은 커밋되지 않으므로 **새 클론·새 머신마다 다시 필요하다**. 조용한 디버그 서명 폴백은 의도적으로 막혀 있다.
 - **설치가 `INSTALL_FAILED_UPDATE_INCOMPATIBLE`로 거부된다** — 이미 깔린 앱과 서명이 다르다(디버그 키로 깔았던 기기다) → 파일럿 **시작 전**이면 지우고 릴리스 서명본으로 다시 깐다. **파일럿 중이면 지우지 말고 멈춘다** — 지우는 순간 2주치가 사라진다. 실패한 것은 설치이지 데이터가 아니다.
-- **인식이 영원히 로딩이고 네트워크가 조용히 죽는다** — `--dart-define=COOKMARK_API_BASE`를 빠뜨렸다 → §3 한 줄을 통째로 복사한다.
+- **인식이 영원히 로딩이고 네트워크가 조용히 죽는다** — `--dart-define=COOKMARK_API_BASE`를 빠뜨렸다 → §3 한 줄을 통째로 복사한다. 파일럿 빌드가 읽는 이름은 `COOKMARK_API_BASE`이지 `COOKMARK_SERVER_BASE`가 **아니다**(후자는 `apps/api` 전용, #164).
 - **재설치했는데 앱이 "처음 실행"처럼 보인다** — 앱을 지우고 깔았거나 `versionCode`를 안 올렸다 → §6 순서를 지킨다.
 - **keytool이 비밀번호를 두 번 묻는데 다르게 넣었다** — PKCS12는 스토어와 키 비밀번호가 같아야 한다 → 키 비밀번호에서 엔터를 친다. `key.properties`의 두 값도 같다.
 - **`key.properties에 storeFile 가 없다`로 죽는다** — 자리표시자를 안 채웠거나 키 이름에 오타가 있다 → §1의 4줄을 그대로 쓴다.

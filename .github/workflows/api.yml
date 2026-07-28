@@ -54,7 +54,9 @@ jobs:
       - name: schemathesis (발행 계약 vs 실 서버)
         env:
           # 앱 import 시점에 Settings가 요구하는 필수 필드 — DB·IdP 연결은 일어나지 않으므로 자리표시자로 족하다.
-          # (#100 인증이 세션 키·IdP 자격증명을 필수로 추가해 DATABASE_URL만으론 부팅이 안 된다.)
+          # (#100 인증이 세션 키를 필수로 추가해 DATABASE_URL만으론 부팅이 안 된다.)
+          # IdP 4개는 부팅에 더는 필요 없다(#163 Optional 강등). **그래도 남겨둔다** — 빼면 콜백이
+          # 503으로 단락돼 fuzzing이 진짜 콜백 경로를 못 때린다. 여기 목적은 부팅이 아니라 커버리지다.
           DATABASE_URL: postgresql+asyncpg://contract-fuzz/placeholder
           KAKAO_CLIENT_ID: placeholder
           KAKAO_CLIENT_SECRET: placeholder

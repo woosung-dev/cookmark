@@ -15,11 +15,16 @@ class Settings(BaseSettings):
     cors_allowed_origins: Annotated[list[str], NoDecode] = []
 
     # IdP 자격증명 (#100). 카카오의 client_id는 콘솔의 REST API 키다 — id_token의 aud로도 돌아온다.
-    # 필수 필드로 둔다 — 없으면 부팅이 실패하는 편이 조용한 로그인 장애보다 낫다.
-    kakao_client_id: str
-    kakao_client_secret: SecretStr
-    google_client_id: str
-    google_client_secret: SecretStr
+    # **필수에서 Optional로 강등됐다 (#163 · ADR-0012는 #162가 발행한다).** 필수였던 근거는 "로그인이 코어"(ADR-0009)였고,
+    # 익명 기기 등록이 그 전제를 연기했다 — 그래서 IdP 콘솔 등록이 배포의 차단자에서 빠진다.
+    # **조용한 로그인 장애 금지는 불변이고, 대가가 자리를 옮겼을 뿐이다** — 부재는 OIDC 라우트가 실제로
+    # 불릴 때 503으로 시끄럽게 실패한다(src/auth/oidc.py·router.py). 부팅만 안 막는다.
+    # **승격 트리거 — 넷 중 하나가 발화하면(둘째 기기 요구 · 재설치로 레시피 북 상실 · 코호트 20명 초과 ·
+    # 공개 배포) 진짜 로그인이 필요해지고, 이 4필드를 다시 필수로 올린다.** 영구 결정이 아니다.
+    kakao_client_id: str | None = None
+    kakao_client_secret: SecretStr | None = None
+    google_client_id: str | None = None
+    google_client_secret: SecretStr | None = None
     # SessionMiddleware 서명 키 — OAuth state·nonce 운반 전용이고 우리 인증 세션과 무관하다(§9).
     session_secret: SecretStr
 

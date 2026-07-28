@@ -1,6 +1,6 @@
 # 이전 라우터 — HTTP 전용. POST /migration/recipes (bulk 가져오기 1회). 도메인 예외를 상태 코드로 옮긴다 (backend.md §3)
 #
-# ⚠️ 시한부 모듈. 제거 트리거는 src/migration/ __init__.py 참조.
+# 영구 모듈이다 — 근거와 개명 시점은 src/migration/ __init__.py 참조.
 from typing import Annotated
 
 from fastapi import APIRouter, Depends, HTTPException, status
@@ -14,7 +14,7 @@ from src.recipes.schemas import RecipeResponse
 
 # 전용 /migration 네임스페이스 — recipes와 경로가 겹치지 않게 한다. /recipes/import는 /recipes/{recipe_id}와
 # 충돌한다: 정의 안 된 메서드(PATCH 등)가 {recipe_id} 라우트로 흘러 405 대신 422를 내 schemathesis
-# "Unsupported methods" 검사가 실패한다(CI 실측). 별도 네임스페이스라 제거 시 그룹·경로째 사라진다.
+# "Unsupported methods" 검사가 실패한다(CI 실측). 별도 네임스페이스라 합류 시 개명도 그룹·경로째 움직인다.
 router = APIRouter(prefix="/migration", tags=["migration"])
 
 Service = Annotated[RecipeImportService, Depends(get_recipe_import_service)]

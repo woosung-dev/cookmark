@@ -11,6 +11,7 @@ import '../domain/suggestion.dart';
 import 'llm_gateway.dart';
 
 /// 프록시 함수의 베이스 URL. 웹 빌드는 같은 오리진이므로 기본값이 빈 문자열이다.
+/// **프록시 전용 이름이다** — apps/api 주소는 COOKMARK_SERVER_BASE로 갈렸다(#164).
 const _baseUrl = String.fromEnvironment('COOKMARK_API_BASE');
 
 /// 인식 호출의 상한 — 30초를 넘기면 사용자에게 타임아웃 인라인 카드를 띄운다(G1 #8).
