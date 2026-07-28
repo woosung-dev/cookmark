@@ -96,6 +96,52 @@ void main() {
       expect(book.syncFailure, isNull);
       expect(book.recipes, hasLength(1));
     });
+
+    test('빈 서버 목록은 비어 있지 않은 미러를 덮지 않는다 — 이벤트 1건 (#165)', () async {
+      // 합류 시나리오 — 파일럿 기기가 서버 빌드로 갈아탄 직후. 로컬 북은 살아 있고 계정은 비어 있다.
+      await storage.writeRecipes(const [seedRecipe]);
+      final book = bookWith(FakeServerRecipeRepository());
+
+      await book.hydrate();
+
+      expect(storage.readRecipes().single.url, seedRecipe.url, reason: '미러 보존');
+      // ready가 아니면 폼 잠금·저장 게이트·가져오기 게이트가 전부 닫혀 앱이 반쯤 죽는다.
+      expect(book.syncState, RecipeSyncState.ready);
+      expect(book.syncFailure, isNull);
+
+      final guard = errorEvents().single;
+      expect(guard.data['kind'], 'emptyServerBook');
+      expect(guard.data['stage'], 'hydrate');
+    });
+
+    test('미러도 서버도 비어 있으면 정상적인 빈 상태다 — 가드는 발동하지 않는다 (#165)', () async {
+      final book = bookWith(FakeServerRecipeRepository());
+
+      await book.hydrate();
+
+      expect(book.recipes, isEmpty);
+      expect(book.syncState, RecipeSyncState.ready);
+      expect(errorEvents(), isEmpty, reason: '빈 계정의 첫 부팅은 에러가 아니다');
+    });
+
+    test('서버에 항목이 있으면 서버가 이긴다 — 미러보다 적어도 그대로 반영된다 (#165)', () async {
+      await storage.writeRecipes(const [
+        seedRecipe,
+        Recipe(
+          url: 'https://youtu.be/gone',
+          title: '김치찌개',
+          ingredients: ['김치'],
+        ),
+      ]);
+      final book = bookWith(
+        FakeServerRecipeRepository(seed: const [seedRecipe]),
+      );
+
+      await book.hydrate();
+
+      expect(book.recipes.map((r) => r.url), [seedRecipe.url]);
+      expect(errorEvents(), isEmpty);
+    });
   });
 
   group('저장 (서버 분기)', () {
@@ -278,6 +324,25 @@ void main() {
       expect(bookEvents(), isEmpty);
       expect(errorEvents().single.data['kind'], 'unavailable');
     });
+
+    test('가드가 지킨 미이전 항목은 로컬 경로로 재추출된다 — PATCH할 곳이 없다 (#165)', () async {
+      // 파일럿에서 추출이 실패해 재료 0개로 저장된 레시피가 가드에 지켜져 남아 있다.
+      // 서버 분기로 보내면 PATCH 대상이 없어 "다시 시도"가 죽은 버튼이 된다.
+      await storage.writeRecipes(const [
+        Recipe(url: 'https://youtu.be/abc', title: '김치찌개', ingredients: []),
+      ]);
+      final server = FakeServerRecipeRepository();
+      final book = bookWith(server);
+      await book.hydrate();
+
+      await book.retryExtraction('https://youtu.be/abc');
+
+      expect(server.patchCallCount, 0, reason: '서버엔 고칠 항목이 없다');
+      expect(book.recipes.single.ingredients, contains('돼지고기'));
+      final event = bookEvents().single;
+      expect(event.data['action'], 'reextract');
+      expect(event.data['costUsd'], isNotNull, reason: 'LLM을 불렀으니 원가가 남는다');
+    });
   });
 
   group('삭제 (서버 분기)', () {
@@ -347,6 +412,22 @@ void main() {
       await book.remove(seedRecipe.url);
 
       expect(book.pendingRemove, isNull);
+    });
+
+    test('가드가 지킨 미이전 항목도 지워진다 — 서버 호출 없이 미러에서만 (#165)', () async {
+      // 서버에 없는 항목은 지울 곳이 없다 — 404를 성공으로 보는 것과 같은 판정이다.
+      // 조용히 return하면 X가 죽은 버튼이 된다(가드가 만든 새 상태).
+      await storage.writeRecipes(const [seedRecipe]);
+      final server = FakeServerRecipeRepository();
+      final book = bookWith(server);
+      await book.hydrate();
+
+      await book.remove(seedRecipe.url);
+
+      expect(server.deleteCallCount, 0, reason: '서버엔 지울 것이 없다');
+      expect(book.recipes, isEmpty);
+      expect(book.removeFailure, isNull);
+      expect(bookEvents().single.data['action'], 'remove');
     });
   });
 }

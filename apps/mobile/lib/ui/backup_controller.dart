@@ -101,6 +101,9 @@ class BackupController extends ChangeNotifier {
         exportedAt: _now(),
       ),
       incoming: incoming,
+      // 서버 모드면 미러의 id 없는 항목이 "아직 서버에 없음"이다 — 하이드레이트 가드가 지켜낸
+      // 파일럿 레시피가 그것이고, 이 가져오기가 그 이전 경로다(#165).
+      serverMode: _server != null,
     );
     notifyListeners();
   }
@@ -123,10 +126,13 @@ class BackupController extends ChangeNotifier {
     _importing = true;
     notifyListeners();
     try {
-      if (_server != null && merge.newRecipes.isNotEmpty) {
-        // 서버 모드 — newRecipes만 보낸다. 서버엔 unique가 없어 dedup 책임이 클라이언트다(#104).
+      // 서버 모드가 올릴 것 = 파일에서 새로 들어온 것 + 미러에 있지만 서버엔 없는 것(#165).
+      // 미이전 항목을 앞에 둬 서버 삽입순(= 하이드레이트가 미러에 되돌릴 순서)이 파일럿 북 순서를 잇는다.
+      // 서버엔 unique가 없어 dedup 책임은 클라이언트다(#104) — 두 목록은 URL로 서로소다.
+      final toUpload = [...merge.unmigratedRecipes, ...merge.newRecipes];
+      if (_server != null && toUpload.isNotEmpty) {
         try {
-          await _server.importBulk(merge.newRecipes);
+          await _server.importBulk(toUpload);
         } on RecipeApiFailure {
           // 원자적 등록이라 부분 반영이 없다 — pendingMerge를 유지해 다시 확정할 수 있고 미러도 불변이다.
           _importError = '가져오기에 실패했어요 — 서버에 저장되지 않았어요.';

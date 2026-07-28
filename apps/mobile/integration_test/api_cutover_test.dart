@@ -652,6 +652,136 @@ void main() {
       ),
     );
   });
+
+  testWidgets('⑬ 하이드레이트 가드 — 빈 서버 목록이 로컬 미러를 덮지 않는다 (#165)', (tester) async {
+    // 합류 시나리오 — 파일럿 기기가 서버 빌드로 갈아탄 직후. 로컬 북은 살아 있고 계정은 비어 있다.
+    await storage.writeRecipes(seedThree);
+    final server = FakeServerRecipeRepository();
+
+    await pumpApp(tester, server: server, skipOnboarding: false);
+    await waitForVisible(
+      tester,
+      () => _visible(find.byKey(const Key('upload-photo'))),
+    );
+    expect(server.fetchAllCallCount, 1, reason: '부팅 킥 1회');
+    // 미러가 살아 있으니 온보딩 카드가 설 자리가 없다 — 사용자에겐 아무 일도 일어나지 않은 화면이다.
+    expect(find.byKey(const Key('onboarding-card')), findsNothing);
+
+    await openRecipeBook(tester);
+    expect(find.text('저장한 레시피 · 3'), findsOneWidget);
+    expect(
+      find.byKey(const Key('recipe-tile-https://youtu.be/1')),
+      findsOneWidget,
+    );
+    // 반쯤 죽은 상태가 아니다 — 에러 카드도 없고 저장 폼도 열려 있다.
+    expect(find.byKey(const Key('recipe-list-error')), findsNothing);
+    expect(
+      tester
+          .widget<TextField>(find.byKey(const Key('recipe-url-field')))
+          .enabled,
+      isTrue,
+    );
+
+    // 가드는 화면 안내를 만들지 않는다(안내는 런북이 한다) — 대신 이벤트 1건을 남긴다.
+    final events = await waitForEvents(
+      tester,
+      storage,
+      (events) => events.any((e) => e.type == AppEventType.errorShown),
+    );
+    final guard = events.where((e) => e.type == AppEventType.errorShown).single;
+    expect(guard.data['kind'], 'emptyServerBook');
+    expect(guard.data['stage'], 'hydrate');
+
+    // 내보낼 원본이 남아 있다 — 이전 vehicle이 export 파일이기 때문이다.
+    final exported =
+        jsonDecode(await BackupController(storage).exportJson())
+            as Map<String, Object?>;
+    expect((exported['recipes'] as List), hasLength(3));
+  });
+
+  testWidgets('⑭ 가드 뒤 이전 — 자기 export를 가져오면 미러가 서버로 올라간다 (#165)', (
+    tester,
+  ) async {
+    await storage.writeRecipes(seedThree);
+    final server = FakeServerRecipeRepository();
+    await pumpApp(tester, server: server);
+    await openRecipeBook(tester);
+    await waitForVisible(
+      tester,
+      () => _visible(find.byKey(const Key('recipe-tile-https://youtu.be/1'))),
+    );
+
+    // 런북 합류 절차 ④ — 프록시 빌드에서 뽑아둔 백업 파일이 곧 이 파일이다.
+    final mine = await BackupController(storage).exportJson();
+    final field = find.byKey(const Key('backup-import-field'));
+    await tester.ensureVisible(field);
+    await tester.pumpAndSettle();
+    await tester.enterText(field, mine);
+    await tapVisible(tester, find.byKey(const Key('backup-preview')));
+
+    // 미러 기준 dedup이라 "새로 들어올 것"은 0인데, 올릴 것은 3개다 — 화면이 그걸 말한다.
+    expect(find.byKey(const Key('merge-preview')), findsOneWidget);
+    expect(find.text('아직 서버에 없는 레시피 3개도 함께 올립니다.'), findsOneWidget);
+    expect(
+      tester
+          .widget<FilledButton>(find.byKey(const Key('backup-confirm')))
+          .onPressed,
+      isNotNull,
+      reason: '확정이 잠겨 있으면 이전이 영원히 실행되지 않는다',
+    );
+
+    await tapVisible(tester, find.byKey(const Key('backup-confirm')));
+    await waitForEvents(
+      tester,
+      storage,
+      (events) => events.any(
+        (e) => e.type == AppEventType.backup && e.data['direction'] == 'import',
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    expect(server.importBulkCallCount, 1);
+    expect(server.recipes.map((r) => r.url), [
+      'https://youtu.be/1',
+      'https://youtu.be/2',
+      'https://youtu.be/3',
+    ]);
+    // 재수화된 미러 = 서버 정본(발급 id 포함) — 이제 다음 부팅이 지울 것이 없다.
+    final mirror = (await Storage.open()).readRecipes();
+    expect(mirror.map((r) => r.url), [
+      'https://youtu.be/1',
+      'https://youtu.be/2',
+      'https://youtu.be/3',
+    ]);
+    expect(mirror.map((r) => r.id), everyElement(isNotNull));
+  });
+
+  testWidgets('⑮ 가드 뒤에도 코어 루프가 산다 — 지켜낸 미러가 매칭 입력이다 (#165)', (tester) async {
+    await storage.writeRecipes(const [
+      Recipe(
+        url: 'https://youtu.be/a',
+        title: '김치찌개',
+        ingredients: ['김치', '돼지고기'],
+      ),
+    ]);
+    final server = FakeServerRecipeRepository();
+    final gateway = FakeLlmGateway();
+    await pumpApp(tester, server: server, gateway: gateway);
+    await waitForVisible(
+      tester,
+      () => _visible(find.byKey(const Key('upload-photo'))),
+    );
+
+    await uploadAndWait(tester);
+    await tapRequestSuggestions(tester);
+
+    // 서버가 비어 있어도 제안이 나온다 — 매칭은 서버 북이 아니라 미러를 입력으로 받는다.
+    expect(find.text('오늘 할 3개'), findsOneWidget);
+    expect(gateway.lastMatchedRecipes!.map((r) => r.url), [
+      'https://youtu.be/a',
+    ]);
+    expect(gateway.lastMatchedRecipes!.single.ingredients, ['김치', '돼지고기']);
+  });
 }
 
 /// test/support의 FakeServerRecipeRepository와 동형 사본.

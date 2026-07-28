@@ -135,6 +135,78 @@ void main() {
     ]);
   });
 
+  // 하이드레이트 가드(#165)가 지킨 파일럿 미러를 서버로 올리는 경로 — 합류 절차 ④.
+  group('미이전 미러 이전 (#165)', () {
+    late FakeServerRecipeRepository emptyServer;
+
+    setUp(() async {
+      emptyServer = FakeServerRecipeRepository();
+      // 가드가 지킨 상태 — 서버는 빈 계정이고 미러엔 id 없는 파일럿 레시피가 남아 있다.
+      await storage.writeRecipes(const [
+        Recipe(url: 'https://youtu.be/p1', title: '김치찌개', ingredients: ['김치']),
+        Recipe(url: 'https://youtu.be/p2', title: '계란찜', ingredients: ['계란']),
+      ]);
+    });
+
+    test('자기 export 파일을 가져오면 미이전 항목이 서버 bulk로 올라간다', () async {
+      final c = controller(overrideServer: emptyServer);
+      final mine = await c.exportJson();
+      c.previewImport(mine);
+
+      expect(c.pendingMerge!.newRecipes, isEmpty, reason: '전제 — 미러 기준 dedup');
+      expect(c.pendingMerge!.changesNothing, isFalse, reason: '확정 버튼이 열려야 한다');
+
+      await c.confirmImport();
+
+      expect(emptyServer.importBulkCallCount, 1);
+      expect(emptyServer.lastImportBulk!.map((r) => r.url), [
+        'https://youtu.be/p1',
+        'https://youtu.be/p2',
+      ]);
+      // 재수화 후 미러 = 서버 정본(발급 id 포함) — 이제 다음 부팅이 지울 것이 없다.
+      expect(storage.readRecipes().map((r) => r.url), [
+        'https://youtu.be/p1',
+        'https://youtu.be/p2',
+      ]);
+      expect(
+        storage.readRecipes().map((r) => r.id),
+        everyElement(isNotNull),
+        reason: '서버 발급 id',
+      );
+      expect(c.pendingMerge, isNull);
+    });
+
+    test('미이전 항목과 새 레시피가 함께 올라간다 — 미이전이 앞이라 파일럿 북 순서가 유지된다', () async {
+      final c = controller(overrideServer: emptyServer)
+        ..previewImport(otherDeviceBackup());
+
+      await c.confirmImport();
+
+      expect(emptyServer.lastImportBulk!.map((r) => r.url), [
+        'https://youtu.be/p1',
+        'https://youtu.be/p2',
+        'https://youtu.be/a',
+        'https://youtu.be/b',
+      ]);
+    });
+
+    test('이전이 끝난 뒤 다시 가져오면 올릴 게 없다 — 중복 등록되지 않는다', () async {
+      final first = controller(overrideServer: emptyServer);
+      first.previewImport(await first.exportJson());
+      await first.confirmImport();
+      expect(emptyServer.importBulkCallCount, 1, reason: '전제');
+
+      final again = controller(overrideServer: emptyServer);
+      again.previewImport(await again.exportJson());
+      expect(again.pendingMerge!.changesNothing, isTrue);
+
+      await again.confirmImport();
+
+      expect(emptyServer.importBulkCallCount, 1);
+      expect(emptyServer.recipes, hasLength(2));
+    });
+  });
+
   group('확정 중복 방지 (#121 수리 R2)', () {
     test(
       'importBulk 성공 + fetchAll 실패 — 예외 이탈 없이 커밋이 잠기고 재확정해도 중복 등록되지 않는다',
