@@ -4,6 +4,8 @@
 
 > **정정 (2026-07-17, [ADR-0009](0009-apps-api-materialization.md))** — 이 ADR의 선언 두 개가 역전됐다. ① **`contracts/`의 "계약 우선"·"상류"**(아래 표 29·30·31·35행) → **코드 우선**(`apps/api`의 Pydantic이 정본, `contracts/`는 발행 지점). 차팅 시점의 좌표 선언보다 채택된 스택이 이긴다 — FastAPI는 구성상 코드 우선이다([#81](https://github.com/woosung-dev/cookmark/issues/81)). ② **`infra/`의 "자동 배포 금지 규약의 정신(#57 선례)"**(36행) → **`apps/api`는 GitHub Actions 자동 배포**. #57을 오독한 문구였다 — #57은 Flutter-Web-on-Vercel 특정 버그(`buildCommand: null` + gitignored `build/web` → 빈 정적 배포) 대응이고 본문 스스로 잠정이라 적었으며, **그 실패 모드는 Cloud Run에 구조적으로 없다**(파이프라인이 이미지를 빌드한다). **`apps/mobile`/Vercel prod의 수동 프리빌드 규약은 그대로 유지된다 — 둘을 한 규칙으로 묶지 말 것**([#88](https://github.com/woosung-dev/cookmark/issues/88)). 아래 본문·표는 정정된 행만 갱신했고, 나머지 서술은 결정 시점 기록으로 둔다.
 
+> **정정 (2026-07-28, 스펙 [#161](https://github.com/woosung-dev/cookmark/issues/161) · 지도 [#153](https://github.com/woosung-dev/cookmark/issues/153))** — 아래 표 `api/`(루트, 잠정) 행의 **삭제 트리거가 교정된다** — *"승계 완료 + 파일럿 종료 후"* → **"합류 후"**. **폐지 결정 자체는 무변경이고 발화 조건만 낡았다** — 그래서 새 ADR을 내지 않는다. **교정의 정본은 [ADR-0009](0009-apps-api-materialization.md)의 같은 날짜 정정 주**(「1기 범위」의 프록시 승계 줄)이고 근거는 [#160](https://github.com/woosung-dev/cookmark/issues/160)이다 — 여기서 다시 서술하면 갈라진다.
+
 이 ADR은 **토폴로지·이름·성장 트리거만** 고정한다. ADR-0005의 MVP 범위 결정 — 로그인·서버 DB 없음, LLM 프록시는 앱과 분리된 서버리스 함수 — 는 **역전하지 않는다**(→ **2026-07-17 [ADR-0009](0009-apps-api-materialization.md)가 역전했다.** 아래 문장이 예고한 "자기 ADR"이 그것이다). 서버리스 프록시 3개는 루트 `api/`에 잠정 유지한다(Vercel 파일 관례가 배포 루트의 `api/`를 요구하고, `vercel.json` rewrites가 이를 참조한다). `apps/api` 실체화(진짜 백엔드)는 ADR-0005를 뒤집는 일이므로 미래 wayfinder 지도에서 나올 자기 ADR이 필요하다. 각 앱의 툴체인(Next 버전 · pnpm/turborepo · FastAPI 채택)도 같은 이유로 이 ADR의 범위 밖이며 같은 지도로 간다.
 
 문서(이 ADR + 실행 이슈 [#69](https://github.com/woosung-dev/cookmark/issues/69))는 지금 커밋하고, 물리 이동은 파일럿 판정(~8/5+) 후 **#38 랜딩 후**에 실행한다 — #51 확정대로 "판정이 #38을 연다, 제품 계속이면 다음 작업 전 #38 먼저"이고, #38이 `lib/` 내부를 전면 재배열하므로 최상위 이동과 겹치면 diff가 곱해지고 미머지 WIP(`worktree-fix-ach`)가 rename 너머로 리베이스돼야 한다. 완전 중단(abandon) 판정이면 #38과 함께 실행 이슈 #69도 닫고, 이 ADR은 미실행 결정 기록으로 남는다.
@@ -36,7 +38,7 @@
 | `packages/design-tokens` | `DESIGN.md` 토큰의 기계 소비형(JSON 등 파생 생성물) | **토큰 정본은 루트 `DESIGN.md`** — 이 패키지는 파생이지 정본이 아니다 | 토큰이 필요한 2번째 UI 소비자 등장 시 `DESIGN.md`에서 생성 |
 | `contracts/` | API 계약의 **발행 지점**(`openapi.yaml` 등) — 정본이 아니라 생성물이 발행되는 곳 | **코드 우선 + 커밋된 스냅샷 + CI 드리프트 가드**(ADR-0009 역전 — 아래 정정 주 참조) | **`apps/api`의 첫 라우트가 생성물로 낳는다**(ADR-0009). 프록시 3개는 수기 문서화하지 않는다 — #75가 폐지를 확정한 코드이고 `.mjs`가 승계 입력이자 정본 |
 | `infra/` | IaC·배포 설정(Vercel 단일 프로젝트 이후) | **IaC 미도입 + 프로비저닝 절차 문서**(ADR-0009). `apps/api`는 GitHub Actions 자동 배포 + WIF — **"자동 배포 금지"는 여기 규율이 아니다**(아래 정정 주 참조) | 충족됨 — Cloud Run 도입(ADR-0009). Terraform 도입 트리거 = 환경 2개째 또는 인프라 변경자 2명째 |
-| `api/`(루트, 잠정) | **지금 돌아가는** 서버리스 프록시 3개 + `_gemini.mjs` — 이동하지 않는다 | ADR-0005(앱과 분리 · API 키 클라이언트 금지) + `vercel.json` rewrites | **폐지 결정됨** — [ADR-0009](0009-apps-api-materialization.md)가 `apps/api` 전량 승계를 확정. 실행 = 승계 완료 + 파일럿 종료 후 **단순 삭제**([#83](https://github.com/woosung-dev/cookmark/issues/83)). 그때까지 무수정 서빙 |
+| `api/`(루트, 잠정) | **지금 돌아가는** 서버리스 프록시 3개 + `_gemini.mjs` — 이동하지 않는다 | ADR-0005(앱과 분리 · API 키 클라이언트 금지) + `vercel.json` rewrites | **폐지 결정됨** — [ADR-0009](0009-apps-api-materialization.md)가 `apps/api` 전량 승계를 확정. 실행 = **합류 후 단순 삭제**([#83](https://github.com/woosung-dev/cookmark/issues/83) · 트리거 교정 [#160](https://github.com/woosung-dev/cookmark/issues/160) — 위 2026-07-28 정정 주 참조). 그때까지 무수정 서빙 |
 
 ## Consequences
 

@@ -1,6 +1,6 @@
 # 로컬→계정 이전 bulk 가져오기 입력 스키마 — 이미 추출된 재료를 그대로 수용한다 (티켓 #104)
 #
-# ⚠️ 시한부 모듈. 제거 트리거 = 파일럿 가구 2계정 이전 완료 (ADR-0009 데이터 이전 절). src/migration/ docstring 참조.
+# 영구 모듈이다 — 근거와 개명 시점은 src/migration/ __init__.py 참조.
 from pydantic import BaseModel, ConfigDict, Field
 
 

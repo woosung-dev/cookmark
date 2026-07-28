@@ -1,6 +1,6 @@
 # 로컬→계정 이전 비즈니스 로직 — 재추출 없는 원자적 bulk 등록. 트랜잭션 경계는 Service (backend.md §3)
 #
-# ⚠️ 시한부 모듈. 제거 트리거는 src/migration/ __init__.py 참조.
+# 영구 모듈이다 — 근거와 개명 시점은 src/migration/ __init__.py 참조.
 from collections.abc import Sequence
 
 from sqlalchemy.exc import SQLAlchemyError
