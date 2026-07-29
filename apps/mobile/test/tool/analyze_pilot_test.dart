@@ -257,4 +257,37 @@ void main() {
       expect(w0.voluntary, true);
     });
   });
+
+  group('원가 원장 — 실패한 호출도 결제됐으면 센다 (#127)', () {
+    test('errorShown 에 실린 costUsd 가 주간 누적에 합산된다', () {
+      // 재추출은 LLM이 성공한 뒤 PATCH가 죽을 수 있다. 그 원가는 저장 실패와 무관하게
+      // 이미 결제됐다(스펙 US 28). 툴은 costUsd 를 이벤트 유형과 무관하게 쓸어담으므로
+      // errorShown 이 필드를 싣기 시작하면 **툴 변경 없이** 원장에 들어온다 — 그 사실을 잠근다.
+      final events = readBackupEvents(
+        backupJson([
+          ev('recipeBookChanged', day(0), {
+            'action': 'reextract',
+            'url': 'https://r.test/1',
+            'title': '김치찌개',
+            'ingredientCount': 3,
+            'costUsd': 0.001,
+          }),
+          ev('errorShown', day(0, m: 5), {
+            'kind': 'unavailable',
+            'stage': 'reextractSave',
+            'costUsd': 0.002,
+          }),
+        ]),
+      );
+      final w0 = aggregate(
+        label: 'dev',
+        events: events,
+        start: start,
+        gap: const Duration(minutes: 30),
+      ).weeks[0]!;
+
+      expect(w0.costUsd, closeTo(0.003, 1e-9));
+      expect(w0.errorsByKind['unavailable'], 1);
+    });
+  });
 }

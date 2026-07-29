@@ -12,6 +12,7 @@ import 'widgets/backup_section.dart';
 import 'widgets/photo_placeholder.dart';
 import 'widgets/recipe_add_failure_card.dart';
 import 'widgets/recipe_form.dart';
+import 'widgets/report_hint.dart';
 import 'widgets/skeleton.dart';
 
 class RecipeBookPage extends StatelessWidget {
@@ -514,6 +515,11 @@ class _SyncErrorCard extends StatelessWidget {
               ),
             ],
           ),
+          // 죽은 서버에서 코호트 사용자가 가장 먼저 닿는 카드다(부팅 하이드레이트) — 여기가
+          // 신고 없이 지나가면 파운더는 장애를 모르고 되돌림 경로가 종이가 된다(#127, 스펙 #161 §G).
+          // kind로 가르지 않는다: 이 카드에 오는 실패는 전부 서버 도달 실패다.
+          const SizedBox(height: Space.sm),
+          const ReportHint(key: Key('recipe-list-report-hint')),
           const SizedBox(height: Space.sm),
           TextButton(
             key: const Key('recipe-list-error-retry'),

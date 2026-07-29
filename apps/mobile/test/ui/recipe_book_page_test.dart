@@ -119,6 +119,25 @@ void main() {
     );
   });
 
+  testWidgets('하이드레이트 실패 카드에도 신고 유도 줄이 있다 (#127)', (tester) async {
+    // 죽은 Cloud Run에서 코호트 사용자가 **가장 먼저 보는 카드**다 — 부팅 하이드레이트가
+    // 먼저 실패하기 때문이다. 여기 신고 줄이 없으면 사용자는 앱이 그냥 안 되는 줄 알고
+    // 이탈하고, 파운더는 장애를 모른 채 "2주 무사고"를 읽는다(스펙 #161 §G).
+    final server = FakeServerRecipeRepository()
+      ..failure = const RecipeApiFailure(RecipeApiFailureKind.unavailable);
+    final book = RecipeBookController(
+      FakeLlmGateway(),
+      storage,
+      server: server,
+    );
+    await book.hydrate();
+    await pumpBook(tester, book);
+
+    expect(find.byKey(const Key('recipe-list-error')), findsOneWidget);
+    expect(find.byKey(const Key('recipe-list-report-hint')), findsOneWidget);
+    expect(find.textContaining('카톡으로 알려주세요'), findsOneWidget);
+  });
+
   testWidgets('서버 삭제 성공엔 실행취소 토스트가 없다 — 그냥 사라진다', (tester) async {
     final server = FakeServerRecipeRepository(
       seed: const [

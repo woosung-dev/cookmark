@@ -4,6 +4,7 @@ import 'package:cookmark/data/storage.dart';
 import 'package:cookmark/domain/app_event.dart';
 import 'package:cookmark/domain/recipe.dart';
 import 'package:cookmark/llm/fake_llm_gateway.dart';
+import 'package:cookmark/llm/llm_gateway.dart';
 import 'package:cookmark/ui/recipe_book_controller.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:shared_preferences_platform_interface/in_memory_shared_preferences_async.dart';
@@ -322,7 +323,44 @@ void main() {
 
       expect(book.recipes.single.ingredients, isEmpty, reason: '미러 미갱신');
       expect(bookEvents(), isEmpty);
-      expect(errorEvents().single.data['kind'], 'unavailable');
+
+      final error = errorEvents().single;
+      expect(error.data['kind'], 'unavailable');
+      // LLM은 이미 돌았고 토큰은 이미 결제됐다 — 저장이 실패했다고 원가가 사라지지 않는다.
+      // 버리면 재추출 원가가 P2 원장에서 통째로 샌다(스펙 US 28, #127).
+      expect(
+        error.data['costUsd'],
+        isNotNull,
+        reason: 'PATCH가 죽어도 결제된 LLM 원가는 원장에 남는다',
+      );
+      expect(error.data['model'], isNotNull, reason: '모델 귀속도 함께');
+      // 실패 지점은 추출이 아니라 저장이다 — 필드 이름이 거짓말하지 않게 한다.
+      expect(error.data['stage'], 'reextractSave');
+    });
+
+    test('추출 자체가 죽으면 stage는 extraction이고 원가도 없다 — 회귀 가드', () async {
+      const empty = Recipe(
+        url: 'https://youtu.be/abc',
+        title: '김치찌개',
+        ingredients: [],
+      );
+      final server = FakeServerRecipeRepository(seed: const [empty]);
+      final gateway = FakeLlmGateway(
+        failure: const LlmFailure(LlmFailureKind.error),
+      );
+      final book = bookWith(server, gateway: gateway);
+      await book.hydrate();
+
+      await book.retryExtraction('https://youtu.be/abc');
+
+      expect(server.patchCallCount, 0, reason: '추출이 죽었으니 PATCH까지 못 간다');
+      final error = errorEvents().single;
+      expect(error.data['stage'], 'extraction');
+      expect(
+        error.data.containsKey('costUsd'),
+        isFalse,
+        reason: '호출이 실패했으니 결제된 원가가 없다',
+      );
     });
 
     test('가드가 지킨 미이전 항목은 로컬 경로로 재추출된다 — PATCH할 곳이 없다 (#165)', () async {

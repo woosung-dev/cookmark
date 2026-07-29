@@ -712,6 +712,55 @@ void main() {
     expect(events.map((e) => e.data['action']), ['add', 'remove']);
   });
 
+  testWidgets('담기지 않은 이유를 폼이 그 자리에서 말한다 — 조용한 무시 없음 (#127)', (tester) async {
+    await pumpApp(tester);
+    await tester.tap(find.byKey(const Key('recipe-book-link')));
+    await tester.pumpAndSettle();
+
+    Future<void> submit(String url, String title) async {
+      await tester.enterText(find.byKey(const Key('recipe-url-field')), url);
+      await tester.enterText(
+        find.byKey(const Key('recipe-title-field')),
+        title,
+      );
+      await tester.tap(find.byKey(const Key('recipe-submit')));
+      await tester.pumpAndSettle();
+    }
+
+    // 제목이 비면 이유를 말한다 — 예전엔 아무 일도 일어나지 않았다.
+    await submit('https://youtu.be/abc', '   ');
+    expect(find.byKey(const Key('recipe-add-rejection')), findsOneWidget);
+    expect(find.text('링크와 제목을 모두 채워주세요.'), findsOneWidget);
+
+    // 고쳐서 담으면 문구가 걷히고 행이 생긴다.
+    await submit('https://youtu.be/abc', '김치찌개');
+    expect(find.byKey(const Key('recipe-add-rejection')), findsNothing);
+    expect(
+      find.byKey(const Key('recipe-tile-https://youtu.be/abc')),
+      findsOneWidget,
+    );
+
+    // 같은 링크를 다시 담으면 — 예전엔 폼이 비워져 담긴 것처럼 보였고 행은 늘지 않았다.
+    await submit('https://youtu.be/abc', '다른 이름');
+    expect(find.byKey(const Key('recipe-add-rejection')), findsOneWidget);
+    expect(find.text('이미 레시피 북에 있는 링크예요.'), findsOneWidget);
+    expect(find.text('저장한 레시피 · 1'), findsOneWidget);
+    // 거절이면 입력을 지우지 않는다 — 사용자가 고칠 대상이 화면에 남아야 한다.
+    expect(
+      tester
+          .widget<TextField>(find.byKey(const Key('recipe-url-field')))
+          .controller!
+          .text,
+      'https://youtu.be/abc',
+    );
+
+    // 담기지 않았으니 레시피 북 이벤트도 1건뿐이다.
+    final added = (await Storage.open()).readEvents().where(
+      (e) => e.type == AppEventType.recipeBookChanged,
+    );
+    expect(added.map((e) => e.data['action']), ['add']);
+  });
+
   testWidgets('확정 재료로 "오늘 할 3개"가 뜬다 — 라벨·출처·부족 칩 (#18)', (tester) async {
     final book = RecipeBookController(FakeLlmGateway(), storage);
     await book.add(url: 'https://youtu.be/abc', title: '김치찌개');

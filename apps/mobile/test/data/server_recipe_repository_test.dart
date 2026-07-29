@@ -356,6 +356,45 @@ void main() {
     });
   });
 
+  group('502의 의미는 엔드포인트에 달렸다 (#127)', () {
+    // 서버에서 502를 내는 recipes 라우트는 POST /recipes 하나뿐이다(UpstreamLLMError =
+    // Gemini 자체 다운). GET·PATCH·DELETE는 502를 내지 않고 bulk 가져오기 실패는 500이다.
+    // 그러므로 create 밖의 502는 전부 인프라 502(Cloud Run bad gateway)이고,
+    // "재료를 알아내지 못해 저장하지 못했어요"로 뜨면 서버 장애를 사용자 입력 탓으로 돌린다.
+    const someRecipes = [
+      Recipe(url: 'https://r.test/1', title: '김치찌개', ingredients: ['김치']),
+    ];
+
+    test('create의 502만 extractionFailed다', () async {
+      await expectLater(
+        repoReturning({
+          'detail': '재료 추출에 실패해 저장하지 않았다',
+        }, status: 502).create(url: 'https://r.test/1', title: '김치찌개'),
+        failsWith(RecipeApiFailureKind.extractionFailed),
+      );
+    });
+
+    for (final (name, call) in <(String, Future<void> Function())>[
+      ('fetchAll', () => repoReturning({}, status: 502).fetchAll()),
+      (
+        'patchIngredients',
+        () => repoReturning(
+          {},
+          status: 502,
+        ).patchIngredients(id: 'srv-uuid', ingredients: ['김치']),
+      ),
+      ('delete', () => repoReturning({}, status: 502).delete('srv-uuid')),
+      (
+        'importBulk',
+        () => repoReturning({}, status: 502).importBulk(someRecipes),
+      ),
+    ]) {
+      test('$name의 502는 unavailable — 인프라 502이지 추출 실패가 아니다', () async {
+        await expectLater(call(), failsWith(RecipeApiFailureKind.unavailable));
+      });
+    }
+  });
+
   group('401 → 재등록 (#168)', () {
     /// 첫 요청만 401을 주고 그다음부터 [ok]를 준다 — 세션이 죽어 있던 상황.
     MockClient expiredOnce(Object ok, {int status = 200}) {

@@ -25,7 +25,8 @@ class OnboardingCard extends StatelessWidget {
   /// 폼 전체 비활성 — 서버 미러가 ready가 아닌 동안 저장 입력을 막는다(#121, 로컬 모드는 항상 참).
   final bool enabled;
 
-  final void Function(String url, String title) onSubmit;
+  /// 결과를 [RecipeForm]까지 돌려보낸다 — 거절 문구는 폼이 띄운다(#127).
+  final Future<RecipeAddOutcome> Function(String url, String title) onSubmit;
 
   /// 건너뛰기는 허용된다 — 빈 레시피 북으로도 루프는 돈다(G1 #8).
   final VoidCallback onSkip;

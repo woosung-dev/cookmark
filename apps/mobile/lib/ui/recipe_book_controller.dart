@@ -13,6 +13,25 @@ const trustedRecipeGoal = 3;
 /// 서버 미러의 동기 상태 — 로컬 모드는 항상 [ready]다(#121).
 enum RecipeSyncState { loading, error, ready }
 
+/// 저장 요청이 어떻게 끝났는지 — 폼이 그 자리에서 사용자에게 말할 수 있게 한다(#127).
+///
+/// [accepted]만 "시도가 들어갔다"는 뜻이고 성공을 보증하지 않는다 — 서버 저장 실패는 기존
+/// 표면(`addFailure` → RecipeAddFailureCard)이 말한다. 나머지 셋은 **호출 전에** 걸러진
+/// 거절이고, 예전에는 전부 조용한 return이라 사용자가 "왜 안 담기지"에 갇혔다.
+enum RecipeAddOutcome {
+  /// 저장 시도가 들어갔다.
+  accepted,
+
+  /// 같은 URL이 이미 레시피 북에 있다 — URL이 식별자다.
+  duplicateUrl,
+
+  /// URL 또는 제목이 비었다.
+  incomplete,
+
+  /// 이미 저장이 도는 중이다(더블탭).
+  busy,
+}
+
 class RecipeBookController extends ChangeNotifier {
   /// [server]가 null이면 로컬 모드(현행 그대로), 주어지면 서버 모드다(#121).
   ///
@@ -111,21 +130,31 @@ class RecipeBookController extends ChangeNotifier {
   /// 추출이 실패해도 레시피 자체는 저장한다 — 재료 없는 레시피가 없는 레시피보다 낫고,
   /// vision-tech 리서치가 예고한 "추출 실패 시 수동 입력 폴백"의 자리이기도 하다.
   /// 서버 모드는 반대로 추출 실패=미저장이 서버 정책이다 — [_addToServer] 참조.
-  Future<void> add({required String url, required String title}) async {
+  ///
+  /// 반환값은 [RecipeAddOutcome]이다 — 거절 세 갈래를 **폼이 그 자리에서 말할 수 있게**(#127).
+  /// 셋 다 첫 await 전에 결정되므로 거절은 마이크로태스크 안에서 돌아온다(프레임 전이다).
+  Future<RecipeAddOutcome> add({
+    required String url,
+    required String title,
+  }) async {
     // 더블탭 가드 — 첫 탭의 await 중 둘째 탭이 옛 목록으로 dedup을 통과해 추출·저장이
     // 2회 돌던 결함의 수리다. _saving은 로컬(아래)·서버([_addToServer]) 모두 첫 await 전에
     // 동기로 세팅되므로 최상단 동기 가드가 양 모드에서 성립한다.
-    if (_saving) return;
+    if (_saving) return RecipeAddOutcome.busy;
     final trimmedUrl = url.trim();
     final trimmedTitle = title.trim();
-    if (trimmedUrl.isEmpty || trimmedTitle.isEmpty) return;
+    if (trimmedUrl.isEmpty || trimmedTitle.isEmpty) {
+      return RecipeAddOutcome.incomplete;
+    }
 
     // URL이 식별자다 — 같은 레시피를 두 번 담지 않는다.
-    if (recipes.any((r) => r.url == trimmedUrl)) return;
+    if (recipes.any((r) => r.url == trimmedUrl)) {
+      return RecipeAddOutcome.duplicateUrl;
+    }
 
     if (_server != null) {
       await _addToServer(_server, url: trimmedUrl, title: trimmedTitle);
-      return;
+      return RecipeAddOutcome.accepted;
     }
 
     _saving = true;
@@ -164,6 +193,7 @@ class RecipeBookController extends ChangeNotifier {
 
     _saving = false;
     notifyListeners();
+    return RecipeAddOutcome.accepted;
   }
 
   /// 서버 모드 저장 — 추출은 서버가 저장 시 1회 수행하고, 실패(502)면 저장되지 않는다.
@@ -174,7 +204,8 @@ class RecipeBookController extends ChangeNotifier {
   }) async {
     // 하이드레이트가 안 끝났거나 실패한 상태면 저장하지 않는다 — 미러가 정확하지 않아
     // dedup 가드가 성립하지 않고, 에러 상태 위에 저장을 겹치면 상태가 꼬인다.
-    // 무음 폐기는 금지다 — 기존 실패 카드로 표면화해 재시도 길을 연다(폼은 이미 비워졌다).
+    // 무음 폐기는 금지다 — 기존 실패 카드로 표면화해 재시도 길을 연다(입력은 폼에 남아 있고
+    // [failedAdd]도 그대로 쥔다 — 실패 카드의 "다시 시도"가 폼과 무관하게 성립해야 한다).
     // 서버 호출 자체가 없었으므로 이벤트는 남기지 않는다.
     if (syncState != RecipeSyncState.ready) {
       _addFailure = _syncFailure ?? RecipeApiFailureKind.unavailable;
@@ -283,12 +314,17 @@ class RecipeBookController extends ChangeNotifier {
     _failure = null;
     notifyListeners();
 
+    // try 밖에 둔다 — 이 메서드엔 throw 지점이 둘이고, 뒤쪽(PATCH)에서 죽으면 앞쪽 LLM 호출은
+    // 이미 성공해 토큰이 결제된 뒤다. try 안의 지역 변수로 두면 catch에서 스코프 밖이라
+    // 그 원가가 원장에 못 들어간다(#127). add()가 같은 이유로 쓰는 관용구다.
+    LlmUsage? usage;
     try {
       // url도 넘긴다 — 서버 경계는 URL 내용 기반 추출 사다리를 탄다(#123).
       final result = await _gateway.extractIngredients(
         target.title,
         url: target.url,
       );
+      usage = result.usage;
       final updated = await server.patchIngredients(
         id: id,
         ingredients: result.ingredients,
@@ -305,18 +341,26 @@ class RecipeBookController extends ChangeNotifier {
           url: target.url,
           title: target.title,
           ingredientCount: updated.ingredients.length,
-          usage: result.usage,
+          usage: usage,
         ),
       );
     } on LlmFailure catch (e) {
+      // 추출 자체가 죽었다 — 결제된 원가가 없으므로 usage도 없다(여기선 항상 null이다).
       _failure = e.kind;
       await _storage.appendEvent(
         AppEvent.errorShown(at: _now(), kind: e.kind.name, stage: 'extraction'),
       );
     } on RecipeApiFailure catch (e) {
-      // PATCH가 죽었다 — 서버가 진실원이므로 미러도 갱신하지 않는다.
+      // PATCH가 죽었다 — 서버가 진실원이므로 미러도 갱신하지 않는다. 단 **LLM은 이미 돌았다** —
+      // 실패 지점은 추출이 아니라 저장이고(stage), 결제된 토큰은 저장 실패와 무관하게 원장에
+      // 남아야 한다(usage). 둘 다 빠뜨리면 재추출 원가가 P2 산식에서 샌다(#127, 스펙 US 28).
       await _storage.appendEvent(
-        AppEvent.errorShown(at: _now(), kind: e.kind.name, stage: 'extraction'),
+        AppEvent.errorShown(
+          at: _now(),
+          kind: e.kind.name,
+          stage: 'reextractSave',
+          usage: usage,
+        ),
       );
     }
 

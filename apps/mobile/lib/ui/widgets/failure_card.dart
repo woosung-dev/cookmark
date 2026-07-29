@@ -6,6 +6,7 @@ import '../main_controller.dart';
 import '../../theme/app_colors.dart';
 import '../../theme/app_theme.dart';
 import 'pressable_scale.dart';
+import 'report_hint.dart';
 
 class FailureCard extends StatelessWidget {
   const FailureCard({
@@ -85,16 +86,7 @@ class FailureCard extends StatelessWidget {
           // 구분하지 못한다(스펙 #161 G절). 사용자 입력 실패까지 붙이면 진짜 신고가 소음에 묻힌다.
           if (kind.isServerSide) ...[
             const SizedBox(height: Space.sm),
-            // 위 두 줄과 같은 크기·굵기면 셋이 평평하게 쌓여 눈이 그냥 흘린다. 작게·굵게로
-            // 3단째 위계를 만든다(DESIGN.md §3 "위계는 크기·굵기·색으로"). muted로 낮추지
-            // 않는 이유 — 이 줄이 이 카드의 용건이다.
-            Text(
-              key: const Key('failure-report-hint'),
-              '계속 이러면 만든 사람에게 카톡으로 알려주세요.',
-              style: AppTypography.footnote.copyWith(
-                fontWeight: FontWeight.w600,
-              ),
-            ),
+            const ReportHint(key: Key('failure-report-hint')),
           ],
           const SizedBox(height: Space.xl),
           // 세로 스택 — 폴백 문구가 길어 반칸에서 두 줄로 접히지 않게(전폭 각각).
