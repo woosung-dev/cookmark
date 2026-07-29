@@ -15,11 +15,12 @@ enum RecipeSyncState { loading, error, ready }
 
 /// 저장 요청이 어떻게 끝났는지 — 폼이 그 자리에서 사용자에게 말할 수 있게 한다(#127).
 ///
-/// [accepted]만 "시도가 들어갔다"는 뜻이고 성공을 보증하지 않는다 — 서버 저장 실패는 기존
-/// 표면(`addFailure` → RecipeAddFailureCard)이 말한다. 나머지 셋은 **호출 전에** 걸러진
-/// 거절이고, 예전에는 전부 조용한 return이라 사용자가 "왜 안 담기지"에 갇혔다.
+/// **[accepted]는 "폼이 더 말할 것이 없다"는 뜻이지 저장 성공이 아니다.** 서버 모드의 저장
+/// 실패도 여기로 온다 — 그건 `addFailure` → `RecipeAddFailureCard`가 말하고, 폼이 겹쳐 말하면
+/// 같은 사건을 두 번 말하게 된다. 나머지 셋은 서버·LLM 호출에 닿기도 전에 걸러진 거절이고,
+/// 예전에는 전부 조용한 return이라 사용자가 "왜 안 담기지"에 갇혔다.
 enum RecipeAddOutcome {
-  /// 저장 시도가 들어갔다.
+  /// 저장 경로에 들어갔다 — 결과는 기존 표면이 말한다.
   accepted,
 
   /// 같은 URL이 이미 레시피 북에 있다 — URL이 식별자다.
@@ -204,8 +205,9 @@ class RecipeBookController extends ChangeNotifier {
   }) async {
     // 하이드레이트가 안 끝났거나 실패한 상태면 저장하지 않는다 — 미러가 정확하지 않아
     // dedup 가드가 성립하지 않고, 에러 상태 위에 저장을 겹치면 상태가 꼬인다.
-    // 무음 폐기는 금지다 — 기존 실패 카드로 표면화해 재시도 길을 연다(입력은 폼에 남아 있고
-    // [failedAdd]도 그대로 쥔다 — 실패 카드의 "다시 시도"가 폼과 무관하게 성립해야 한다).
+    // 무음 폐기는 금지다 — 기존 실패 카드로 표면화해 재시도 길을 연다. 이 분기에선 폼이
+    // 잠겨 있어(enabled = syncState == ready) 실패 카드의 "다시 시도"가 유일한 길이고,
+    // 그래서 [failedAdd]가 그 입력을 쥐고 있어야 한다.
     // 서버 호출 자체가 없었으므로 이벤트는 남기지 않는다.
     if (syncState != RecipeSyncState.ready) {
       _addFailure = _syncFailure ?? RecipeApiFailureKind.unavailable;

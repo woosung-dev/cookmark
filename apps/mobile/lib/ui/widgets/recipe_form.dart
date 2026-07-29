@@ -39,19 +39,28 @@ class _RecipeFormState extends State<RecipeForm> {
     super.dispose();
   }
 
-  /// 조용히 무시된 거절의 이유 — null이면 아무 일도 없었다.
+  /// 저장 경로에 닿지도 못하고 거절된 이유 — null이면 할 말이 없다.
   RecipeAddOutcome? _rejection;
+
+  /// 손을 대면 걷는다 — 이미 고친 URL 밑에 "이미 있는 링크예요"가 남아 있으면 그 문구가
+  /// 거짓말이 된다. 아래 문구가 "고칠 대상이 필드다"라고 말하는 이상 필드가 문구를 지운다.
+  void _clearRejection() {
+    if (_rejection != null) setState(() => _rejection = null);
+  }
 
   /// 빈 값 판정을 여기서 하지 않는다 — 컨트롤러가 [RecipeAddOutcome.incomplete]로 답한다.
   /// 두 곳에서 자르면 판정이 갈리고, 갈리면 한쪽만 고쳐진다.
   ///
   /// 거절은 첫 await 전에 결정되므로 마이크로태스크 안에서 돌아온다 — 필드가 비었다 돌아오는
-  /// 깜빡임이 없다. [RecipeAddOutcome.accepted]에서만 비우므로, 저장이 도는 동안 사용자가 넣은
-  /// 값이 화면에 남고(그 사이 폼은 잠겨 있다) 저장이 실패해도 입력이 사라지지 않는다.
+  /// 깜빡임이 없다. 거절이면 입력을 남겨 사용자가 그 자리에서 고칠 수 있게 한다.
+  ///
+  /// **서버 모드의 저장 실패는 여기 오지 않는다** — [RecipeAddOutcome.accepted]로 와서
+  /// 필드가 비워지고, 재시도는 실패 카드가 쥔 그 입력으로 간다(#121). 폼이 그 실패까지
+  /// 말하면 카드와 두 번 말하게 된다.
   Future<void> _submit() async {
     final url = _urlController.text.trim();
     final title = _titleController.text.trim();
-    if (_rejection != null) setState(() => _rejection = null);
+    _clearRejection();
 
     final outcome = await widget.onSubmit(url, title);
     if (!mounted) return;
@@ -86,6 +95,7 @@ class _RecipeFormState extends State<RecipeForm> {
           controller: _urlController,
           enabled: active,
           keyboardType: TextInputType.url,
+          onChanged: (_) => _clearRejection(),
           decoration: const InputDecoration(hintText: '레시피 링크 붙여넣기'),
         ),
         const SizedBox(height: Space.sm),
@@ -94,6 +104,7 @@ class _RecipeFormState extends State<RecipeForm> {
           controller: _titleController,
           enabled: active,
           textInputAction: TextInputAction.done,
+          onChanged: (_) => _clearRejection(),
           onSubmitted: (_) => _submit(),
           decoration: const InputDecoration(hintText: '무슨 요리인가요? (예: 김치찌개)'),
         ),

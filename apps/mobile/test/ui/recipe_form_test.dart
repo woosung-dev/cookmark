@@ -80,6 +80,17 @@ void main() {
     expect(submissions, [('https://youtu.be/abc', '')]);
   });
 
+  testWidgets('필드를 고치면 거절 문구가 걷힌다 — 고친 URL 밑에 남으면 그 문구가 거짓말이다', (tester) async {
+    await pumpForm(tester, outcome: RecipeAddOutcome.duplicateUrl);
+    await fillAndSubmit(tester);
+    expect(find.byKey(rejection), findsOneWidget);
+
+    await tester.enterText(find.byKey(urlField), 'https://youtu.be/xyz');
+    await tester.pump();
+
+    expect(find.byKey(rejection), findsNothing);
+  });
+
   testWidgets('저장 중이면(busy) 문구를 띄우지 않는다 — 진행 표시가 이미 피드백이다', (tester) async {
     await pumpForm(tester, outcome: RecipeAddOutcome.busy);
     await fillAndSubmit(tester);

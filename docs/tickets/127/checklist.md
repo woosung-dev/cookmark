@@ -21,7 +21,8 @@
   - [x] `analyze_pilot`은 `costUsd`를 switch 밖에서 쓸어담으므로 **툴 0줄**로 원장에 합산된다 — 그 사실을 유닛으로 잠갔다
 - [x] **D. 저장 거절 표면화** — `RecipeAddOutcome{accepted,duplicateUrl,incomplete,busy}` + `add()` 반환 + 폼의 `Key('recipe-add-rejection')` 한 줄. 폼의 자체 빈-값 조기 return은 제거해 판정을 컨트롤러 한 곳으로 모았다
   - [x] `busy`는 문구 없음 — 버튼의 "재료를 알아보는 중…"이 이미 그 말을 한다. **exhaustive switch가 트립와이어**다(값이 늘면 컴파일이 깨져 문구를 강제로 답하게 한다)
-  - [x] 낡아진 주석 2곳 정정(`_addToServer`의 "폼은 이미 비워졌다" · `RecipeAddFailureCard.onRetry` doc)
+  - [x] 필드를 고치면 문구가 걷힌다(`onChanged`) — 고친 URL 밑에 남으면 그 문구가 거짓말이 된다
+  - [x] `RecipeAddFailureCard.onRetry` doc 정정 — 재시도는 폼의 현재 입력이 아니라 `failedAdd`가 쥔 입력으로 간다
 - [ ] 동명 레시피 saved 제안 URL 오연결 — **하지 않았다.** 위 범위 결정 참조
 - [ ] `_addToServer`의 `stage: 'extraction'` 오기 — **하지 않았다.** A와 같은 결이나 이슈가 열거하지 않았고 기존 테스트가 값을 잠그고 있다(`context-notes.md`에 표면화)
 
@@ -32,4 +33,4 @@
 - [x] **트립와이어 검증** — 신규 E2E 2건의 단언을 각각 틀린 값으로 바꿔 **실패하는 것을 확인**한 뒤 복원했다(`flutter drive`는 케이스별 출력이 없어 안 도는 E2E와 통과한 E2E가 같아 보인다)
 - [x] `test/ui/failure_card_test.dart` **무변경 통과** — `ReportHint` 추출이 행동을 안 바꿨다는 증거
 - [x] `dart format --set-exit-if-changed` · `flutter analyze --fatal-infos` green
-- [x] `/code-review` — Standards·Spec 두 축
+- [x] `/code-review` — Standards·Spec 두 축. **Standards 하드 위반 0**, 판정 5건. **두 축이 독립적으로 같은 결함을 짚었다**(= 강한 신호): 서버 모드 저장 실패도 `accepted`로 와서 폼이 비워지는데 주석이 반대로 적혀 있었다. 반영 내역은 `context-notes.md` 「코드리뷰 반영」
