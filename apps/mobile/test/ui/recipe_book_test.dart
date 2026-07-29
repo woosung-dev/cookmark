@@ -1,4 +1,6 @@
 // 레시피 북 — URL 저장·삭제, 제목 기반 재료 추출, 미인식 칩(#17).
+import 'dart:async';
+
 import 'package:cookmark/data/storage.dart';
 import 'package:cookmark/domain/app_event.dart';
 import 'package:cookmark/domain/recipe.dart';
@@ -113,6 +115,67 @@ void main() {
       expect(gateway.extractCallCount, 1);
       expect(book.recipes, hasLength(1));
       expect(bookEvents(), hasLength(1));
+    });
+
+    // 거절이 조용하면 사용자는 "왜 안 담기지"에 갇힌다 — 폼이 이미 필드를 비운 뒤라
+    // 담긴 것처럼 보이기까지 한다(파일럿 세션 후반 실사용에서 발생). add가 이유를 돌려주고
+    // 폼이 그 자리에서 말한다(#127).
+    group('저장 결과를 돌려준다 (#127)', () {
+      test('담기면 accepted', () async {
+        final book = bookWith(FakeLlmGateway());
+        expect(
+          await book.add(url: 'https://youtu.be/abc', title: '김치찌개'),
+          RecipeAddOutcome.accepted,
+        );
+      });
+
+      test('같은 URL이면 duplicateUrl', () async {
+        final book = bookWith(FakeLlmGateway());
+        await book.add(url: 'https://youtu.be/abc', title: '김치찌개');
+        expect(
+          await book.add(url: 'https://youtu.be/abc', title: '다른 이름'),
+          RecipeAddOutcome.duplicateUrl,
+        );
+      });
+
+      test('URL이나 제목이 비면 incomplete', () async {
+        final book = bookWith(FakeLlmGateway());
+        expect(
+          await book.add(url: '  ', title: '김치찌개'),
+          RecipeAddOutcome.incomplete,
+        );
+        expect(
+          await book.add(url: 'https://youtu.be/abc', title: '   '),
+          RecipeAddOutcome.incomplete,
+        );
+      });
+
+      test('저장이 도는 중이면 busy — 진행 표시가 이미 피드백이다', () async {
+        final book = bookWith(
+          FakeLlmGateway(latency: const Duration(milliseconds: 50)),
+        );
+        final first = book.add(url: 'https://youtu.be/abc', title: '김치찌개');
+        expect(
+          await book.add(url: 'https://youtu.be/xyz', title: '계란찜'),
+          RecipeAddOutcome.busy,
+        );
+        expect(await first, RecipeAddOutcome.accepted);
+      });
+
+      test('거절은 await 없이도 즉시 판정된다 — 폼이 필드를 비웠다 되돌리지 않는다', () async {
+        final book = bookWith(FakeLlmGateway());
+        await book.add(url: 'https://youtu.be/abc', title: '김치찌개');
+
+        // 마이크로태스크 하나로 끝난다(네트워크·LLM 왕복 없음) — 프레임 전에 결과가 온다.
+        RecipeAddOutcome? outcome;
+        unawaited(
+          book
+              .add(url: 'https://youtu.be/abc', title: '김치찌개')
+              .then((o) => outcome = o),
+        );
+        await Future<void>.delayed(Duration.zero);
+        expect(outcome, RecipeAddOutcome.duplicateUrl);
+      });
     });
   });
 

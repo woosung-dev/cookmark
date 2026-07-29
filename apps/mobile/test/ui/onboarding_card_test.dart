@@ -1,4 +1,5 @@
 // 온보딩 카드의 enabled 배선(#121 수리 R1) — 서버 미러가 ready가 아닌 동안 폼이 실제로 닫히는지.
+import 'package:cookmark/ui/recipe_book_controller.dart';
 import 'package:cookmark/ui/widgets/onboarding_card.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -13,7 +14,7 @@ void main() {
               savedCount: 0,
               saving: false,
               enabled: enabled,
-              onSubmit: (_, _) {},
+              onSubmit: (_, _) async => RecipeAddOutcome.accepted,
               onSkip: () {},
             ),
           ),

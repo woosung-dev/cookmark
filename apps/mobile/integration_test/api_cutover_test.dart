@@ -951,6 +951,48 @@ void main() {
       );
     }
   });
+
+  testWidgets('⑱ 인프라 502 — 추출 실패로 오분류되지 않고 신고 경로가 열린다 (#127)', (tester) async {
+    // Cloud Run bad gateway가 전 라우트에 502를 낸다. 실 경계를 태워야 하는 이유 —
+    // 이 케이스의 질문은 "상태 코드로부터 무엇이 화면에 뜨는가"이고, 경계 페이크에 kind를
+    // 손으로 꽂으면 그 질문을 건너뛴다(#166이 남긴 교훈).
+    await storage.writeRecipes(seedThree);
+    final session = FakeDeviceSession(storedToken: 'tok-live');
+    final server = ServerRecipeRepository(
+      baseUrl: 'https://api.test',
+      session: session,
+      client: MockClient(
+        (_) async => http.Response(jsonEncode({'detail': 'bad gateway'}), 502),
+      ),
+    );
+
+    await pumpApp(tester, server: server);
+    await openRecipeBook(tester);
+    await waitForVisible(
+      tester,
+      () => _visible(find.byKey(const Key('recipe-list-error'))),
+    );
+    await tester.pumpAndSettle();
+
+    // 502를 세션 문제로 읽지 않는다 — 재등록도 돌지 않았다.
+    expect(session.registerCount, 0);
+    expect(find.text('레시피 북을 불러오지 못했어요.'), findsOneWidget);
+    expect(find.text('접속 정보가 유효하지 않아요.'), findsNothing);
+
+    // ★ 서버 장애를 사용자가 넣은 URL 탓으로 돌리지 않는다.
+    expect(
+      find.textContaining('재료를 알아내지 못해'),
+      findsNothing,
+      reason: '인프라 502가 추출 실패로 오분류되면 사용자는 자기 레시피를 의심한다',
+    );
+
+    // ★ 파운더가 이 장애를 알 수 있는 유일한 경로가 열려 있다(스펙 #161 §G).
+    expect(find.byKey(const Key('recipe-list-report-hint')), findsOneWidget);
+    expect(find.textContaining('카톡으로 알려주세요'), findsOneWidget);
+
+    // 서버가 살아나면 그냥 이어진다 — 502가 막다른 상태를 만들지 않는다(G1 #8).
+    expect(find.byKey(const Key('recipe-list-error-retry')), findsOneWidget);
+  });
 }
 
 /// test/support의 FakeServerRecipeRepository와 동형 사본.

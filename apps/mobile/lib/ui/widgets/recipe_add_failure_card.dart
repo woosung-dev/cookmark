@@ -8,6 +8,7 @@ import '../../data/server_recipe_repository.dart';
 import '../../theme/app_colors.dart';
 import '../../theme/app_theme.dart';
 import 'pressable_scale.dart';
+import 'report_hint.dart';
 
 class RecipeAddFailureCard extends StatelessWidget {
   const RecipeAddFailureCard({
@@ -19,7 +20,8 @@ class RecipeAddFailureCard extends StatelessWidget {
 
   final RecipeApiFailureKind kind;
 
-  /// 실패한 입력(controller.failedAdd)으로 add를 재전송한다 — 폼은 이미 비워졌다.
+  /// 실패한 입력(controller.failedAdd)으로 add를 재전송한다 — 폼의 입력과 무관하게 성립한다
+  /// (폼이 그 사이 지워졌든 다른 값으로 바뀌었든 실패한 그 입력을 다시 보낸다).
   final VoidCallback onRetry;
 
   /// 재시도를 포기하고 카드를 접는다(clearAddFailure).
@@ -45,6 +47,13 @@ class RecipeAddFailureCard extends StatelessWidget {
             _message,
             style: AppTypography.headline.copyWith(color: AppColors.danger),
           ),
+          // 신고 유도는 kind로 가르지 않는다(#127) — [RecipeApiFailureKind]에는 LlmFailureKind의
+          // empty·lowQuality 같은 "사용자 입력이 원인인" 값이 하나도 없다. 502조차 서버 LLM 자체
+          // 다운일 때만 나고(추출 사다리가 그 앞을 전부 제목 추론으로 강등한다), 나머지 셋은
+          // 정의상 서버 도달 실패다. 그래서 LlmFailureBlame 같은 분류 축을 새로 만들지 않는다 —
+          // 없는 갈림을 위해 축을 세우면 다음 사람이 그 축을 진짜라고 믿는다.
+          const SizedBox(height: Space.sm),
+          const ReportHint(key: Key('recipe-add-report-hint')),
           const SizedBox(height: Space.xl),
           SizedBox(
             height: Space.touchMin,

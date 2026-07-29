@@ -246,12 +246,26 @@ class AppEvent {
        };
 
   /// ⑫ 오류 표시
+  ///
+  /// [stage]는 실패가 난 자리다 — 현재 쓰이는 값: `recognition`·`matching`·`extraction`·
+  /// `hydrate`·`remove`·`reextractSave`. enum이 아닌 이유는 분석이 이 필드를 집계하지 않고
+  /// 원본 해상도로만 쓰기 때문이다. **실패 지점을 정직하게 적는다** — 재추출에서 LLM은 성공했는데
+  /// PATCH가 죽은 것을 `extraction`으로 적으면 필드 이름이 거짓말을 한다(#127).
+  ///
+  /// [usage]는 **실패했지만 이미 결제된** LLM 호출의 원가다. 재추출처럼 LLM 성공 뒤 저장이
+  /// 죽는 경로가 있고, 그때 원가를 버리면 P2 원장에서 샌다(스펙 US 28 "원가는 호출마다").
+  /// 카탈로그 12종은 무변경이다 — 이건 이벤트 유형이 아니라 ⑫의 데이터 필드다.
   AppEvent.errorShown({
     required this.at,
     required String kind,
     required String stage,
+    LlmUsage? usage,
   }) : type = AppEventType.errorShown,
-       data = {'kind': kind, 'stage': stage};
+       data = {
+         'kind': kind,
+         'stage': stage,
+         if (usage != null) ...usage.toJson(),
+       };
 
   final AppEventType type;
   final DateTime at;

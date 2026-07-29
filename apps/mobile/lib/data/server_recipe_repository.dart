@@ -17,7 +17,8 @@ enum RecipeApiFailureKind {
   /// 401 — 세션이 없거나 만료됐다.
   unauthorized,
 
-  /// 502 — 저장 시 재료 추출이 실패해 레시피가 저장되지 않았다.
+  /// **create의** 502 — 저장 시 재료 추출이 실패해 레시피가 저장되지 않았다.
+  /// 다른 호출의 502는 인프라 502라 [unavailable]로 간다(#127, [_ensureStatus] 참조).
   extractionFailed,
 
   /// 404 — 없는 항목(남의 것도 같은 응답이다 — 존재를 노출하지 않는다).
@@ -71,7 +72,8 @@ class ServerRecipeRepository {
         body: jsonEncode({'url': url, 'title': title}),
       ),
     );
-    _ensureStatus(response, 201);
+    // 502가 "추출 실패=미저장"을 뜻하는 유일한 호출이다(#127) — 다른 넷은 인프라 502다.
+    _ensureStatus(response, 201, extractionFailedOn502: true);
     return _parseObject(response);
   }
 
@@ -153,14 +155,27 @@ class ServerRecipeRepository {
     }
   }
 
-  /// 401·404·502만 고유 의미가 있다 — 나머지 비성공(400·422·5xx)은 전부 unavailable이다.
-  void _ensureStatus(http.Response response, int expected) {
+  /// 401·404만 전 엔드포인트 공통이다 — 나머지 비성공(400·422·5xx)은 전부 unavailable이다.
+  ///
+  /// **502는 create에서만 고유 의미를 가진다**([extractionFailedOn502], #127). 서버에서 502를
+  /// 내는 recipes 라우트는 `POST /recipes` 하나뿐이고(추출 사다리 끝의 LLM 자체 다운), GET·PATCH·
+  /// DELETE는 502를 내지 않으며 bulk 가져오기 실패는 500이다. 그러므로 그 넷에서 온 502는 인프라
+  /// 502(Cloud Run bad gateway)이고, extractionFailed로 접으면 화면에 "재료를 알아내지 못해
+  /// 저장하지 못했어요"가 떠 **서버 장애를 사용자가 넣은 URL 탓으로 읽히게** 한다 —
+  /// 스펙 #161 §G가 닫으려던 인지 경로 구멍이 거기서 다시 열린다(#166과 같은 병리).
+  void _ensureStatus(
+    http.Response response,
+    int expected, {
+    bool extractionFailedOn502 = false,
+  }) {
     final status = response.statusCode;
     if (status == expected) return;
     throw switch (status) {
       401 => const RecipeApiFailure(RecipeApiFailureKind.unauthorized),
       404 => const RecipeApiFailure(RecipeApiFailureKind.notFound),
-      502 => const RecipeApiFailure(RecipeApiFailureKind.extractionFailed),
+      502 when extractionFailedOn502 => const RecipeApiFailure(
+        RecipeApiFailureKind.extractionFailed,
+      ),
       _ => RecipeApiFailure(RecipeApiFailureKind.unavailable, 'HTTP $status'),
     };
   }

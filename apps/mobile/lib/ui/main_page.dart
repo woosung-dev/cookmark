@@ -67,9 +67,13 @@ class _MainPageState extends State<MainPage> {
   Future<XFile?> _pickFromGallery() =>
       ImagePicker().pickImage(source: ImageSource.gallery);
 
-  Future<void> _saveRecipe(String url, String title) async {
-    await widget.recipeBookController.add(url: url, title: title);
+  Future<RecipeAddOutcome> _saveRecipe(String url, String title) async {
+    final outcome = await widget.recipeBookController.add(
+      url: url,
+      title: title,
+    );
     _controller.refresh();
+    return outcome;
   }
 
   /// "레시피 보기" — 원본을 새 탭으로 연다. 레시피 실행(③)은 익숙한 유튜브에서 한다(스펙 #13).
