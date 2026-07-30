@@ -40,6 +40,8 @@
 - **(A) private 전환** — 가장 단순. `gh repo edit woosung-dev/cookmark --visibility private --accept-visibility-change-consequences`. 파일럿 웹(Vercel)은 별도 프로젝트라 영향받지 않는다.
 - **(B) public 유지 + 하드닝** — branch protection(main) + 필수 리뷰 + 액션 SHA 핀(`allowed_actions` 제한) + `sha_pinning_required`. 오픈소스로 남기고 싶을 때.
 
+  **SHA 핀의 범위는 워크플로의 직접 `uses:`에 그치지 않는다.** 합성 액션이 다시 호출하는 액션도 불변 커밋이어야 한다. 현재 Flutter 설치 액션은 [Cookmark 포크](https://github.com/woosung-dev/cookmark-flutter-action)의 `d7481f5`를 사용하며, 원본 v2의 `actions/cache@v5` 두 참조만 `caa2961` SHA로 고정했다. 액션을 업데이트할 때는 이 간접 의존성 그래프를 다시 감사하고, 포크 커밋과 워크플로 참조를 같은 PR에서 함께 바꾼다.
+
 **이 선결 조건은 §6(리포 변수 주입)과 한 묶음이다** — deploy job은 변수가 없으면 skip이라, 하드닝 없이 변수만 넣지 않는 한 무보호 러너가 실 자격증명을 만지는 창이 열리지 않는다. 순서는 **하드닝 → GCP 프로비저닝 → §6 변수**다.
 
 ## 0. 사전 준비 — 프로젝트·과금·API
