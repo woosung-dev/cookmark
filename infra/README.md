@@ -1,6 +1,6 @@
 # infra — 프로비저닝 절차
 
-`apps/api`(FastAPI)를 **Cloud Run 서울(asia-northeast3)** 에 GitHub Actions로 자동 배포하기 위한 GCP 리소스 절차다. 결정 정본은 [ADR-0009](../docs/adr/0009-apps-api-materialization.md), 인프라 결정은 그릴링 [#88](https://github.com/woosung-dev/cookmark/issues/88), 실행은 [#98](https://github.com/woosung-dev/cookmark/issues/98).
+`apps/api`(FastAPI)를 **Cloud Run 도쿄(asia-northeast1)** 에 GitHub Actions로 자동 배포하기 위한 GCP 리소스 절차다. 결정 정본은 [ADR-0009](../docs/adr/0009-apps-api-materialization.md), 인프라 결정은 그릴링 [#88](https://github.com/woosung-dev/cookmark/issues/88), 실행은 [#98](https://github.com/woosung-dev/cookmark/issues/98).
 
 - **무엇이 들어오는가.** 프로비저닝 절차(이 문서). 배포 워크플로는 `.github/workflows/api.yml`에 **살아야 하고**(GitHub 강제), Dockerfile은 `apps/api/`에 colocate한다 — 그래서 여기 남는 건 "GCP에 손으로 만들 것" 목록뿐이다.
 - **어떤 rules가 규율하는가.** `.claude/rules/backend.md`(§8 마이그레이션 · §9.1 CORS · §10 Docker 포트) + ADR-0009.
@@ -16,7 +16,7 @@
 | --- | --- | --- |
 | 0.5 | 리포 하드닝 (private 전환 또는 branch protection+SHA 핀) | 1 (선결) |
 | 1 | Cloud Run 서비스 (`cookmark-api`) + `allUsers` invoker 바인딩 | 1 |
-| 2 | Artifact Registry 저장소 (docker, 서울) | 1 |
+| 2 | Artifact Registry 저장소 (docker, 도쿄) | 1 |
 | 3 | Secret Manager 시크릿 (런타임·배포자 SA 둘 다 읽음) | **4** (아래 주 참조) |
 | 4 | 서비스 계정 (배포자 1 · 런타임 1) | 2 |
 | 5 | Workload Identity 풀 1 + OIDC provider 1 | 2 |
@@ -46,14 +46,14 @@
 
 ```bash
 export PROJECT_ID="cookmark"          # 실제 값으로 교체 (전역 고유)
-export REGION="asia-northeast3"       # 서울 — 유료 리전(무료 US 등급은 ADR-0009가 의식적으로 포기)
+export REGION="asia-northeast1"       # 도쿄 — Tier 1; free tier는 사용량 할당이며 과금 계정은 필요
 export GITHUB_REPO="woosung-dev/cookmark"
 
 gcloud projects create "${PROJECT_ID}"
 gcloud config set project "${PROJECT_ID}"
 ```
 
-**과금 계정 연결은 콘솔에서 한다** — Cloud Run 서울도 Artifact Registry도 과금 없이는 안 뜬다.
+**과금 계정 연결은 콘솔에서 한다** — Cloud Run 도쿄도 Artifact Registry도 과금 없이는 안 뜬다. `min-instances=0`은 유휴 비용을 없앨 뿐, 사용량 초과 비용을 막는 장치는 아니다.
 <https://console.cloud.google.com/billing/linkedaccount>
 
 ```bash

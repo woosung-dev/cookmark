@@ -153,7 +153,7 @@ uv run python scripts/smoke_llm.py --image 사진.jpg  # + 인식 1건 — 총 �
 
 2026-07-18 실측 — 총 $0.00146, `image_tokens=1064` 고정 불변식 재현. 단 `required` 필드가 매칭 출력 토큰을 늘려(225→643) 매칭 1건 원가가 ≈$0.0004→$0.0011로 올랐다 — 루프 원가는 ≈$0.0018 수준(승계 기준 $0.0011 대비 증가, 여전히 파일럿 원가 판정에 무해한 자릿수).
 
-## 배포 — Cloud Run 서울 + WIF ([#98](https://github.com/woosung-dev/cookmark/issues/98))
+## 배포 — Cloud Run 도쿄 + WIF ([#98](https://github.com/woosung-dev/cookmark/issues/98))
 
 `main` push → `api.yml`의 gate 통과 → deploy job이 이미지 빌드 → Artifact Registry 푸시 → **마이그레이션** → Cloud Run 배포 → health 스모크. 키 파일 없이 Workload Identity Federation으로 배포자 SA를 임퍼서네이트한다.
 

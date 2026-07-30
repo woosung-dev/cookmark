@@ -27,8 +27,8 @@ jobs:
     name: format · lint · mypy · pytest · 계약
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
-      - uses: astral-sh/setup-uv@v6
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+      - uses: astral-sh/setup-uv@d0cc045d04ccac9d8b7881df0226f9e82c39688e # v6
         with:
           enable-cache: true
           cache-dependency-glob: "apps/api/uv.lock"
@@ -92,7 +92,7 @@ jobs:
   # 대가 — main의 무관한 푸시(docs 등)도 리비전을 하나 만든다. scale-to-zero + 사용자 0이라 비용은 0에
   # 수렴하고, 부수적으로 "배포된 것 = main"이 항상 참이 된다.
   deploy:
-    name: Cloud Run 서울 배포
+    name: Cloud Run 도쿄 배포
     needs: gate
     # 프로비저닝 전엔 통째로 skip한다 — 가드가 없으면 시크릿 없는 main push마다 CI가 영구히 빨개진다.
     # 파운더가 리포 변수를 넣는 순간(infra/README 절차 마지막 단계) 파이프라인이 발화한다.
@@ -109,7 +109,7 @@ jobs:
       group: api-deploy-prod
       cancel-in-progress: false
     env:
-      REGION: asia-northeast3 # 서울 — ADR-0009(무료 US 등급 의식적 포기)
+      REGION: asia-northeast1 # 도쿄 — ADR-0009(2026-07-30 정정)
       SERVICE: cookmark-api
       AR_REPO: cookmark
       # Secret Manager 시크릿 이름 — 상수라 리포 변수로 뽑지 않는다(infra/README §3).
@@ -123,19 +123,19 @@ jobs:
       GEMINI_SECRET: cookmark-gemini-api-key
       REGISTER_SECRET: cookmark-register-key # 익명 기기 등록의 문지기 (#167)
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
 
       # 키 파일 없음 — WIF로 배포자 SA를 임퍼서네이트한다.
       # Cloud Run은 Direct WIF를 지원하지 않아 service_account가 필수다(구글 문서 명시).
       # 일반 IAM 문서는 direct를 권장하므로 그대로 따르면 push까지 통과한 뒤 deploy에서 죽는다.
       - id: auth
-        uses: google-github-actions/auth@v3
+        uses: google-github-actions/auth@7c6bc770dae815cd3e89ee6cdf493a5fab2cc093 # v3
         with:
           project_id: ${{ vars.GCP_PROJECT_ID }}
           workload_identity_provider: ${{ vars.GCP_WIF_PROVIDER }}
           service_account: ${{ vars.GCP_DEPLOYER_SA }}
 
-      - uses: google-github-actions/setup-gcloud@v3
+      - uses: google-github-actions/setup-gcloud@aa5489c8933f4cc7a4f7d45035b3b1440c9c10db # v3
 
       - name: Artifact Registry 도커 인증
         run: gcloud auth configure-docker "${REGION}-docker.pkg.dev" --quiet
@@ -164,7 +164,7 @@ jobs:
       # DATABASE_URL만으로는 alembic이 뜨지도 않는다 — 그래서 서빙과 같은 넷을 여기서도 조회한다.
       - name: 배포 시크릿 조회 (WIF — Secret Manager에서 직접, GitHub Secret 경유 안 함)
         id: secrets
-        uses: google-github-actions/get-secretmanager-secrets@v3
+        uses: google-github-actions/get-secretmanager-secrets@bc9c54b29fdffb8a47776820a7d26e77b379d262 # v3
         with:
           secrets: |-
             database_url:${{ vars.GCP_PROJECT_ID }}/${{ env.DB_SECRET }}
