@@ -108,6 +108,16 @@ class RecipeBookController extends ChangeNotifier {
       // 상태는 반드시 ready다 — error로 두면 폼 잠금·서버 저장 게이트·가져오기 게이트가 전부 닫혀
       // 이전 경로(가져오기 → bulk)까지 함께 막힌다.
       if (fetched.isEmpty && recipes.isNotEmpty) {
+        // 현재 계정의 서버에는 없으므로, 남아 있던 id는 옛 계정의 수송 메타데이터다. id 없는
+        // 미이전 항목으로 바꿔야 자기 export의 가져오기가 새 계정으로 이 레시피들을 올릴 수 있다(#181).
+        await _storage.writeRecipes([
+          for (final recipe in recipes)
+            Recipe(
+              url: recipe.url,
+              title: recipe.title,
+              ingredients: recipe.ingredients,
+            ),
+        ]);
         await _storage.appendEvent(
           AppEvent.errorShown(
             at: _now(),

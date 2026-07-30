@@ -708,10 +708,17 @@ void main() {
     expect((exported['recipes'] as List), hasLength(3));
   });
 
-  testWidgets('⑭ 가드 뒤 이전 — 자기 export를 가져오면 미러가 서버로 올라간다 (#165)', (
-    tester,
-  ) async {
-    await storage.writeRecipes(seedThree);
+  testWidgets('⑭ 재등록 가드 뒤 이전 — 옛 서버 id 미러도 새 계정으로 올라간다 (#181)', (tester) async {
+    // 30일+ 비활성 뒤 재등록한 상태 — 미러의 id는 옛 계정 소유라 새 빈 계정에는 쓸 수 없다.
+    await storage.writeRecipes([
+      for (final (index, recipe) in seedThree.indexed)
+        Recipe(
+          id: 'old-account-$index',
+          url: recipe.url,
+          title: recipe.title,
+          ingredients: recipe.ingredients,
+        ),
+    ]);
     final server = FakeServerRecipeRepository();
     await pumpApp(tester, server: server);
     await openRecipeBook(tester);
@@ -749,20 +756,30 @@ void main() {
     );
     await tester.pumpAndSettle();
 
-    expect(server.importBulkCallCount, 1);
-    expect(server.recipes.map((r) => r.url), [
-      'https://youtu.be/1',
-      'https://youtu.be/2',
-      'https://youtu.be/3',
+    // 재수화된 서버 정본이 export에도 새 id·기존 레시피 내용으로 남는다.
+    final exported =
+        jsonDecode(await BackupController(storage).exportJson())
+            as Map<String, Object?>;
+    expect(exported['recipes'], [
+      {
+        'id': 'srv-1',
+        'url': 'https://youtu.be/1',
+        'title': '김치찌개',
+        'ingredients': ['김치', '돼지고기'],
+      },
+      {
+        'id': 'srv-2',
+        'url': 'https://youtu.be/2',
+        'title': '계란찜',
+        'ingredients': ['계란'],
+      },
+      {
+        'id': 'srv-3',
+        'url': 'https://youtu.be/3',
+        'title': '애호박볶음',
+        'ingredients': ['애호박'],
+      },
     ]);
-    // 재수화된 미러 = 서버 정본(발급 id 포함) — 이제 다음 부팅이 지울 것이 없다.
-    final mirror = (await Storage.open()).readRecipes();
-    expect(mirror.map((r) => r.url), [
-      'https://youtu.be/1',
-      'https://youtu.be/2',
-      'https://youtu.be/3',
-    ]);
-    expect(mirror.map((r) => r.id), everyElement(isNotNull));
   });
 
   testWidgets('⑮ 가드 뒤에도 코어 루프가 산다 — 지켜낸 미러가 매칭 입력이다 (#165)', (tester) async {
