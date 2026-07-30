@@ -1,10 +1,13 @@
 // 레시피 북 서버 모드(#121) — hydrate·미러 계약·add/재추출/삭제의 서버 분기.
+import 'dart:convert';
+
 import 'package:cookmark/data/server_recipe_repository.dart';
 import 'package:cookmark/data/storage.dart';
 import 'package:cookmark/domain/app_event.dart';
 import 'package:cookmark/domain/recipe.dart';
 import 'package:cookmark/llm/fake_llm_gateway.dart';
 import 'package:cookmark/llm/llm_gateway.dart';
+import 'package:cookmark/ui/backup_controller.dart';
 import 'package:cookmark/ui/recipe_book_controller.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:shared_preferences_platform_interface/in_memory_shared_preferences_async.dart';
@@ -48,6 +51,13 @@ void main() {
     ingredients: ['계란'],
   );
 
+  const oldAccountRecipe = Recipe(
+    id: 'old-account-recipe',
+    url: 'https://youtu.be/seed',
+    title: '시드 요리',
+    ingredients: ['시드 재료'],
+  );
+
   group('hydrate', () {
     test('loading에서 시작해 서버 목록을 미러에 쓰고 ready가 된다', () async {
       final server = FakeServerRecipeRepository(
@@ -69,6 +79,7 @@ void main() {
     });
 
     test('실패하면 error + syncFailure가 남는다 — 미러는 쓰지 않는다', () async {
+      await storage.writeRecipes(const [oldAccountRecipe]);
       final server = FakeServerRecipeRepository(
         failure: const RecipeApiFailure(RecipeApiFailureKind.unauthorized),
       );
@@ -77,7 +88,15 @@ void main() {
 
       expect(book.syncState, RecipeSyncState.error);
       expect(book.syncFailure, RecipeApiFailureKind.unauthorized);
-      expect(storage.readRecipes(), isEmpty);
+      final exported =
+          jsonDecode(await BackupController(storage).exportJson())
+              as Map<String, Object?>;
+      expect((exported['recipes'] as List).single, {
+        'id': 'old-account-recipe',
+        'url': 'https://youtu.be/seed',
+        'title': '시드 요리',
+        'ingredients': ['시드 재료'],
+      });
     });
 
     test('실패 후 다시 시도해 성공하면 ready로 전환된다', () async {
@@ -100,12 +119,23 @@ void main() {
 
     test('빈 서버 목록은 비어 있지 않은 미러를 덮지 않는다 — 이벤트 1건 (#165)', () async {
       // 합류 시나리오 — 파일럿 기기가 서버 빌드로 갈아탄 직후. 로컬 북은 살아 있고 계정은 비어 있다.
-      await storage.writeRecipes(const [seedRecipe]);
+      await storage.writeRecipes(const [oldAccountRecipe]);
       final book = bookWith(FakeServerRecipeRepository());
 
       await book.hydrate();
 
-      expect(storage.readRecipes().single.url, seedRecipe.url, reason: '미러 보존');
+      final exported =
+          jsonDecode(await BackupController(storage).exportJson())
+              as Map<String, Object?>;
+      expect(
+        (exported['recipes'] as List).single,
+        {
+          'url': 'https://youtu.be/seed',
+          'title': '시드 요리',
+          'ingredients': ['시드 재료'],
+        },
+        reason: 'export에는 새 빈 계정에 속하지 않는 옛 서버 id가 남지 않는다',
+      );
       // ready가 아니면 폼 잠금·저장 게이트·가져오기 게이트가 전부 닫혀 앱이 반쯤 죽는다.
       expect(book.syncState, RecipeSyncState.ready);
       expect(book.syncFailure, isNull);
@@ -127,8 +157,14 @@ void main() {
 
     test('서버에 항목이 있으면 서버가 이긴다 — 미러보다 적어도 그대로 반영된다 (#165)', () async {
       await storage.writeRecipes(const [
-        seedRecipe,
         Recipe(
+          id: 'old-account-seed',
+          url: 'https://youtu.be/seed',
+          title: '계란찜',
+          ingredients: ['계란'],
+        ),
+        Recipe(
+          id: 'old-account-gone',
           url: 'https://youtu.be/gone',
           title: '김치찌개',
           ingredients: ['김치'],
@@ -141,6 +177,15 @@ void main() {
       await book.hydrate();
 
       expect(book.recipes.map((r) => r.url), [seedRecipe.url]);
+      final exported =
+          jsonDecode(await BackupController(storage).exportJson())
+              as Map<String, Object?>;
+      expect((exported['recipes'] as List).single, {
+        'id': 'srv-1',
+        'url': 'https://youtu.be/seed',
+        'title': '계란찜',
+        'ingredients': ['계란'],
+      });
       expect(errorEvents(), isEmpty);
     });
   });
