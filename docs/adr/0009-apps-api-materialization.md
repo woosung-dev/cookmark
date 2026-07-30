@@ -21,7 +21,9 @@
 - **`.claude/rules/backend.md` 표준 전량 채택** — FastAPI + SQLModel + Neon + `uv` + 100% async. 내부 레이아웃은 §11을 따르되 위치는 `apps/api/src/…`(ADR-0008 화해 조항).
 - **편차 2곳** — ① **§4는 구조만 채택**(LLM 호출 집중 · `BaseLLMService` 추상화 · 프롬프트 상수화)하고 구현체는 **google-genai**다(승계 프록시 3개의 Gemini flash-lite 연속성 + 원가 $0.0011/루프 승계). §4의 "Claude/anthropic" 명시는 프로바이더 교체 가능한 일반형으로 읽는다. ② **§9(인증)는 아래 인증 절이 전면 교체**한다.
 - **배포처 = Google Cloud Run 서울(유료 리전).** GCP 생태계 정렬(Gemini 동일 벤더) · Docker 네이티브(§8 "Docker entrypoint에서 `alembic upgrade head`" 전제 충족) · 사용자(한국) 근접. **무료 등급(US 3리전 한정)은 의식적으로 포기**했다 — 조사 [#82](https://github.com/woosung-dev/cookmark/issues/82)의 권고(싱가포르 상주)와 갈린 결정이다.
+  - **정정 (2026-07-30, 파운더 결정)** — 배포처는 **Google Cloud Run 도쿄(`asia-northeast1`, Tier 1)** 다. 서울(`asia-northeast3`, Tier 2)보다 Cloud Run 기본 단가가 낮고 한국 사용자와 같은 동아시아 권역이다. 무료는 리전이 아니라 사용량 할당이므로, **`min-instances=0`으로 유휴 비용을 없애되 과금 계정 없이 배포할 수 있거나 비용이 0원으로 보장된다는 뜻은 아니다.** 실제 콜드·웜 지연은 flip 관통 스모크에서 기록한다.
 - **DB = Neon 싱가포르(ap-southeast-1) 유지** — 표준 무편차. 서울↔싱가포르 왕복 ~60-70ms/쿼리(CRUD 2-3쿼리 기준 요청당 +150~200ms)를 감수한다. **재검토 트리거 = CRUD p95 체감 불만.** `asyncpg` + Neon PgBouncer는 `statement_cache_size=0` **필수**(#82 함정).
+  - **정정 (2026-07-30, 파운더 결정)** — 서버가 도쿄로 옮겨져 위 서울↔싱가포르 수치는 더 이상 현재 지연의 근거가 아니다. 도쿄↔싱가포르 지연은 flip 관통 스모크에서 기록하고, CRUD p95 체감 불만을 재검토 트리거로 두는 결론은 유지한다.
 - **인스턴스 = scale-to-zero(min-instances=0).** 콜드스타트 1~3초는 LLM 지배 루프에서 부차적. **승격 트리거 = 실사용자 유입 또는 체감 불만.**
 - **배포 = GitHub Actions 자동 배포 + Workload Identity Federation**(키 파일 없음). main push → 이미지 빌드 → Cloud Run 배포. CI가 이미 GitHub Actions라 한 곳에 모인다.
 - **시크릿 = Secret Manager(비밀) + 환경변수(비-비밀 설정) 분리.** 1기 비밀 5개 — `GEMINI_API_KEY` · `DATABASE_URL` · `KAKAO_CLIENT_SECRET` · `GOOGLE_CLIENT_SECRET` · 세션 서명/암호화 키. Cloud Run `--set-secrets`가 env로 주입하므로 **앱 코드 변경 0**이다. `CORS_ALLOWED_ORIGINS` 같은 비-비밀은 env로 남긴다. **로컬 개발은 Secret Manager를 보지 않는다** — `.env.local`이 로컬 정본이다.
@@ -85,5 +87,6 @@
 - **ADR-0008의 두 선언이 정정된다** — ① `contracts/`의 "계약 우선"·"상류" 표현(29·30·31·35행) ② `infra/`의 "자동 배포 금지 규약의 정신"(36행). 후자는 **#57을 오독한 것**이다 — #57은 Flutter-Web-on-Vercel 특정 버그(`buildCommand: null` + gitignored `build/web` → 빈 정적 배포) 대응이고 본문 스스로 잠정이라 적었으며, **그 실패 모드는 Cloud Run에 구조적으로 없다**(파이프라인이 이미지를 빌드한다). **Vercel prod의 수동 프리빌드 규약은 `apps/mobile`에 한정해 그대로 유지된다** — 둘을 한 규칙으로 묶지 말 것.
 - **`backend.md`(gitignored 로컬 정본)가 4곳 바뀐다** — §9 전면 교체(Clerk 삭제) · §12 신설(데이터 보호) · CORS 절 신설 · 계약 절 신설. 표준은 회사 자산이라 리포 밖에 살며 이 PR에 포함되지 않는다.
 - **`apps/mobile`은 이 ADR로 인해 지금 바뀌지 않는다.** BE 소비는 #38 랜딩 후이고 첫 소비는 로컬이다([#83](https://github.com/woosung-dev/cookmark/issues/83)). 파일럿 무접촉 가드(~8/5)는 유지된다 — `apps/api`는 별도 앱·별도 배포라 파일럿과 절연된다.
-- **부정적 결과를 정직하게** — 자체 인증은 세션·소셜 연동을 직접 소유한다는 뜻이고(벤더 0의 대가), Neon 싱가포르 유지로 요청당 +150~200ms를 감수하며, Cloud Run 서울은 무료 등급을 포기한다. 이전 코드·`infra/` 절차 문서는 트리거로만 정당화되는 임시물이라 만료를 지켜야 한다.
+- **부정적 결과를 정직하게** — 자체 인증은 세션·소셜 연동을 직접 소유한다는 뜻이고(벤더 0의 대가), Neon 싱가포르 유지로 요청당 +150~200ms를 감수한다. Cloud Run 도쿄는 Tier 1이지만 과금 계정 연결과 사용량 기반 과금 표면은 남는다. 이전 코드·`infra/` 절차 문서는 트리거로만 정당화되는 임시물이라 만료를 지켜야 한다.
+  - **정정 (2026-07-30)** — 현재 서버는 도쿄이므로 요청당 +150~200ms라는 서울 기준 추정은 확정값이 아니다. flip 관통 스모크가 현재 수치를 남긴다.
 - **다음 단계** — 이 ADR이 발행되면 지도 [#74](https://github.com/woosung-dev/cookmark/issues/74)가 닫히고 스펙 트랙(`/to-spec` → `/to-tickets`)이 열린다.

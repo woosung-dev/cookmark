@@ -23,7 +23,7 @@
 ## 1. 좌표 — 이 셸에서 계속 쓰는 값들
 
 ```bash
-export REGION="asia-northeast3"                # 서울 — .github/workflows/api.yml의 env와 같은 값
+export REGION="asia-northeast1"                # 도쿄 — .github/workflows/api.yml의 env와 같은 값
 export SERVICE="cookmark-api"
 export URL="$(gcloud run services describe "$SERVICE" --region="$REGION" --format='value(status.url)')"
 export REGISTER_KEY="$(gcloud secrets versions access latest --secret=cookmark-register-key)"
